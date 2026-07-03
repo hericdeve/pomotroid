@@ -3,12 +3,29 @@
   import * as m from '$paraglide/messages.js';
   import { getLocale } from '$paraglide/runtime.js';
 
-  let { week, streak }: { week: DayStat[] | null; streak: StreakInfo | null } = $props();
+  let { 
+    week, 
+    streak,
+    onBarClick
+  }: { 
+    week: DayStat[] | null; 
+    streak: StreakInfo | null;
+    onBarClick?: (range: { start: number; end: number; label: string }) => void;
+  } = $props();
 
   const CHART_H = 140; // px, max bar height
   const BAR_W = 52; // px per bar
   const BAR_GAP = 16; // px between bars
   const CHART_W = 7 * (BAR_W + BAR_GAP) - BAR_GAP; // 412px
+
+  function handleBarClick(day: DayStat) {
+    if (day.rounds === 0 || !onBarClick) return;
+    const d = new Date(day.date + 'T00:00:00');
+    const start = Math.floor(d.getTime() / 1000);
+    d.setHours(23, 59, 59, 999);
+    const end = Math.floor(d.getTime() / 1000);
+    onBarClick({ start, end, label: d.toLocaleDateString() });
+  }
 
   // Reactive to app language setting — updates when user changes language in Settings.
   const shortFmt = $derived(new Intl.DateTimeFormat(getLocale(), { weekday: 'short' }));
@@ -98,7 +115,14 @@
               class="bar"
               class:bar-today={day.isToday}
               class:bar-empty={day.rounds === 0}
+              class:interactive={day.rounds > 0 && onBarClick}
               style="--bar-delay: {i * 40}ms"
+              onclick={() => handleBarClick(day)}
+              role="button"
+              tabindex={day.rounds > 0 && onBarClick ? 0 : -1}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') handleBarClick(day);
+              }}
             />
 
             <!-- Round count label above bar -->
@@ -210,6 +234,16 @@
     transform-box: fill-box;
     animation: bar-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
     animation-delay: var(--bar-delay, 0ms);
+    outline: none;
+  }
+
+  .bar.interactive {
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+
+  .bar.interactive:hover, .bar.interactive:focus-visible {
+    filter: brightness(1.2);
   }
 
   @keyframes bar-rise {

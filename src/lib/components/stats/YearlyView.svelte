@@ -3,7 +3,13 @@
   import * as m from '$paraglide/messages.js';
   import { getLocale } from '$paraglide/runtime.js';
 
-  let { heatmap }: { heatmap: HeatmapStats | null } = $props();
+  let { 
+    heatmap,
+    onBarClick
+  }: { 
+    heatmap: HeatmapStats | null;
+    onBarClick?: (range: { start: number; end: number; label: string }) => void;
+  } = $props();
 
   // Heatmap grid constants
   const CELL = 11;
@@ -142,6 +148,15 @@
   const SVG_H = MONTH_LABEL_H + GRID_H;
 
   const hasData = $derived(heatmap !== null && heatmap.total_rounds > 0);
+
+  function handleCellClick(cell: GridCell) {
+    if (cell.count === 0 || !onBarClick || cell.dimmed) return;
+    const d = new Date(cell.date + 'T00:00:00');
+    const start = Math.floor(d.getTime() / 1000);
+    d.setHours(23, 59, 59, 999);
+    const end = Math.floor(d.getTime() / 1000);
+    onBarClick({ start, end, label: d.toLocaleDateString() });
+  }
 </script>
 
 <!-- Intensity scale CSS variables -->
@@ -247,11 +262,17 @@
                 style="fill: {LEVEL_FILL[cell.level]}"
                 class="cell"
                 class:cell-dimmed={cell.dimmed}
-                role="img"
+                class:interactive={cell.count > 0 && !cell.dimmed && onBarClick}
+                role={cell.count > 0 && !cell.dimmed && onBarClick ? "button" : "img"}
+                tabindex={cell.count > 0 && !cell.dimmed && onBarClick ? 0 : -1}
                 aria-label="{cell.date}: {cell.count} {m.stats_rounds().toLowerCase()}"
                 onmouseenter={(e) => showTooltip(e, cell)}
                 onmouseleave={() => {
                   tooltip = null;
+                }}
+                onclick={() => handleCellClick(cell)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') handleCellClick(cell);
                 }}
               />
             {/each}

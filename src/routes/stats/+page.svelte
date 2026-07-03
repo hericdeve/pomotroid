@@ -28,6 +28,7 @@
   import HistoryView from '$lib/components/stats/HistoryView.svelte';
   import ManualEntryModal from '$lib/components/ManualEntryModal.svelte';
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
+  import SessionsListModal from '$lib/components/stats/SessionsListModal.svelte';
 
   type Tab = 'today' | 'week' | 'alltime' | 'history';
 
@@ -37,6 +38,7 @@
   let heatmapLoaded = $state(false);
   let showManualEntry = $state(false);
   let editingSessionId = $state<number | null>(null);
+  let listModalTimeRange = $state<{ start: number; end: number; label: string } | null>(null);
 
   async function switchTab(tab: Tab) {
     activeTab = tab;
@@ -187,11 +189,11 @@
   <!-- Content -->
   <div class="content">
     {#if activeTab === 'today'}
-      <DailyView today={detailed?.today ?? null} />
+      <DailyView today={detailed?.today ?? null} onBarClick={(r) => listModalTimeRange = r} />
     {:else if activeTab === 'week'}
-      <WeeklyView week={detailed?.week ?? null} streak={detailed?.streak ?? null} />
+      <WeeklyView week={detailed?.week ?? null} streak={detailed?.streak ?? null} onBarClick={(r) => listModalTimeRange = r} />
     {:else if activeTab === 'alltime'}
-      <YearlyView {heatmap} />
+      <YearlyView {heatmap} onBarClick={(r) => listModalTimeRange = r} />
     {:else}
       <HistoryView onEditSession={(id) => editingSessionId = id} />
     {/if}
@@ -200,6 +202,19 @@
 
 {#if showManualEntry}
   <ManualEntryModal onclose={() => showManualEntry = false} />
+{/if}
+
+{#if listModalTimeRange !== null}
+  <SessionsListModal
+    dateFrom={listModalTimeRange.start}
+    dateTo={listModalTimeRange.end}
+    label={listModalTimeRange.label}
+    onClose={() => listModalTimeRange = null}
+    onEditSession={(id) => {
+      listModalTimeRange = null;
+      editingSessionId = id;
+    }}
+  />
 {/if}
 
 {#if editingSessionId !== null}

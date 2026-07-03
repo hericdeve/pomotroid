@@ -2,7 +2,13 @@
   import type { DailyStats } from '$lib/types';
   import * as m from '$paraglide/messages.js';
 
-  let { today }: { today: DailyStats | null } = $props();
+  let { 
+    today,
+    onBarClick 
+  }: { 
+    today: DailyStats | null;
+    onBarClick?: (range: { start: number; end: number; label: string }) => void;
+  } = $props();
 
   const CHART_H = 80; // px, max bar height in the hourly chart
   const CHART_W = 744; // px, total SVG width for 24 bars
@@ -27,6 +33,17 @@
 
   // Hour labels: show every 6 hours
   const hourLabels = [0, 6, 12, 18];
+
+  function handleBarClick(h: number, count: number) {
+    if (count === 0 || !onBarClick) return;
+    const d = new Date();
+    d.setHours(h, 0, 0, 0);
+    const start = Math.floor(d.getTime() / 1000);
+    d.setHours(h, 59, 59, 999);
+    const end = Math.floor(d.getTime() / 1000);
+    const ampm = h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
+    onBarClick({ start, end, label: `Today, ${ampm}` });
+  }
 </script>
 
 <div class="view">
@@ -78,7 +95,14 @@
             rx="2"
             class="bar"
             class:bar-empty={count === 0}
+            class:interactive={count > 0 && onBarClick}
             style="--bar-scale: {barH / CHART_H}; --bar-delay: {h * 18}ms"
+            onclick={() => handleBarClick(h, count)}
+            role="button"
+            tabindex={count > 0 && onBarClick ? 0 : -1}
+            onkeydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') handleBarClick(h, count);
+            }}
           />
 
           <!-- Hour label (every 6 hours) -->
@@ -207,6 +231,16 @@
     transform-box: fill-box;
     animation: bar-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
     animation-delay: var(--bar-delay, 0ms);
+    outline: none;
+  }
+
+  .bar.interactive {
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+
+  .bar.interactive:hover, .bar.interactive:focus-visible {
+    filter: brightness(1.2);
   }
 
   @keyframes bar-rise {
