@@ -759,6 +759,17 @@ pub fn session_get_subjects(db: State<'_, DbState>) -> Result<Vec<String>, Strin
 }
 
 #[tauri::command]
+pub fn sessions_get_history(
+    limit: u32,
+    offset: u32,
+    filter: queries::SessionFilter,
+    db: State<'_, DbState>,
+) -> Result<queries::SessionHistoryPage, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::get_history(&conn, limit, offset, &filter).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn session_get_topics(subject: Option<String>, db: State<'_, DbState>) -> Result<Vec<String>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     queries::get_distinct_topics(&conn, subject.as_deref()).map_err(|e| e.to_string())

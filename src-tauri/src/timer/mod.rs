@@ -38,6 +38,7 @@ pub struct TimerSnapshot {
     /// Monotonically-increasing focus round count since last reset. Used as a
     /// session counter when long breaks are disabled.
     pub session_work_count: u32,
+    pub active_session_id: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,7 @@ pub struct TimerSnapshot {
 struct TimerShared {
     elapsed_secs: u32,
     is_running: bool,
+    active_session_id: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -82,6 +84,7 @@ impl TimerController {
         let shared = Arc::new(Mutex::new(TimerShared {
             elapsed_secs: 0,
             is_running: false,
+            active_session_id: None,
         }));
 
         // Clone handles for the event-listener thread.
@@ -193,6 +196,7 @@ impl TimerController {
             work_round_number: seq.work_round_number,
             work_rounds_total: seq.work_rounds_total,
             session_work_count: seq.session_work_count,
+            active_session_id: shared.active_session_id,
         }
     }
 
@@ -275,7 +279,12 @@ fn listen_events(
                     };
                     if let Ok(conn) = db.lock() {
                         match queries::insert_session(&conn, &rt, total) {
-                            Ok(id) => current_session_id = Some(id),
+                            Ok(id) => {
+                                current_session_id = Some(id);
+                                if rt == "work" {
+                                    shared.lock().unwrap().active_session_id = Some(id);
+                                }
+                            }
                             Err(e) => log::error!("[timer] failed to record session: {e}"),
                         }
                     }
@@ -515,5 +524,6 @@ fn build_snapshot(
         work_round_number: seq.work_round_number,
         work_rounds_total: seq.work_rounds_total,
         session_work_count: seq.session_work_count,
+        active_session_id: sh.active_session_id,
     }
 }

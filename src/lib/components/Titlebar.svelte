@@ -6,9 +6,12 @@
   import { isMac } from '$lib/utils/platform';
   import Tooltip from './Tooltip.svelte';
   import * as m from '$paraglide/messages.js';
+  import { timerState } from '$lib/stores/timer';
+  import SessionTagModal from './SessionTagModal.svelte';
 
   let maximized = $state(false);
   let suppressTitlebarHover = $state(false);
+  let showTagModal = $state(false);
 
   function blurTitlebarControl() {
     const active = document.activeElement;
@@ -178,17 +181,31 @@
   </Tooltip>
 {/snippet}
 
+{#snippet tagBtn()}
+  {#if $timerState.active_session_id !== null}
+    <Tooltip text="Tag Active Session">
+      <button class="btn-icon tag-btn" onclick={() => (showTagModal = true)} aria-label="Tag Session">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M14.5,2.5 L10,2.5 C9.73,2.5 9.48,2.61 9.29,2.8 L2.8,9.29 C2.41,9.68 2.41,10.31 2.8,10.7 L7.3,15.2 C7.69,15.59 8.31,15.59 8.7,15.2 L15.2,8.7 C15.39,8.51 15.5,8.27 15.5,8 L15.5,3.5 C15.5,2.95 15.05,2.5 14.5,2.5 Z M12.5,5.5 C11.95,5.5 11.5,5.05 11.5,4.5 C11.5,3.95 11.95,3.5 12.5,3.5 C13.05,3.5 13.5,3.95 13.5,4.5 C13.5,5.05 13.05,5.5 12.5,5.5 Z"/>
+        </svg>
+      </button>
+    </Tooltip>
+  {/if}
+{/snippet}
+
 <nav class="titlebar" class:suppress-hover={suppressTitlebarHover} data-tauri-drag-region>
   <!-- Left: settings + stats buttons on Linux/Windows. On macOS the traffic
        lights live here; the action buttons move to the right side instead. -->
   {#if !isMac}
     {@render settingsBtn()}
     {@render statsBtn()}
+    {@render tagBtn()}
   {/if}
 
   <!-- Right: settings + stats buttons on macOS, window controls on Linux/Windows. -->
   <div class="controls">
     {#if isMac}
+      {@render tagBtn()}
       {@render statsBtn()}
       {@render settingsBtn()}
     {:else}
@@ -275,6 +292,13 @@
     {/if}
   </div>
 </nav>
+
+{#if showTagModal && $timerState.active_session_id !== null}
+  <SessionTagModal 
+    sessionId={$timerState.active_session_id} 
+    onClose={() => (showTagModal = false)} 
+  />
+{/if}
 
 <style>
   .titlebar {

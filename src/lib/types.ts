@@ -14,6 +14,7 @@ export interface TimerState {
   work_round_number: number; // current work round (1-based)
   work_rounds_total: number; // total work rounds before long break
   session_work_count: number; // monotonic focus round count since last reset
+  active_session_id: number | null;
 }
 
 /** Mirrors Rust `Settings` struct returned by `settings_get`. */
@@ -145,6 +146,19 @@ export interface UpdateSessionPayload {
   subject_topic: string | null;
   study_type: string | null;
   notes: string | null;
+}
+
+export interface SessionFilter {
+  subject?: string | null;
+  subject_topic?: string | null;
+  study_type?: string | null;
+  date_from?: number | null;
+  date_to?: number | null;
+}
+
+export interface SessionHistoryPage {
+  sessions: SessionRow[];
+  total: number;
 }
 
 export interface CreateManualSessionPayload {

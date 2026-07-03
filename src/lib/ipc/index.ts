@@ -15,6 +15,8 @@ import type {
   SessionRow,
   UpdateSessionPayload,
   CreateManualSessionPayload,
+  SessionFilter,
+  SessionHistoryPage,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -85,6 +87,7 @@ export const updateSession = (id: number, payload: UpdateSessionPayload) => invo
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
 export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');
 export const getSessionTopics = (subject?: string) => invoke<string[]>('session_get_topics', { subject });
+export const sessionsGetHistory = (limit: number, offset: number, filter: SessionFilter) => invoke<SessionHistoryPage>('sessions_get_history', { limit, offset, filter });
 
 // --- Stats commands ---
 

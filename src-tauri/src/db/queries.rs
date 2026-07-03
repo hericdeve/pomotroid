@@ -68,6 +68,98 @@ pub struct UpdateSessionPayload {
     pub notes: Option<String>,
 }
 
+
+#[derive(Debug, Deserialize)]
+pub struct SessionFilter {
+    pub subject: Option<String>,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub date_from: Option<i64>,
+    pub date_to: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionHistoryPage {
+    pub sessions: Vec<SessionRow>,
+    pub total: u32,
+}
+
+pub fn get_history(
+    conn: &Connection,
+    limit: u32,
+    offset: u32,
+    filter: &SessionFilter,
+) -> Result<SessionHistoryPage> {
+    let mut query = String::from("SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed, subject, subject_topic, study_type, notes, updated_at, deleted_at FROM sessions WHERE deleted_at IS NULL");
+    let mut count_query = String::from("SELECT COUNT(*) FROM sessions WHERE deleted_at IS NULL");
+    
+    let mut params = Vec::<rusqlite::types::Value>::new();
+
+    if let Some(subject) = &filter.subject {
+        let sql = format!(" AND subject = ?{}", params.len() + 1);
+        query.push_str(&sql);
+        count_query.push_str(&sql);
+        params.push(subject.clone().into());
+    }
+    if let Some(topic) = &filter.subject_topic {
+        let sql = format!(" AND subject_topic = ?{}", params.len() + 1);
+        query.push_str(&sql);
+        count_query.push_str(&sql);
+        params.push(topic.clone().into());
+    }
+    if let Some(stype) = &filter.study_type {
+        let sql = format!(" AND study_type = ?{}", params.len() + 1);
+        query.push_str(&sql);
+        count_query.push_str(&sql);
+        params.push(stype.clone().into());
+    }
+    if let Some(d_from) = filter.date_from {
+        let sql = format!(" AND started_at >= ?{}", params.len() + 1);
+        query.push_str(&sql);
+        count_query.push_str(&sql);
+        params.push(d_from.into());
+    }
+    if let Some(d_to) = filter.date_to {
+        let sql = format!(" AND started_at <= ?{}", params.len() + 1);
+        query.push_str(&sql);
+        count_query.push_str(&sql);
+        params.push(d_to.into());
+    }
+
+    let total: u32 = conn.query_row(&count_query, rusqlite::params_from_iter(params.iter()), |row| row.get(0))?;
+
+    let sql = format!(" ORDER BY started_at DESC LIMIT ?{} OFFSET ?{}", params.len() + 1, params.len() + 2);
+    query.push_str(&sql);
+    params.push(limit.into());
+    params.push(offset.into());
+
+    let mut stmt = conn.prepare(&query)?;
+    let iter = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+        Ok(SessionRow {
+            id: row.get(0)?,
+            uuid: row.get(1)?,
+            started_at: row.get(2)?,
+            ended_at: row.get(3)?,
+            round_type: row.get(4)?,
+            duration_secs: row.get(5)?,
+            completed: row.get::<_, i64>(6)? != 0,
+            subject: row.get(7)?,
+            subject_topic: row.get(8)?,
+            study_type: row.get(9)?,
+            notes: row.get(10)?,
+            updated_at: row.get(11)?,
+            deleted_at: row.get(12)?,
+        })
+    })?;
+
+    let mut sessions = Vec::new();
+    for row in iter {
+        sessions.push(row?);
+    }
+
+    Ok(SessionHistoryPage { sessions, total })
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateManualSessionPayload {
     pub started_at: i64,

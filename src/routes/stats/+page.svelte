@@ -25,15 +25,18 @@
   import DailyView from '$lib/components/stats/DailyView.svelte';
   import WeeklyView from '$lib/components/stats/WeeklyView.svelte';
   import YearlyView from '$lib/components/stats/YearlyView.svelte';
+  import HistoryView from '$lib/components/stats/HistoryView.svelte';
   import ManualEntryModal from '$lib/components/ManualEntryModal.svelte';
+  import SessionTagModal from '$lib/components/SessionTagModal.svelte';
 
-  type Tab = 'today' | 'week' | 'alltime';
+  type Tab = 'today' | 'week' | 'alltime' | 'history';
 
   let activeTab = $state<Tab>('today');
   let detailed = $state<DetailedStats | null>(null);
   let heatmap = $state<HeatmapStats | null>(null);
   let heatmapLoaded = $state(false);
   let showManualEntry = $state(false);
+  let editingSessionId = $state<number | null>(null);
 
   async function switchTab(tab: Tab) {
     activeTab = tab;
@@ -172,6 +175,9 @@
       <button class="tab" class:active={activeTab === 'alltime'} onclick={() => switchTab('alltime')}
         >{m.stats_tab_alltime()}</button
       >
+      <button class="tab" class:active={activeTab === 'history'} onclick={() => switchTab('history')}
+        >History</button
+      >
     </div>
     <button class="btn-manual" onclick={() => showManualEntry = true}>
       + Manual Entry
@@ -184,14 +190,20 @@
       <DailyView today={detailed?.today ?? null} />
     {:else if activeTab === 'week'}
       <WeeklyView week={detailed?.week ?? null} streak={detailed?.streak ?? null} />
-    {:else}
+    {:else if activeTab === 'alltime'}
       <YearlyView {heatmap} />
+    {:else}
+      <HistoryView onEditSession={(id) => editingSessionId = id} />
     {/if}
   </div>
 </div>
 
 {#if showManualEntry}
   <ManualEntryModal onclose={() => showManualEntry = false} />
+{/if}
+
+{#if editingSessionId !== null}
+  <SessionTagModal sessionId={editingSessionId} onClose={() => editingSessionId = null} />
 {/if}
 
 <style>
