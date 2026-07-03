@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { settings } from '$lib/stores/settings';
-  import { setSetting, resetSettings, clearSessionHistory, traySupported } from '$lib/ipc';
+  import { setSetting, resetSettings, clearSessionHistory, traySupported, sessionsImportXlsx } from '$lib/ipc';
+  import { open } from '@tauri-apps/plugin-dialog';
   import SettingsToggle from '$lib/components/settings/SettingsToggle.svelte';
   import * as m from '$paraglide/messages.js';
   import { setLocale } from '$lib/locale.svelte.js';
@@ -68,6 +69,22 @@
   async function handleClear() {
     await clearSessionHistory();
     confirmingClear = false;
+  }
+
+  async function handleImport() {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    });
+    if (file) {
+      try {
+        const num = await sessionsImportXlsx(file as string);
+        alert(`Successfully imported ${num} sessions!`);
+      } catch (e) {
+        console.error('Import failed', e);
+        alert(`Failed to import: ${e}`);
+      }
+    }
   }
 
   async function toggle(dbKey: string, current: boolean) {
@@ -268,6 +285,9 @@
         </div>
       </div>
     {/if}
+    <button class="data-row" onclick={handleImport}>
+      <span>Import Data (.xlsx)</span>
+    </button>
   </div>
 </div>
 

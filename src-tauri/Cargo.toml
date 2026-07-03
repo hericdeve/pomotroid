@@ -41,6 +41,8 @@ symphonia-codec-adpcm = "0.6.0"
 tiny-skia = "0.12"
 notify = "8"
 uuid = { version = "1.23.4", features = ["v4"] }
+calamine = { version = "0.25", features = ["dates"] }
+chrono = "0.4"
 
 [dev-dependencies]
 tokio-tungstenite = "0.29"

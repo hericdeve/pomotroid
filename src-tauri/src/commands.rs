@@ -21,6 +21,9 @@ use crate::websocket::{self, WsState};
 // CMD-01 — Timer commands
 // ---------------------------------------------------------------------------
 
+use calamine::{Reader, open_workbook_auto, Data, DataType};
+use chrono::NaiveDateTime;
+
 /// Toggle the timer: start if idle, resume if paused, pause if running.
 /// This is the primary action bound to the space bar and the play/pause button.
 #[tauri::command]
@@ -330,6 +333,112 @@ pub fn sessions_clear(db: State<'_, DbState>, app: AppHandle) -> Result<(), Stri
     log::info!("[sessions] cleared {n} rows");
     app.emit("sessions:cleared", ()).ok();
     Ok(())
+}
+
+/// Imports legacy sessions from an `.xlsx` file.
+/// Expects columns: Início, Duração (minutos), Matéria, Conteúdo, Tipo, Anotações
+#[tauri::command]
+pub fn sessions_import_xlsx(path: String, db: State<'_, DbState>, app: AppHandle) -> Result<u32, String> {
+    log::info!("[sessions] importing from {path}");
+    let mut workbook = open_workbook_auto(&path).map_err(|e| format!("Failed to open workbook: {e}"))?;
+    
+    // get first sheet
+    let sheet_name = workbook.sheet_names().first().cloned().ok_or("No sheets found in workbook")?;
+    let range = workbook.worksheet_range(&sheet_name)
+        .map_err(|e| e.to_string())?;
+
+    let mut rows = range.rows();
+    let header = rows.next().ok_or("No header row found")?;
+
+    let mut col_inicio = None;
+    let mut col_duracao = None;
+    let mut col_materia = None;
+    let mut col_conteudo = None;
+    let mut col_tipo = None;
+    let mut col_anotacoes = None;
+
+    for (i, cell) in header.iter().enumerate() {
+        if let Some(s) = cell.as_string() {
+            match s.trim() {
+                "Início" => col_inicio = Some(i),
+                "Duração (minutos)" => col_duracao = Some(i),
+                "Matéria" => col_materia = Some(i),
+                "Conteúdo" => col_conteudo = Some(i),
+                "Tipo" => col_tipo = Some(i),
+                "Anotações" => col_anotacoes = Some(i),
+                _ => {}
+            }
+        }
+    }
+
+    let col_inicio = col_inicio.ok_or("Missing column 'Início'")?;
+    let col_duracao = col_duracao.ok_or("Missing column 'Duração (minutos)'")?;
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut imported = 0;
+
+    for row in rows {
+        let cell_inicio = row.get(col_inicio);
+        let cell_duracao = row.get(col_duracao);
+
+        let started_at = match cell_inicio {
+            Some(Data::DateTime(_)) | Some(Data::Float(_)) => {
+                if let Some(nd) = cell_inicio.unwrap().as_datetime() {
+                    nd.and_utc().timestamp()
+                } else {
+                    continue;
+                }
+            },
+            Some(Data::String(s)) => {
+                if let Ok(nd) = NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S") {
+                    nd.and_utc().timestamp()
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        };
+
+        let dur_mins = match cell_duracao {
+            Some(Data::Float(f)) => *f,
+            Some(Data::Int(i)) => *i as f64,
+            Some(Data::String(s)) => s.parse::<f64>().unwrap_or(0.0),
+            _ => 0.0,
+        };
+        
+        if dur_mins <= 0.0 {
+            continue;
+        }
+
+        let duration_secs = (dur_mins * 60.0) as u32;
+
+        let get_str = |col_opt: Option<usize>| -> Option<String> {
+            let col = col_opt?;
+            row.get(col).and_then(|c| c.as_string()).map(|s| s.to_string()).filter(|s| !s.trim().is_empty())
+        };
+
+        let payload = queries::CreateManualSessionPayload {
+            started_at,
+            duration_secs,
+            subject: get_str(col_materia),
+            subject_topic: get_str(col_conteudo),
+            study_type: get_str(col_tipo),
+            notes: get_str(col_anotacoes),
+        };
+
+        if queries::insert_manual_session(&conn, payload).is_ok() {
+            imported += 1;
+        }
+    }
+
+    log::info!("[sessions] imported {imported} rows from {path}");
+    app.emit("sessions:imported", ()).ok();
+
+    if imported > 0 {
+        app.emit("sessions:cleared", ()).ok();
+    }
+    
+    Ok(imported)
 }
 
 // CMD-05 — Stats commands
