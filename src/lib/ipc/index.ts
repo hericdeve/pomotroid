@@ -12,6 +12,9 @@ import type {
   DetailedStats,
   HeatmapStats,
   UpdateInfo,
+  SessionRow,
+  UpdateSessionPayload,
+  CreateManualSessionPayload,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -77,6 +80,11 @@ export const appVersion = () => invoke<string>('app_version');
 // --- Sessions commands ---
 
 export const clearSessionHistory = () => invoke<void>('sessions_clear');
+export const getSession = (id: number) => invoke<SessionRow | null>('session_get', { id });
+export const updateSession = (id: number, payload: UpdateSessionPayload) => invoke<void>('session_update', { id, payload });
+export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
+export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');
+export const getSessionTopics = (subject?: string) => invoke<string[]>('session_get_topics', { subject });
 
 // --- Stats commands ---
 

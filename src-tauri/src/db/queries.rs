@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection, Result};
-use serde::Serialize;
+use rusqlite::{params, Connection, Result, OptionalExtension};
+use serde::{Serialize, Deserialize};
 
 // ---------------------------------------------------------------------------
 // Session CRUD (DATA-03)
@@ -13,10 +13,11 @@ pub fn insert_session(
     duration_secs: u32,
 ) -> Result<i64> {
     let started_at = unix_now();
+    let uuid = uuid::Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO sessions (started_at, round_type, duration_secs, completed)
-         VALUES (?1, ?2, ?3, 0)",
-        params![started_at, round_type, duration_secs],
+        "INSERT INTO sessions (uuid, started_at, updated_at, round_type, duration_secs, completed)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+        params![uuid, started_at, started_at, round_type, duration_secs],
     )?;
     let id = conn.last_insert_rowid();
     log::debug!("[db] session started: id={id} type={round_type} duration={duration_secs}s");
@@ -29,12 +30,163 @@ pub fn complete_session(
     session_id: i64,
     completed: bool,
 ) -> Result<()> {
+    let now = unix_now();
     conn.execute(
-        "UPDATE sessions SET ended_at = ?1, completed = ?2 WHERE id = ?3",
-        params![unix_now(), completed as i64, session_id],
+        "UPDATE sessions SET ended_at = ?1, completed = ?2, updated_at = ?3 WHERE id = ?4",
+        params![now, completed as i64, now, session_id],
     )?;
     log::debug!("[db] session ended: id={session_id} completed={completed}");
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Extended Session CRUD
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct SessionRow {
+    pub id: i64,
+    pub uuid: String,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+    pub round_type: String,
+    pub duration_secs: u32,
+    pub completed: bool,
+    pub subject: Option<String>,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub notes: Option<String>,
+    pub updated_at: Option<i64>,
+    pub deleted_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateSessionPayload {
+    pub subject: Option<String>,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateManualSessionPayload {
+    pub started_at: i64,
+    pub duration_secs: u32,
+    pub subject: Option<String>,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub notes: Option<String>,
+}
+
+pub fn get_session(conn: &Connection, id: i64) -> Result<Option<SessionRow>> {
+    conn.query_row(
+        "SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed,
+                subject, subject_topic, study_type, notes, updated_at, deleted_at
+         FROM sessions WHERE id = ?1",
+        [id],
+        |r| {
+            Ok(SessionRow {
+                id: r.get(0)?,
+                uuid: r.get(1)?,
+                started_at: r.get(2)?,
+                ended_at: r.get(3)?,
+                round_type: r.get(4)?,
+                duration_secs: r.get(5)?,
+                completed: r.get::<_, i64>(6)? != 0,
+                subject: r.get(7)?,
+                subject_topic: r.get(8)?,
+                study_type: r.get(9)?,
+                notes: r.get(10)?,
+                updated_at: r.get(11)?,
+                deleted_at: r.get(12)?,
+            })
+        },
+    ).optional()
+}
+
+pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload) -> Result<()> {
+    conn.execute(
+        "UPDATE sessions SET
+            subject = ?1,
+            subject_topic = ?2,
+            study_type = ?3,
+            notes = ?4,
+            updated_at = ?5
+         WHERE id = ?6",
+        params![
+            payload.subject,
+            payload.subject_topic,
+            payload.study_type,
+            payload.notes,
+            unix_now(),
+            id
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayload) -> Result<i64> {
+    let uuid = uuid::Uuid::new_v4().to_string();
+    let ended_at = payload.started_at + (payload.duration_secs as i64);
+    
+    conn.execute(
+        "INSERT INTO sessions (
+            uuid, started_at, ended_at, round_type, duration_secs, completed,
+            subject, subject_topic, study_type, notes, updated_at
+        ) VALUES (
+            ?1, ?2, ?3, 'work', ?4, 1,
+            ?5, ?6, ?7, ?8, ?9
+        )",
+        params![
+            uuid,
+            payload.started_at,
+            ended_at,
+            payload.duration_secs,
+            payload.subject,
+            payload.subject_topic,
+            payload.study_type,
+            payload.notes,
+            unix_now()
+        ],
+    )?;
+    
+    let id = conn.last_insert_rowid();
+    log::debug!("[db] manual session inserted: id={id} duration={}", payload.duration_secs);
+    Ok(id)
+}
+
+pub fn get_distinct_subjects(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT subject FROM sessions WHERE subject IS NOT NULL AND subject != '' ORDER BY subject COLLATE NOCASE ASC"
+    )?;
+    let rows = stmt.query_map([], |r| r.get(0))?;
+    let mut subjects = Vec::new();
+    for row in rows {
+        subjects.push(row?);
+    }
+    Ok(subjects)
+}
+
+pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<Vec<String>> {
+    let mut topics = Vec::new();
+    if let Some(s) = subject {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT subject_topic FROM sessions WHERE subject = ?1 AND subject_topic IS NOT NULL AND subject_topic != '' ORDER BY subject_topic COLLATE NOCASE ASC"
+        )?;
+        let rows = stmt.query_map([s], |r| r.get(0))?;
+        for row in rows {
+            topics.push(row?);
+        }
+    } else {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT subject_topic FROM sessions WHERE subject_topic IS NOT NULL AND subject_topic != '' ORDER BY subject_topic COLLATE NOCASE ASC"
+        )?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        for row in rows {
+            topics.push(row?);
+        }
+    }
+    Ok(topics)
 }
 
 // ---------------------------------------------------------------------------

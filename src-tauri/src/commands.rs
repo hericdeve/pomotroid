@@ -727,6 +727,44 @@ fn cue_to_name_key(cue: &str) -> Result<&'static str, String> {
 }
 
 // ---------------------------------------------------------------------------
+// CMD-12 — Extended Sessions commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn session_get(id: i64, db: State<'_, DbState>) -> Result<Option<queries::SessionRow>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::get_session(&conn, id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn session_update(id: i64, payload: queries::UpdateSessionPayload, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::update_session(&conn, id, payload).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn session_create_manual(payload: queries::CreateManualSessionPayload, db: State<'_, DbState>, app: AppHandle) -> Result<i64, String> {
+    let id = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::insert_manual_session(&conn, payload).map_err(|e| e.to_string())?
+    };
+    app.emit("sessions:cleared", ()).ok(); // Trigger stats UI refresh
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn session_get_subjects(db: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::get_distinct_subjects(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn session_get_topics(subject: Option<String>, db: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::get_distinct_topics(&conn, subject.as_deref()).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Stats payload types
 // ---------------------------------------------------------------------------
 
@@ -760,9 +798,9 @@ mod tests {
 
     fn seed_sessions(conn: &Connection) {
         conn.execute_batch("
-            INSERT INTO sessions (started_at, ended_at, round_type, duration_secs, completed)
-            VALUES (1000, 1060, 'work', 60, 1),
-                   (2000, 2300, 'short-break', 300, 1);
+            INSERT INTO sessions (uuid, started_at, ended_at, round_type, duration_secs, completed)
+            VALUES ('test-uuid-1', 1000, 1060, 'work', 60, 1),
+                   ('test-uuid-2', 2000, 2300, 'short-break', 300, 1);
         ").unwrap();
     }
 

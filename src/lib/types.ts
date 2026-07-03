@@ -119,3 +119,40 @@ export interface HeatmapStats {
   total_hours: number;
   longest_streak: number;
 }
+
+// ---------------------------------------------------------------------------
+// Extended Sessions types
+// ---------------------------------------------------------------------------
+
+export interface SessionRow {
+  id: number;
+  uuid: string;
+  started_at: number;
+  ended_at: number | null;
+  round_type: string;
+  duration_secs: number;
+  completed: boolean;
+  subject: string | null;
+  subject_topic: string | null;
+  study_type: string | null;
+  notes: string | null;
+  updated_at: number | null;
+  deleted_at: number | null;
+}
+
+export interface UpdateSessionPayload {
+  subject: string | null;
+  subject_topic: string | null;
+  study_type: string | null;
+  notes: string | null;
+}
+
+export interface CreateManualSessionPayload {
+  started_at: number; // unix timestamp
+  duration_secs: number;
+  subject: string | null;
+  subject_topic: string | null;
+  study_type: string | null;
+  notes: string | null;
+}
+

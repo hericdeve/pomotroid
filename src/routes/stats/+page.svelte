@@ -25,6 +25,7 @@
   import DailyView from '$lib/components/stats/DailyView.svelte';
   import WeeklyView from '$lib/components/stats/WeeklyView.svelte';
   import YearlyView from '$lib/components/stats/YearlyView.svelte';
+  import ManualEntryModal from '$lib/components/ManualEntryModal.svelte';
 
   type Tab = 'today' | 'week' | 'alltime';
 
@@ -32,6 +33,7 @@
   let detailed = $state<DetailedStats | null>(null);
   let heatmap = $state<HeatmapStats | null>(null);
   let heatmapLoaded = $state(false);
+  let showManualEntry = $state(false);
 
   async function switchTab(tab: Tab) {
     activeTab = tab;
@@ -159,16 +161,21 @@
   </nav>
 
   <!-- Tab bar -->
-  <div class="tabs">
-    <button class="tab" class:active={activeTab === 'today'} onclick={() => switchTab('today')}
-      >{m.stats_tab_today()}</button
-    >
-    <button class="tab" class:active={activeTab === 'week'} onclick={() => switchTab('week')}
-      >{m.stats_tab_week()}</button
-    >
-    <button class="tab" class:active={activeTab === 'alltime'} onclick={() => switchTab('alltime')}
-      >{m.stats_tab_alltime()}</button
-    >
+  <div class="tabs-container">
+    <div class="tabs">
+      <button class="tab" class:active={activeTab === 'today'} onclick={() => switchTab('today')}
+        >{m.stats_tab_today()}</button
+      >
+      <button class="tab" class:active={activeTab === 'week'} onclick={() => switchTab('week')}
+        >{m.stats_tab_week()}</button
+      >
+      <button class="tab" class:active={activeTab === 'alltime'} onclick={() => switchTab('alltime')}
+        >{m.stats_tab_alltime()}</button
+      >
+    </div>
+    <button class="btn-manual" onclick={() => showManualEntry = true}>
+      + Manual Entry
+    </button>
   </div>
 
   <!-- Content -->
@@ -182,6 +189,10 @@
     {/if}
   </div>
 </div>
+
+{#if showManualEntry}
+  <ManualEntryModal onclose={() => showManualEntry = false} />
+{/if}
 
 <style>
   .window {
@@ -243,12 +254,18 @@
   }
 
   /* ── Tabs ──────────────────────────────────────────────── */
-  .tabs {
+  .tabs-container {
     display: flex;
-    gap: 0;
+    justify-content: space-between;
+    align-items: center;
     border-bottom: 1px solid var(--color-separator);
     flex-shrink: 0;
     padding: 0 24px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0;
   }
 
   .tab {
@@ -275,6 +292,22 @@
   .tab.active {
     color: var(--color-focus-round);
     border-bottom-color: var(--color-focus-round);
+  }
+
+  .btn-manual {
+    background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
+    border: none;
+    color: var(--color-foreground);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-default);
+  }
+
+  .btn-manual:hover {
+    background: color-mix(in oklch, var(--color-foreground) 15%, transparent);
   }
 
   /* ── Content ───────────────────────────────────────────── */

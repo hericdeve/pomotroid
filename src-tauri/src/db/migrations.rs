@@ -90,6 +90,33 @@ const MIGRATION_6: &str = "
     INSERT INTO schema_version VALUES (6);
 ";
 
+/// Recreates the `sessions` table from scratch (losing existing session data, per user request)
+/// to include new fields: uuid, subject, subject_topic, study_type, notes, updated_at, deleted_at.
+const MIGRATION_7: &str = "
+    DROP TABLE IF EXISTS sessions;
+
+    CREATE TABLE sessions (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid          TEXT NOT NULL UNIQUE,
+        started_at    INTEGER NOT NULL,
+        ended_at      INTEGER,
+        round_type    TEXT NOT NULL CHECK(round_type IN ('work', 'short-break', 'long-break')),
+        duration_secs INTEGER NOT NULL CHECK(duration_secs > 0),
+        completed     INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
+        subject       TEXT,
+        subject_topic TEXT,
+        study_type    TEXT,
+        notes         TEXT,
+        updated_at    INTEGER,
+        deleted_at    INTEGER
+    );
+
+    CREATE INDEX idx_sessions_started_at ON sessions(started_at);
+    CREATE INDEX idx_sessions_round_type ON sessions(round_type);
+
+    INSERT INTO schema_version VALUES (7);
+";
+
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
 pub fn run(conn: &Connection) -> Result<()> {
@@ -131,6 +158,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_6 complete");
     }
 
+    if version < 7 {
+        log::info!("[db/migrations] applying MIGRATION_7: recreate sessions table with extended schema");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_7} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_7 complete");
+    }
+
     Ok(())
 }
 
@@ -166,7 +199,7 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 6);
+        assert_eq!(v, 7);
     }
 
     #[test]
