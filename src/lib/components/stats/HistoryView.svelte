@@ -41,8 +41,12 @@
   }
 
   function formatDuration(secs: number) {
-    const m = Math.floor(secs / 60);
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
     const s = secs % 60;
+    if (h > 0) {
+      return `${h}h ${m}m ${s}s`;
+    }
     return `${m}m ${s}s`;
   }
 
