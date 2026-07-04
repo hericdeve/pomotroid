@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { getSessionSubjects, getSessionTopics, sessionsGetHistory } from '$lib/ipc';
   import type { SessionRow, SessionFilter, SessionHistoryPage } from '$lib/types';
   import * as m from '$paraglide/messages.js';
@@ -149,18 +149,22 @@
     const _f4 = dateFromStr;
     const _f5 = dateToStr;
     
-    offset = 0; // reset to first page when filters change
-    loadHistory();
-    if (_f1 || _f1 === '') {
-        // Need to reload topics if subject changes
-        loadSubjectsAndTopics();
-    }
+    untrack(() => {
+      offset = 0; // reset to first page when filters change
+      loadHistory();
+      if (_f1 || _f1 === '') {
+          // Need to reload topics if subject changes
+          loadSubjectsAndTopics();
+      }
+    });
   });
 
   $effect(() => {
     // Only load history when offset changes without resetting to 0
     const _o = offset;
-    loadHistory();
+    untrack(() => {
+      loadHistory();
+    });
   });
 
   onMount(() => {
