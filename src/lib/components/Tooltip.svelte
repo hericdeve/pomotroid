@@ -130,6 +130,7 @@
     border: 1px solid color-mix(in oklch, var(--color-foreground) 12%, transparent);
     /* Hidden until JS positions it to avoid a 1-frame flash at top-left. */
     visibility: hidden;
+    zoom: 1 !important;
   }
 
   .tooltip.positioned {

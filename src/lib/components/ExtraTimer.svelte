@@ -89,8 +89,8 @@
   .extra-timer-container {
     position: absolute;
     bottom: 3rem;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -100,8 +100,8 @@
   }
 
   @keyframes fade-in {
-    from { opacity: 0; transform: translate(-50%, 10px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
   }
 
   .time {
