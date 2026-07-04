@@ -46,6 +46,12 @@
     return `${m}m ${s}s`;
   }
 
+  function fmtDuration(secs: number): string {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    return `${h.toLocaleString()}h ${m}m`;
+  }
+
   async function loadSubjectsAndTopics() {
     subjects = await getSessionSubjects();
     if (filterSubject) {
@@ -201,6 +207,14 @@
         {/if}
         <button class="nav-btn" disabled={quickMode === 'all'} onclick={() => shiftPeriod(1)}>&#9654;</button>
       </div>
+
+      <div class="pagination">
+        <button disabled={offset === 0} onclick={() => offset = Math.max(0, offset - limit)}>&#9664; Prev</button>
+        <span class="page-info">
+          {history.total === 0 ? '0-0' : Math.min(offset + 1, history.total)} - {Math.min(offset + limit, history.total)} of {history.total}
+        </span>
+        <button disabled={offset + limit >= history.total} onclick={() => offset += limit}>Next &#9654;</button>
+      </div>
     </div>
   </div>
 
@@ -237,12 +251,26 @@
     {/if}
   </div>
 
-  <div class="pagination">
-    <button disabled={offset === 0} onclick={() => offset = Math.max(0, offset - limit)}>Previous</button>
-    <span class="page-info">
-      Showing {Math.min(offset + 1, history.total)} - {Math.min(offset + limit, history.total)} of {history.total}
-    </span>
-    <button disabled={offset + limit >= history.total} onclick={() => offset += limit}>Next</button>
+  <div class="totals">
+    <div class="total-card" style="--delay: 0ms">
+      <span class="total-label">{m.stats_total_rounds()}</span>
+      <span class="total-value">{history.total.toLocaleString()}</span>
+    </div>
+    <div class="total-divider"></div>
+    <div class="total-card" style="--delay: 60ms">
+      <span class="total-label">{m.stats_focus_time()}</span>
+      <span class="total-value">{fmtDuration(history.total_focus_secs)}</span>
+    </div>
+    <div class="total-divider"></div>
+    <div class="total-card" style="--delay: 120ms">
+      <span class="total-label">{m.stats_best_streak()}</span>
+      <span class="total-value">
+        {history.longest_streak > 0 ? history.longest_streak : '—'}
+        {#if history.longest_streak > 0}
+          <span class="total-unit">{m.stats_days()}</span>
+        {/if}
+      </span>
+    </div>
   </div>
 </div>
 
@@ -298,6 +326,105 @@
     padding: 6px 12px;
     border-radius: 4px;
     font-size: 0.85rem;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+  }
+
+  .pagination button {
+    background: var(--color-hover);
+    color: var(--color-foreground);
+    border: 1px solid var(--color-separator);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.1s ease;
+  }
+
+  .pagination button:hover:not(:disabled) {
+    background: var(--color-focus-round);
+    color: var(--color-background);
+    border-color: var(--color-focus-round);
+  }
+
+  .pagination button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .page-info {
+    font-size: 0.85rem;
+    color: var(--color-foreground-darker);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Lifetime totals ─────────────────────────────────────── */
+  .totals {
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid var(--color-separator);
+    flex-shrink: 0;
+  }
+
+  .total-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 18px 24px;
+    animation: card-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--delay, 0ms);
+  }
+
+  @keyframes card-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .total-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-foreground-darker);
+  }
+
+  .total-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    color: var(--color-foreground);
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .total-unit {
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: var(--color-foreground-darker);
+  }
+
+  .total-divider {
+    width: 1px;
+    background: var(--color-separator);
+    align-self: stretch;
+    margin: 10px 0;
   }
 
   .quick-select {
@@ -383,27 +510,5 @@
 
   .table tbody tr:hover {
     background: var(--color-hover);
-  }
-
-  .pagination {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.85rem;
-    color: var(--color-foreground-darker);
-  }
-
-  .pagination button {
-    background: var(--color-hover);
-    color: var(--color-foreground);
-    border: 1px solid var(--color-separator);
-    padding: 6px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .pagination button:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
 </style>

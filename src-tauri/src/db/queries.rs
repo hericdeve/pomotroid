@@ -82,6 +82,8 @@ pub struct SessionFilter {
 pub struct SessionHistoryPage {
     pub sessions: Vec<SessionRow>,
     pub total: u32,
+    pub total_focus_secs: u64,
+    pub longest_streak: u32,
 }
 
 pub fn get_history(
@@ -157,7 +159,68 @@ pub fn get_history(
         sessions.push(row?);
     }
 
-    Ok(SessionHistoryPage { sessions, total })
+    // Compute stats for all filtered WORK sessions
+    let mut stats_query = String::from("SELECT started_at, duration_secs FROM sessions WHERE deleted_at IS NULL AND round_type = 'work'");
+    let mut stats_params = Vec::<rusqlite::types::Value>::new();
+
+    if let Some(subject) = &filter.subject {
+        let sql = format!(" AND subject = ?{}", stats_params.len() + 1);
+        stats_query.push_str(&sql);
+        stats_params.push(subject.clone().into());
+    }
+    if let Some(topic) = &filter.subject_topic {
+        let sql = format!(" AND subject_topic = ?{}", stats_params.len() + 1);
+        stats_query.push_str(&sql);
+        stats_params.push(topic.clone().into());
+    }
+    if let Some(stype) = &filter.study_type {
+        let sql = format!(" AND study_type = ?{}", stats_params.len() + 1);
+        stats_query.push_str(&sql);
+        stats_params.push(stype.clone().into());
+    }
+    if let Some(d_from) = filter.date_from {
+        let sql = format!(" AND started_at >= ?{}", stats_params.len() + 1);
+        stats_query.push_str(&sql);
+        stats_params.push(d_from.into());
+    }
+    if let Some(d_to) = filter.date_to {
+        let sql = format!(" AND started_at <= ?{}", stats_params.len() + 1);
+        stats_query.push_str(&sql);
+        stats_params.push(d_to.into());
+    }
+    
+    stats_query.push_str(" ORDER BY started_at ASC");
+
+    let mut total_focus_secs = 0u64;
+    let mut days_set = std::collections::BTreeSet::new();
+
+    let mut stats_stmt = conn.prepare(&stats_query)?;
+    let stats_iter = stats_stmt.query_map(rusqlite::params_from_iter(stats_params.iter()), |row| {
+        let started_at: i64 = row.get(0)?;
+        let duration: u32 = row.get(1)?;
+        Ok((started_at, duration))
+    })?;
+
+    for row in stats_iter {
+        if let Ok((started_at, duration)) = row {
+            total_focus_secs += duration as u64;
+            if let Some(dt) = chrono::DateTime::from_timestamp(started_at, 0) {
+                let local = dt.with_timezone(&chrono::Local);
+                days_set.insert(local.format("%Y-%m-%d").to_string());
+            }
+        }
+    }
+
+    let today_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let days: Vec<String> = days_set.into_iter().collect();
+    let streak_info = compute_streak(&days, &today_str);
+
+    Ok(SessionHistoryPage { 
+        sessions, 
+        total,
+        total_focus_secs,
+        longest_streak: streak_info.longest
+    })
 }
 
 #[derive(Debug, Deserialize)]

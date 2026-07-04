@@ -159,6 +159,8 @@ export interface SessionFilter {
 export interface SessionHistoryPage {
   sessions: SessionRow[];
   total: number;
+  total_focus_secs: number;
+  longest_streak: number;
 }
 
 export interface CreateManualSessionPayload {
