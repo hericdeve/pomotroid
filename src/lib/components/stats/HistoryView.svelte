@@ -234,6 +234,15 @@
       <div class="msg">No sessions found.</div>
     {:else}
       <table class="table">
+        <colgroup>
+          <col style="width: 18%;">
+          <col style="width: 12%;">
+          <col style="width: 8%;">
+          <col style="width: 12%;">
+          <col style="width: 18%;">
+          <col style="width: 17%;">
+          <col style="width: 15%;">
+        </colgroup>
         <thead>
           <tr>
             <th>Date</th>
@@ -381,6 +390,9 @@
     font-size: 0.85rem;
     color: var(--color-foreground-darker);
     font-variant-numeric: tabular-nums;
+    min-width: 85px;
+    text-align: center;
+    display: inline-block;
   }
 
   /* ── Lifetime totals ─────────────────────────────────────── */
@@ -450,6 +462,8 @@
   .date-controls {
     flex: 1;
     justify-content: space-between;
+    flex-wrap: nowrap;
+    overflow-x: auto;
   }
   .quick-modes {
     display: flex;
@@ -526,6 +540,7 @@
 
   .table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.85rem;
   }
