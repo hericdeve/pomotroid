@@ -61,12 +61,12 @@
       let date_to: number | null = null;
 
       if (dateFromStr) {
-        const d = new Date(dateFromStr);
+        const d = new Date(dateFromStr + 'T00:00:00');
         d.setHours(0, 0, 0, 0);
         date_from = Math.floor(d.getTime() / 1000);
       }
       if (dateToStr) {
-        const d = new Date(dateToStr);
+        const d = new Date(dateToStr + 'T00:00:00');
         d.setHours(23, 59, 59, 999);
         date_to = Math.floor(d.getTime() / 1000);
       }
@@ -277,8 +277,8 @@
     flex-wrap: wrap;
   }
 
-  .custom-select, .custom-input {
-    background: var(--color-background-lighter);
+  .custom-input {
+    background: var(--color-hover);
     color: var(--color-foreground);
     border: 1px solid var(--color-separator);
     padding: 6px 12px;
@@ -287,6 +287,29 @@
     outline: none;
     flex: 1;
     min-width: 120px;
+  }
+
+  .custom-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--color-hover);
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23a3aec4%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px top 50%;
+    background-size: 10px auto;
+    color: var(--color-foreground);
+    border: 1px solid var(--color-separator);
+    padding: 6px 30px 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    outline: none;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .custom-select option {
+    background: var(--color-background);
+    color: var(--color-foreground);
   }
 
   .date-input {
@@ -300,7 +323,7 @@
   }
 
   .quick-select button {
-    background: var(--color-background-lighter);
+    background: var(--color-hover);
     color: var(--color-foreground);
     border: 1px solid var(--color-separator);
     padding: 4px 10px;
@@ -310,9 +333,9 @@
   }
 
   .quick-select button.active {
-    background: var(--color-primary);
+    background: var(--color-focus-round);
     color: var(--color-background);
-    border-color: var(--color-primary);
+    border-color: var(--color-focus-round);
   }
 
   .date-range {
@@ -339,7 +362,7 @@
   .list-container {
     flex: 1;
     overflow-y: auto;
-    background: var(--color-background-lighter);
+    background: transparent;
     border: 1px solid var(--color-separator);
     border-radius: 6px;
   }
@@ -388,7 +411,7 @@
   }
 
   .pagination button {
-    background: var(--color-background-lighter);
+    background: var(--color-hover);
     color: var(--color-foreground);
     border: 1px solid var(--color-separator);
     padding: 6px 16px;
