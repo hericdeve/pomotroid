@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { getSessionSubjects, getSessionTopics, sessionsGetHistory } from '$lib/ipc';
+  import DropdownSelect from '$lib/components/DropdownSelect.svelte';
   import type { SessionRow, SessionFilter, SessionHistoryPage } from '$lib/types';
   import * as m from '$paraglide/messages.js';
 
@@ -176,26 +177,9 @@
 <div class="history-view">
   <div class="controls">
     <div class="filter-row">
-      <select bind:value={filterSubject} class="custom-select">
-        <option value="">All Subjects</option>
-        {#each subjects as s}
-          <option value={s}>{s}</option>
-        {/each}
-      </select>
-
-      <select bind:value={filterTopic} class="custom-select">
-        <option value="">All Topics</option>
-        {#each topics as t}
-          <option value={t}>{t}</option>
-        {/each}
-      </select>
-
-      <select bind:value={filterStudyType} class="custom-select">
-        <option value="">All Types</option>
-        {#each studyTypes as type}
-          <option value={type}>{type}</option>
-        {/each}
-      </select>
+      <DropdownSelect bind:value={filterSubject} options={subjects} placeholder="All Subjects" />
+      <DropdownSelect bind:value={filterTopic} options={topics} placeholder="All Topics" />
+      <DropdownSelect bind:value={filterStudyType} options={studyTypes} placeholder="All Types" />
     </div>
 
     <div class="filter-row">
@@ -280,7 +264,7 @@
 
   .filter-row {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     align-items: center;
     flex-wrap: wrap;
   }
@@ -295,29 +279,6 @@
     outline: none;
     flex: 1;
     min-width: 120px;
-  }
-
-  .custom-select {
-    appearance: none;
-    -webkit-appearance: none;
-    background-color: var(--color-hover);
-    background-image: url("/src/lib/assets/dropdown.svg");
-    background-repeat: no-repeat;
-    background-position: right 10px top 50%;
-    background-size: 10px auto;
-    color: var(--color-foreground);
-    border: 1px solid var(--color-separator);
-    padding: 6px 30px 6px 12px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    outline: none;
-    flex: 1;
-    min-width: 120px;
-  }
-
-  .custom-select option {
-    background: var(--color-background);
-    color: var(--color-foreground);
   }
 
   .date-input {
