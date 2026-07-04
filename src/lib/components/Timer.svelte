@@ -24,6 +24,9 @@
   import type { UnlistenFn } from '@tauri-apps/api/event';
   import * as m from '$paraglide/messages.js';
   import { notificationShow } from '$lib/ipc';
+  import { pendingTags } from '$lib/stores/pendingTags';
+  import { get } from 'svelte/store';
+  import { updateSession } from '$lib/ipc';
 
   interface Props {
     isCompact?: boolean;
@@ -33,6 +36,22 @@
   let { isCompact = false, uiScale = 1 }: Props = $props();
 
   let state = $derived($timerState);
+
+  let lastActiveSessionId: number | null = null;
+  $effect(() => {
+    if (state.active_session_id !== null && state.active_session_id !== lastActiveSessionId) {
+      const p = get(pendingTags);
+      if (p.subject || p.subject_topic || p.study_type || p.notes) {
+        updateSession(state.active_session_id, {
+          subject: p.subject || null,
+          subject_topic: p.subject_topic || null,
+          study_type: p.study_type || null,
+          notes: p.notes || null,
+        }).catch(console.error);
+      }
+      lastActiveSessionId = state.active_session_id;
+    }
+  });
 
   function roundColor(rt: string): string {
     if (rt === 'work') return 'var(--color-focus-round)';

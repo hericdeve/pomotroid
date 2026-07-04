@@ -2,9 +2,11 @@
   import { onMount } from 'svelte';
   import { getSession, updateSession } from '$lib/ipc';
   import EntryDetail from './EntryDetail.svelte';
+  import { pendingTags } from '$lib/stores/pendingTags';
+  import { get } from 'svelte/store';
 
   interface Props {
-    sessionId: number;
+    sessionId: number | null;
     onClose: () => void;
   }
   let { sessionId, onClose }: Props = $props();
@@ -19,17 +21,23 @@
 
   onMount(async () => {
     try {
-      const row = await getSession(sessionId);
-      if (row) {
-        payload = {
-          subject: row.subject || '',
-          subject_topic: row.subject_topic || '',
-          study_type: row.study_type || '',
-          notes: row.notes || '',
-        };
-        initialLoaded = true;
+      if (sessionId !== null) {
+        const row = await getSession(sessionId);
+        if (row) {
+          payload = {
+            subject: row.subject || '',
+            subject_topic: row.subject_topic || '',
+            study_type: row.study_type || '',
+            notes: row.notes || '',
+          };
+          initialLoaded = true;
+        } else {
+          onClose();
+        }
       } else {
-        onClose();
+        const p = get(pendingTags);
+        payload = { ...p };
+        initialLoaded = true;
       }
     } catch (e) {
       console.error(e);
@@ -47,12 +55,15 @@
     clearTimeout(timeout);
     timeout = setTimeout(async () => {
       try {
-        await updateSession(sessionId, {
-          subject: p.subject || null,
-          subject_topic: p.subject_topic || null,
-          study_type: p.study_type || null,
-          notes: p.notes || null,
-        });
+        if (sessionId !== null) {
+          await updateSession(sessionId, {
+            subject: p.subject || null,
+            subject_topic: p.subject_topic || null,
+            study_type: p.study_type || null,
+            notes: p.notes || null,
+          });
+        }
+        pendingTags.set({ ...p });
       } catch (e) {
         console.error(e);
       }
