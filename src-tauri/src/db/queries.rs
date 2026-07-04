@@ -877,22 +877,10 @@ pub struct SubjectInsight {
 }
 
 #[derive(Debug, Serialize)]
-pub struct TopicInsight {
-    pub topic: String,
-    pub focus_secs: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct StudyTypeInsight {
-    pub study_type: String,
-    pub focus_secs: i64,
-}
-
-#[derive(Debug, Serialize)]
 pub struct InsightsStats {
     pub top_subjects: Vec<SubjectInsight>,
-    pub top_topics: Vec<TopicInsight>,
-    pub top_study_types: Vec<StudyTypeInsight>,
+    pub by_day_of_week: Vec<i64>, // 0 = Sunday, 6 = Saturday
+    pub by_hour_of_day: Vec<i64>, // 0 = 12am, 23 = 11pm
 }
 
 pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<InsightsStats> {
@@ -935,29 +923,37 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
         })
     })?.filter_map(Result::ok).collect();
 
-    // Top Topics
-    let topic_query = format!("SELECT COALESCE(subject_topic, 'Uncategorized'), SUM(duration_secs) {} GROUP BY COALESCE(subject_topic, 'Uncategorized') ORDER BY SUM(duration_secs) DESC", base_query);
-    let mut stmt = conn.prepare(&topic_query)?;
-    let top_topics = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
-        Ok(TopicInsight {
-            topic: row.get(0)?,
-            focus_secs: row.get(1)?,
-        })
-    })?.filter_map(Result::ok).collect();
+    // By Day of Week
+    let day_query = format!("SELECT CAST(strftime('%w', started_at, 'unixepoch', 'localtime') AS INTEGER), SUM(duration_secs) {} GROUP BY strftime('%w', started_at, 'unixepoch', 'localtime')", base_query);
+    let mut stmt = conn.prepare(&day_query)?;
+    let mut by_day_of_week = vec![0; 7];
+    let mut rows = stmt.query(rusqlite::params_from_iter(params.iter()))?;
+    while let Some(row) = rows.next()? {
+        let day_i: i64 = row.get(0)?;
+        let secs: i64 = row.get(1)?;
+        let day = day_i as usize;
+        if day < 7 {
+            by_day_of_week[day] = secs;
+        }
+    }
 
-    // Top Study Types
-    let type_query = format!("SELECT COALESCE(study_type, 'None / Uncategorized'), SUM(duration_secs) {} GROUP BY COALESCE(study_type, 'None / Uncategorized') ORDER BY SUM(duration_secs) DESC", base_query);
-    let mut stmt = conn.prepare(&type_query)?;
-    let top_study_types = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
-        Ok(StudyTypeInsight {
-            study_type: row.get(0)?,
-            focus_secs: row.get(1)?,
-        })
-    })?.filter_map(Result::ok).collect();
+    // By Hour of Day
+    let hour_query = format!("SELECT CAST(strftime('%H', started_at, 'unixepoch', 'localtime') AS INTEGER), SUM(duration_secs) {} GROUP BY strftime('%H', started_at, 'unixepoch', 'localtime')", base_query);
+    let mut stmt = conn.prepare(&hour_query)?;
+    let mut by_hour_of_day = vec![0; 24];
+    let mut rows = stmt.query(rusqlite::params_from_iter(params.iter()))?;
+    while let Some(row) = rows.next()? {
+        let hour_i: i64 = row.get(0)?;
+        let secs: i64 = row.get(1)?;
+        let hour = hour_i as usize;
+        if hour < 24 {
+            by_hour_of_day[hour] = secs;
+        }
+    }
 
     Ok(InsightsStats {
         top_subjects,
-        top_topics,
-        top_study_types,
+        by_day_of_week,
+        by_hour_of_day,
     })
 }

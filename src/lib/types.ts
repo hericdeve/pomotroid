@@ -133,20 +133,10 @@ export interface SubjectInsight {
   focus_secs: number;
 }
 
-export interface TopicInsight {
-  topic: string;
-  focus_secs: number;
-}
-
-export interface StudyTypeInsight {
-  study_type: string;
-  focus_secs: number;
-}
-
 export interface InsightsStats {
   top_subjects: SubjectInsight[];
-  top_topics: TopicInsight[];
-  top_study_types: StudyTypeInsight[];
+  by_day_of_week: number[];
+  by_hour_of_day: number[];
 }
 
 // ---------------------------------------------------------------------------
