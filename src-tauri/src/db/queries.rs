@@ -295,13 +295,13 @@ pub struct SessionStats {
 
 pub fn get_all_time_stats(conn: &Connection) -> Result<SessionStats> {
     let total_work_sessions: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sessions WHERE round_type = 'work'",
+        "SELECT COALESCE(SUM(MAX(1, CAST(ROUND(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)) AS INTEGER))), 0) FROM sessions WHERE round_type = 'work'",
         [],
         |r| r.get(0),
     )?;
 
     let completed_work_sessions: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sessions WHERE round_type = 'work' AND completed = 1",
+        "SELECT COALESCE(SUM(MAX(1, CAST(ROUND(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)) AS INTEGER))), 0) FROM sessions WHERE round_type = 'work' AND completed = 1",
         [],
         |r| r.get(0),
     )?;
@@ -363,7 +363,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
     )?;
 
     let total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sessions
+        "SELECT COALESCE(SUM(MAX(1, CAST(ROUND(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)) AS INTEGER))), 0) FROM sessions
          WHERE round_type = 'work'
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
@@ -371,7 +371,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
     )?;
 
     let completed: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sessions
+        "SELECT COALESCE(SUM(MAX(1, CAST(ROUND(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)) AS INTEGER))), 0) FROM sessions
          WHERE round_type = 'work' AND completed = 1
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
@@ -389,7 +389,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
     let mut by_hour = vec![0u32; 24];
     let mut stmt = conn.prepare(
         "SELECT CAST(strftime('%H', datetime(started_at, 'unixepoch', 'localtime')) AS INTEGER) as h,
-                COUNT(*) as cnt
+                COALESCE(SUM(MAX(1, CAST(ROUND(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)) AS INTEGER))), 0) as cnt
          FROM sessions
          WHERE round_type = 'work' AND completed = 1
          AND date(started_at, 'unixepoch', 'localtime') = ?1
@@ -415,7 +415,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
 pub fn get_weekly_stats(conn: &Connection) -> Result<Vec<DayStat>> {
     let mut stmt = conn.prepare(
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
-                COUNT(*) as rounds
+                COALESCE(SUM(MAX(1, CAST(ROUND(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)) AS INTEGER))), 0) as rounds
          FROM sessions
          WHERE round_type = 'work' AND completed = 1
          AND date(started_at, 'unixepoch', 'localtime') >= date('now', 'localtime', '-6 days')
@@ -432,7 +432,7 @@ pub fn get_weekly_stats(conn: &Connection) -> Result<Vec<DayStat>> {
 pub fn get_heatmap_data(conn: &Connection) -> Result<Vec<HeatmapEntry>> {
     let mut stmt = conn.prepare(
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
-                COUNT(*) as cnt
+                COALESCE(SUM(MAX(1, CAST(ROUND(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)) AS INTEGER))), 0) as cnt
          FROM sessions
          WHERE round_type = 'work' AND completed = 1
          GROUP BY day
