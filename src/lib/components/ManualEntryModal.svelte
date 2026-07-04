@@ -72,6 +72,7 @@
     
     <div class="scrollable-body">
       <div class="form-row">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>Time Occurred</label>
         <div class="toggle-group">
           <button class:active={timeMode === 'now'} onclick={() => timeMode = 'now'}>Right Now</button>
@@ -86,8 +87,8 @@
       {/if}
 
       <div class="form-row">
-        <label>Duration (minutes)</label>
-        <input type="number" bind:value={durationMins} min="1" class="custom-input" />
+        <label for="duration-input">Duration (minutes)</label>
+        <input id="duration-input" type="number" bind:value={durationMins} min="1" class="custom-input" />
       </div>
 
       <div class="divider"></div>

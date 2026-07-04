@@ -256,7 +256,7 @@
     </Tooltip>
 
     {#if showVolume}
-      <div class="volume-slider-wrapper" onmouseenter={() => (showVolume = true)} onmouseleave={() => (showVolume = false)}>
+      <div class="volume-slider-wrapper" role="presentation" onmouseenter={() => (showVolume = true)} onmouseleave={() => (showVolume = false)}>
         <input
           type="range"
           min="0"
@@ -398,32 +398,6 @@
     flex-shrink: 0;
   }
 
-  .traffic-lights {
-    display: flex;
-    gap: 8px;
-    padding: 0 12px;
-  }
-
-  .traffic-light {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    /* Colors approximated from macOS system defaults */
-    background: color-mix(in oklch, var(--color-foreground) 20%, transparent);
-  }
-
-  .traffic-light.close {
-    background: #ff5f56;
-    border: 1px solid #e0443e;
-  }
-  .traffic-light.minimize {
-    background: #ffbd2e;
-    border: 1px solid #dea123;
-  }
-  .traffic-light.maximize {
-    background: #27c93f;
-    border: 1px solid #1aab29;
-  }
 
   .volume-wrapper {
     position: relative;
@@ -488,12 +462,6 @@
   }
 
   .titlebar:not(.suppress-hover) .btn-icon:hover {
-    color: var(--color-foreground);
-    background: var(--color-hover);
-  }
-
-  .titlebar:not(.suppress-hover) .btn-icon.close:hover {
-    color: var(--color-background);
-    background: var(--color-focus-round);
+    background-color: var(--color-hover);
   }
 </style>

@@ -36,5 +36,16 @@ export default defineConfig(async () => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ['**/src-tauri/**'],
     },
+    // 4. Pre-compile critical Svelte component CSS virtual modules during startup
+    //    to avoid the race condition where Tauri's WebView loads before Vite has
+    //    registered them, causing intermittently broken layouts on first boot.
+    warmup: {
+      clientFiles: [
+        './src/routes/+layout.svelte',
+        './src/routes/+page.svelte',
+        './src/routes/settings/+page.svelte',
+        './src/routes/stats/+page.svelte',
+      ],
+    },
   },
 }));

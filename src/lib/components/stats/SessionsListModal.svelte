@@ -68,8 +68,8 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="modal-backdrop" onclick={onClose} role="dialog">
-  <div class="modal" onclick={(e) => e.stopPropagation()}>
+<div class="modal-backdrop" onclick={onClose} role="presentation">
+  <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
     <div class="header">
       <h2>{label}</h2>
       <button class="close-btn" onclick={onClose} aria-label="Close">

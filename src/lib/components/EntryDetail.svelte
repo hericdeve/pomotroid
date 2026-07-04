@@ -106,8 +106,9 @@
 
 <div class="entry-detail">
   <div class="form-group">
-    <label>Subject</label>
+    <label for="subject-input">Subject</label>
     <AutocompleteInput
+      id="subject-input"
       bind:value={localSubject}
       options={subjectOptions}
       placeholder="e.g. Mathematics"
@@ -116,8 +117,9 @@
   </div>
   
   <div class="form-group">
-    <label>Topic</label>
+    <label for="topic-input">Topic</label>
     <AutocompleteInput
+      id="topic-input"
       bind:value={localTopic}
       options={topicOptions}
       placeholder="e.g. Linear Algebra"
@@ -126,8 +128,9 @@
   </div>
 
   <div class="form-group">
-    <label>Study Type</label>
+    <label for="study-type-input">Study Type</label>
     <AutocompleteInput
+      id="study-type-input"
       bind:value={localStudyType}
       options={studyTypeOptions}
       placeholder="e.g. Exercise"
@@ -136,8 +139,9 @@
   </div>
 
   <div class="form-group">
-    <label>Notes</label>
+    <label for="notes-input">Notes</label>
     <textarea 
+      id="notes-input"
       bind:value={localNotes} 
       placeholder="Any additional notes..." 
       onblur={handleNotesBlur}
@@ -169,7 +173,7 @@
     font-weight: 500;
   }
   
-  .custom-select, textarea {
+  textarea {
     width: 100%;
     padding: 10px 14px;
     background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
@@ -182,20 +186,12 @@
     outline: none;
     -webkit-appearance: none;
     appearance: none;
-  }
-  
-  .custom-select:focus, textarea:focus {
-    border-color: var(--color-accent);
-    background: color-mix(in oklch, var(--color-foreground) 15%, transparent);
-  }
-  
-  textarea {
     resize: vertical;
     min-height: 80px;
   }
   
-  .custom-select option {
-    background: var(--color-background-light);
-    color: var(--color-foreground);
+  textarea:focus {
+    border-color: var(--color-accent);
+    background: color-mix(in oklch, var(--color-foreground) 15%, transparent);
   }
 </style>

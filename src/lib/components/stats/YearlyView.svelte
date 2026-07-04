@@ -255,6 +255,7 @@
             {#each col as cell, d}
               {@const cx = LEFT_OFFSET + w * STRIDE}
               {@const cy = MONTH_LABEL_H + d * STRIDE}
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
               <rect
                 x={cx}
                 y={cy}

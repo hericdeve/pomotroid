@@ -1,5 +1,6 @@
 <script lang="ts">
   interface Props {
+    id?: string;
     value: string;
     options: string[];
     placeholder?: string;
@@ -7,6 +8,7 @@
   }
 
   let {
+    id,
     value = $bindable(),
     options,
     placeholder = '',
@@ -88,6 +90,7 @@
 
 <div class="autocomplete-container">
   <input
+    {id}
     bind:this={inputElement}
     type="text"
     {value}
@@ -101,6 +104,7 @@
     <ul class="dropdown">
       {#each filteredOptions as opt, i}
         <!-- Use mousedown instead of click because mousedown fires before blur -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <li 
           class:active={i === activeIndex} 
           onmousedown={(e) => { e.preventDefault(); selectOption(opt); }}

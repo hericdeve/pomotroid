@@ -91,7 +91,7 @@
 
 <div class="modal-overlay" role="presentation" onclick={onClose}>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="modal" role="dialog" onclick={(e) => e.stopPropagation()}>
+  <div class="modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
     <div class="header">
       <h2>Tag Session</h2>
       <div class="header-actions">
