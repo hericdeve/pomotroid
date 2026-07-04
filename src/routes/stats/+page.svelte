@@ -38,7 +38,14 @@
   let heatmapLoaded = $state(false);
   let showManualEntry = $state(false);
   let editingSessionId = $state<number | null>(null);
-  let listModalTimeRange = $state<{ start: number; end: number; label: string } | null>(null);
+  let refreshTrigger = $state(0);
+  
+  let listModalTimeRange = $state<{ start: number, end: number, label: string } | null>(null);
+
+  async function loadData() {
+    detailed = await statsGetDetailed();
+    if (heatmapLoaded) heatmap = await statsGetHeatmap();
+  }
 
   async function switchTab(tab: Tab) {
     activeTab = tab;
@@ -191,37 +198,54 @@
 
   <!-- Content -->
   <div class="content">
-    {#if activeTab === 'today'}
-      <DailyView today={detailed?.today ?? null} onBarClick={(r) => listModalTimeRange = r} />
-    {:else if activeTab === 'week'}
-      <WeeklyView week={detailed?.week ?? null} streak={detailed?.streak ?? null} onBarClick={(r) => listModalTimeRange = r} />
-    {:else if activeTab === 'alltime'}
-      <YearlyView {heatmap} onBarClick={(r) => listModalTimeRange = r} />
-    {:else}
-      <HistoryView onEditSession={(id) => editingSessionId = id} />
-    {/if}
+    {#key refreshTrigger}
+      {#if activeTab === 'today'}
+        <DailyView today={detailed?.today ?? null} onBarClick={(r) => listModalTimeRange = r} />
+      {:else if activeTab === 'week'}
+        <WeeklyView week={detailed?.week ?? null} streak={detailed?.streak ?? null} onBarClick={(r) => listModalTimeRange = r} />
+      {:else if activeTab === 'alltime'}
+        <YearlyView {heatmap} onBarClick={(r) => listModalTimeRange = r} />
+      {:else}
+        <HistoryView onEditSession={(id) => editingSessionId = id} />
+      {/if}
+    {/key}
   </div>
 </div>
 
 {#if showManualEntry}
-  <ManualEntryModal onclose={() => showManualEntry = false} />
+  <ManualEntryModal onclose={() => {
+    showManualEntry = false;
+    refreshTrigger++;
+    loadData();
+  }} />
 {/if}
 
 {#if listModalTimeRange !== null}
-  <SessionsListModal
-    dateFrom={listModalTimeRange.start}
-    dateTo={listModalTimeRange.end}
-    label={listModalTimeRange.label}
-    onClose={() => listModalTimeRange = null}
-    onEditSession={(id) => {
-      listModalTimeRange = null;
-      editingSessionId = id;
-    }}
-  />
+  {#key refreshTrigger}
+    <SessionsListModal
+      dateFrom={listModalTimeRange.start}
+      dateTo={listModalTimeRange.end}
+      label={listModalTimeRange.label}
+      onClose={() => listModalTimeRange = null}
+      onEditSession={(id) => {
+        listModalTimeRange = null;
+        editingSessionId = id;
+      }}
+    />
+  {/key}
 {/if}
 
 {#if editingSessionId !== null}
-  <SessionTagModal sessionId={editingSessionId} onClose={() => editingSessionId = null} />
+  <SessionTagModal 
+    sessionId={editingSessionId} 
+    allowDelete={true}
+    onClose={() => editingSessionId = null} 
+    onDeleted={() => {
+      editingSessionId = null;
+      refreshTrigger++;
+      loadData();
+    }}
+  />
 {/if}
 
 <style>

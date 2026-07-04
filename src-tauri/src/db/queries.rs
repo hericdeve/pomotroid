@@ -266,6 +266,15 @@ pub fn get_session(conn: &Connection, id: i64) -> Result<Option<SessionRow>> {
     ).optional()
 }
 
+pub fn delete_session(conn: &Connection, id: i64) -> Result<()> {
+    let now = unix_now();
+    conn.execute(
+        "UPDATE sessions SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
+        params![now, now, id],
+    )?;
+    Ok(())
+}
+
 pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload) -> Result<()> {
     conn.execute(
         "UPDATE sessions SET

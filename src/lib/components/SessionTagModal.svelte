@@ -7,9 +7,11 @@
 
   interface Props {
     sessionId: number | null;
+    allowDelete?: boolean;
     onClose: () => void;
+    onDeleted?: () => void;
   }
-  let { sessionId, onClose }: Props = $props();
+  let { sessionId, allowDelete = false, onClose, onDeleted }: Props = $props();
 
   let payload = $state<{
     subject: string;
@@ -69,6 +71,22 @@
       }
     }, 500);
   });
+
+  import { sessionDelete } from '$lib/ipc';
+
+  async function handleDelete() {
+    if (confirm('Are you sure you want to delete this session?')) {
+      if (sessionId !== null) {
+        try {
+          await sessionDelete(sessionId);
+          onDeleted?.();
+          onClose();
+        } catch (e) {
+          console.error('Failed to delete session', e);
+        }
+      }
+    }
+  }
 </script>
 
 <div class="modal-overlay" role="presentation" onclick={onClose}>
@@ -76,12 +94,24 @@
   <div class="modal" role="dialog" onclick={(e) => e.stopPropagation()}>
     <div class="header">
       <h2>Tag Session</h2>
-      <button class="close-btn" onclick={onClose} aria-label="Close">
-        <svg width="12" height="12" viewBox="0 0 12 12">
-          <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </button>
+      <div class="header-actions">
+        {#if allowDelete && sessionId !== null}
+          <button class="delete-btn" onclick={handleDelete} aria-label="Delete Session" title="Delete Session">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"></path>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </button>
+        {/if}
+        <button class="close-btn" onclick={onClose} aria-label="Close">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="content">
       {#if initialLoaded && payload}
@@ -130,6 +160,29 @@
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-danger, #ff4444);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  }
+  .delete-btn:hover {
+    opacity: 1;
+    background: var(--color-hover);
   }
   .close-btn {
     background: none;

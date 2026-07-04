@@ -893,6 +893,12 @@ pub fn session_update(id: i64, payload: queries::UpdateSessionPayload, db: State
 }
 
 #[tauri::command]
+pub fn session_delete(id: i64, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::delete_session(&conn, id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn session_create_manual(payload: queries::CreateManualSessionPayload, db: State<'_, DbState>, app: AppHandle) -> Result<i64, String> {
     let id = {
         let conn = db.lock().map_err(|e| e.to_string())?;
