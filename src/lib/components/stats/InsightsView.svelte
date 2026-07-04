@@ -191,7 +191,7 @@
           <div class="donut-container">
             <svg class="donut-svg" viewBox="0 0 160 160">
               <!-- Background ring -->
-              <circle cx="80" cy="80" r={r} fill="none" stroke="var(--color-bg)" stroke-width="24" />
+              <circle cx="80" cy="80" r={r} fill="none" stroke="var(--color-background)" stroke-width="24" />
               <!-- Slices -->
               {#each insights.top_subjects as s, i}
                 {@const prevOffset = insights.top_subjects.slice(0, i).reduce((sum, item) => sum + (item.focus_secs / totalSubjectTime) * c, 0)}
@@ -244,7 +244,7 @@
           <h3>Time by Day of Week</h3>
         </div>
         <div class="vertical-chart-container">
-          <svg viewBox="0 0 280 {CHART_H + 30}" class="vertical-svg">
+          <svg viewBox="0 0 280 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_day_of_week as secs, i}
               {@const h = Math.max(2, (secs / maxDayTime) * CHART_H)}
               {@const x = i * 40 + 10}
@@ -253,12 +253,12 @@
               <!-- Hoverable Group -->
               <g class="chart-group">
                 <rect {x} {y} width="20" height={h} fill={colors[i % colors.length]} rx="3" class="v-bar" />
-                <text x={x + 10} y={CHART_H + 20} text-anchor="middle" class="axis-label">{days[i]}</text>
+                <text x={x + 10} y={CHART_H + 18} text-anchor="middle" class="axis-label">{days[i]}</text>
                 
                 <!-- Tooltip Overlay (CSS managed) -->
-                <rect x={i * 40} y="0" width="40" height={CHART_H + 30} fill="transparent" class="hover-area" />
+                <rect x={i * 40} y="0" width="40" height={CHART_H + 40} fill="transparent" class="hover-area" />
                 <g class="tooltip">
-                  <rect x={x + 10} y={y - 30} width="60" height="24" rx="4" fill="var(--color-bg)" transform="translate(-30, 0)" />
+                  <rect x={x + 10} y={y - 30} width="60" height="24" rx="4" fill="var(--color-background)" transform="translate(-30, 0)" />
                   <text x={x + 10} y={y - 14} text-anchor="middle" class="tooltip-text">{fmtTime(secs)}</text>
                 </g>
               </g>
@@ -273,7 +273,7 @@
           <h3>Time by Hour of Day</h3>
         </div>
         <div class="vertical-chart-container hour-chart-wrap">
-          <svg viewBox="0 0 528 {CHART_H + 30}" class="vertical-svg">
+          <svg viewBox="0 0 528 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_hour_of_day as secs, i}
               {@const h = Math.max(2, (secs / maxHourTime) * CHART_H)}
               {@const x = i * 22 + 4}
@@ -282,14 +282,14 @@
               <g class="chart-group">
                 <rect {x} {y} width="14" height={h} fill={colors[(i + 4) % colors.length]} rx="2" class="v-bar" />
                 {#if i % 4 === 0}
-                  <text x={x + 7} y={CHART_H + 20} text-anchor="middle" class="axis-label">
+                  <text x={x + 7} y={CHART_H + 18} text-anchor="middle" class="axis-label">
                     {i === 0 ? '12A' : i < 12 ? `${i}A` : i === 12 ? '12P' : `${i-12}P`}
                   </text>
                 {/if}
                 
-                <rect x={i * 22} y="0" width="22" height={CHART_H + 30} fill="transparent" class="hover-area" />
+                <rect x={i * 22} y="0" width="22" height={CHART_H + 40} fill="transparent" class="hover-area" />
                 <g class="tooltip">
-                  <rect x={x + 7} y={y - 30} width="50" height="24" rx="4" fill="var(--color-bg)" transform="translate(-25, 0)" />
+                  <rect x={x + 7} y={y - 30} width="50" height="24" rx="4" fill="var(--color-background)" transform="translate(-25, 0)" />
                   <text x={x + 7} y={y - 14} text-anchor="middle" class="tooltip-text">{fmtTime(secs)}</text>
                 </g>
               </g>
@@ -314,7 +314,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    background: var(--color-bg-secondary);
+    background: var(--color-background);
     padding: 12px 16px;
     border-radius: 8px;
   }
@@ -327,7 +327,7 @@
   .quick-modes {
     display: flex;
     gap: 4px;
-    background: var(--color-bg);
+    background: var(--color-background);
     padding: 4px;
     border-radius: 6px;
   }
@@ -336,18 +336,18 @@
     font-size: 0.85rem;
     border: none;
     background: transparent;
-    color: var(--color-text-secondary);
+    color: var(--color-foreground-darker);
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s;
   }
   .btn-small:hover {
-    color: var(--color-text);
-    background: var(--color-bg-hover);
+    color: var(--color-foreground);
+    background: var(--color-hover);
   }
   .btn-small.active {
-    background: var(--color-primary);
-    color: var(--color-bg);
+    background: var(--color-focus-round);
+    color: var(--color-background);
     font-weight: 600;
   }
   .btn-icon {
@@ -360,7 +360,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--color-bg);
+    background: var(--color-background);
     padding: 4px 8px;
     border-radius: 6px;
   }
@@ -371,15 +371,15 @@
   }
   .date-input {
     background: transparent;
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
+    border: 1px solid var(--color-separator);
+    color: var(--color-foreground);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.85rem;
   }
   .date-sep {
     font-size: 0.85rem;
-    color: var(--color-text-secondary);
+    color: var(--color-foreground-darker);
   }
 
   .insights-dashboard {
@@ -389,7 +389,7 @@
   }
   
   .card {
-    background: var(--color-bg-secondary);
+    background: var(--color-background);
     border-radius: 12px;
     padding: 20px;
     display: flex;
@@ -408,14 +408,14 @@
   .card-header h3 {
     margin: 0;
     font-size: 1.1rem;
-    color: var(--color-text);
+    color: var(--color-foreground);
     font-weight: 600;
   }
   
   .toggles {
     display: flex;
     gap: 4px;
-    background: var(--color-bg);
+    background: var(--color-background);
     border-radius: 6px;
     padding: 4px;
   }
@@ -427,19 +427,19 @@
     border: none;
     background: transparent;
     border-radius: 4px;
-    color: var(--color-text-secondary);
+    color: var(--color-foreground-darker);
     cursor: pointer;
   }
   .btn-toggle:hover {
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
   .btn-toggle.active {
-    background: var(--color-primary);
-    color: var(--color-bg);
+    background: var(--color-focus-round);
+    color: var(--color-background);
   }
   
   .empty {
-    color: var(--color-text-secondary);
+    color: var(--color-foreground-darker);
     font-size: 0.9rem;
     text-align: center;
     padding: 20px 0;
@@ -467,16 +467,16 @@
     font-size: 0.9rem;
   }
   .name {
-    color: var(--color-text);
+    color: var(--color-foreground);
     font-weight: 500;
   }
   .val {
-    color: var(--color-text-secondary);
+    color: var(--color-foreground-darker);
   }
   .bar-track {
     width: 100%;
     height: 8px;
-    background: var(--color-bg);
+    background: var(--color-background);
     border-radius: 4px;
     overflow: hidden;
   }
@@ -534,14 +534,14 @@
     flex-shrink: 0;
   }
   .legend-label {
-    color: var(--color-text);
+    color: var(--color-foreground);
     flex-grow: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .legend-val {
-    color: var(--color-text-secondary);
+    color: var(--color-foreground-darker);
     font-weight: 500;
   }
 
@@ -575,7 +575,7 @@
   
   .axis-label {
     font-size: 11px;
-    fill: var(--color-text-secondary);
+    fill: var(--color-foreground-darker);
     user-select: none;
   }
   
@@ -588,7 +588,7 @@
   .tooltip-text {
     font-size: 11px;
     font-weight: 600;
-    fill: var(--color-text);
+    fill: var(--color-foreground);
   }
   .chart-group:hover .tooltip {
     opacity: 1;
