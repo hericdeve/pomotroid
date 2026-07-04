@@ -61,8 +61,18 @@
   <div class="extra-timer-container">
     <div class="time">{formatTime(extraSeconds)}</div>
     <div class="actions">
-      <button class="btn-discard" onclick={stopAndDiscard}>Discard</button>
-      <button class="btn-add" onclick={stopAndAdd}>Add</button>
+      <button class="btn-discard" onclick={stopAndDiscard} aria-label="Discard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+      <button class="btn-add" onclick={stopAndAdd} aria-label="Add extra time">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
     </div>
   </div>
 {/if}
@@ -70,13 +80,13 @@
 <style>
   .extra-timer-container {
     position: absolute;
-    bottom: 4rem;
+    bottom: 3rem;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.25rem;
     z-index: 10;
     animation: fade-in 0.3s ease-out;
   }
@@ -87,7 +97,7 @@
   }
 
   .time {
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     font-weight: 600;
     color: var(--color-accent);
     font-variant-numeric: tabular-nums;
@@ -95,19 +105,18 @@
 
   .actions {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   button {
     background: transparent;
     border: none;
-    font-size: 0.8rem;
-    padding: 0.3rem 0.75rem;
-    border-radius: 6px;
+    padding: 0.25rem;
+    border-radius: 50%;
     cursor: pointer;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.2s ease;
   }
 
