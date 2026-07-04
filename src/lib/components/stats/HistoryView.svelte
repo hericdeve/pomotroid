@@ -399,7 +399,7 @@
   }
 
   .table tbody tr:hover {
-    background: var(--color-background);
+    background: var(--color-hover);
   }
 
   .pagination {

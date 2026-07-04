@@ -216,8 +216,8 @@
   }
 
   .session-row:hover {
-    background: var(--color-background);
-    border-color: var(--color-primary);
+    background: var(--color-hover);
+    border-color: var(--color-accent);
   }
 
   .session-row:hover .action-icon {
