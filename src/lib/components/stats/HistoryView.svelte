@@ -322,15 +322,15 @@
 
   .date-input {
     flex: none;
-    min-width: 130px;
-    width: 130px;
+    min-width: 115px;
+    width: 115px;
   }
 
   .all-time-badge {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 280px;
+    width: 230px;
     background: var(--color-hover);
     color: var(--color-foreground);
     border: 1px solid var(--color-separator);
