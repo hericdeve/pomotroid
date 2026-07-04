@@ -313,8 +313,9 @@
   }
 
   .date-input {
-    flex: 0;
-    min-width: unset;
+    flex: none;
+    min-width: 130px;
+    width: 130px;
   }
 
   .quick-select {
