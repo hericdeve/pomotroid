@@ -279,8 +279,6 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    padding: 16px;
-    gap: 16px;
     box-sizing: border-box;
   }
 
@@ -288,6 +286,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    padding: 16px 16px 0 16px;
   }
 
   .filter-row {
@@ -475,6 +474,7 @@
     background: transparent;
     border: 1px solid var(--color-separator);
     border-radius: 6px;
+    margin: 16px;
   }
 
   .msg {
