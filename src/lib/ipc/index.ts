@@ -94,6 +94,7 @@ export const sessionsExport = (path: string) => invoke<number>('sessions_export'
 export const sessionsImport = (path: string) => invoke<ImportSummary>('sessions_import', { path });
 export const getSession = (id: number) => invoke<SessionRow | null>('session_get', { id });
 export const updateSession = (id: number, payload: UpdateSessionPayload) => invoke<void>('session_update', { id, payload });
+export const sessionAddExtraTime = (id: number, extraSecs: number) => invoke<void>('session_add_extra_time', { id, extraSecs });
 export const sessionDelete = (id: number) => invoke<void>('session_delete', { id });
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
 export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');

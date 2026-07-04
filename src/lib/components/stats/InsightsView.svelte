@@ -448,6 +448,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding-right: 10px;
   }
   .bar-item {
     display: flex;
@@ -550,7 +553,7 @@
     display: flex;
     align-items: flex-end;
     overflow-x: auto;
-    padding-top: 16px;
+    padding-top: 36px;
   }
   .vertical-svg {
     display: block;

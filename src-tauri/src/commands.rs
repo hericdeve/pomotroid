@@ -893,6 +893,13 @@ pub fn session_update(id: i64, payload: queries::UpdateSessionPayload, db: State
 }
 
 #[tauri::command]
+pub fn session_add_extra_time(id: i64, extra_secs: i64, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::add_extra_time_to_session(&conn, id, extra_secs).map_err(|e| e.to_string())
+}
+
+
+#[tauri::command]
 pub fn session_delete(id: i64, db: State<'_, DbState>) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     queries::delete_session(&conn, id).map_err(|e| e.to_string())

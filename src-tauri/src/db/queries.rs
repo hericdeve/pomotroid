@@ -302,6 +302,14 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
     Ok(())
 }
 
+pub fn add_extra_time_to_session(conn: &Connection, id: i64, extra_secs: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE sessions SET duration_secs = duration_secs + ?1, updated_at = ?2 WHERE id = ?3",
+        params![extra_secs, unix_now(), id],
+    )?;
+    Ok(())
+}
+
 pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayload) -> Result<i64> {
     let uuid = uuid::Uuid::new_v4().to_string();
     let ended_at = payload.started_at + (payload.duration_secs as i64);

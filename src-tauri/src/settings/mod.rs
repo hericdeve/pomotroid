@@ -26,6 +26,7 @@ pub struct Settings {
     pub long_breaks_enabled: bool,
     /// When true the dial arc starts full and subtracts; when false it fills from empty.
     pub dial_countdown: bool,
+    pub enable_extra_timer: bool,
     pub theme_mode: String,
     pub theme_light: String,
     pub theme_dark: String,
@@ -84,6 +85,7 @@ impl Default for Settings {
             short_breaks_enabled: true,
             long_breaks_enabled: true,
             dial_countdown: true,
+            enable_extra_timer: false,
             theme_mode: "auto".to_string(),
             theme_light: "Pomotroid Light".to_string(),
             theme_dark: "Pomotroid".to_string(),
@@ -195,6 +197,7 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         short_breaks_enabled: parse_bool(&map, "short_breaks_enabled", d.short_breaks_enabled),
         long_breaks_enabled: parse_bool(&map, "long_breaks_enabled", d.long_breaks_enabled),
         dial_countdown: parse_bool(&map, "dial_countdown", d.dial_countdown),
+        enable_extra_timer: parse_bool(&map, "enable_extra_timer", d.enable_extra_timer),
         theme_mode: map
             .get("theme_mode")
             .cloned()

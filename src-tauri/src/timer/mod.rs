@@ -39,6 +39,7 @@ pub struct TimerSnapshot {
     /// session counter when long breaks are disabled.
     pub session_work_count: u32,
     pub active_session_id: Option<i64>,
+    pub last_completed_session_id: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +49,9 @@ pub struct TimerSnapshot {
 struct TimerShared {
     elapsed_secs: u32,
     is_running: bool,
+    is_paused: bool,
     active_session_id: Option<i64>,
+    last_completed_session_id: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +87,9 @@ impl TimerController {
         let shared = Arc::new(Mutex::new(TimerShared {
             elapsed_secs: 0,
             is_running: false,
+            is_paused: false,
             active_session_id: None,
+            last_completed_session_id: None,
         }));
 
         // Clone handles for the event-listener thread.
@@ -197,6 +202,7 @@ impl TimerController {
             work_rounds_total: seq.work_rounds_total,
             session_work_count: seq.session_work_count,
             active_session_id: shared.active_session_id,
+            last_completed_session_id: shared.last_completed_session_id,
         }
     }
 
@@ -321,6 +327,7 @@ fn listen_events(
                     if let Ok(conn) = db.lock() {
                         let _ = queries::complete_session(&conn, session_id, !was_skipped);
                     }
+                    shared.lock().unwrap().last_completed_session_id = Some(session_id);
                 }
 
                 // Advance sequence.
@@ -525,5 +532,6 @@ fn build_snapshot(
         work_rounds_total: seq.work_rounds_total,
         session_work_count: seq.session_work_count,
         active_session_id: sh.active_session_id,
+        last_completed_session_id: sh.last_completed_session_id,
     }
 }

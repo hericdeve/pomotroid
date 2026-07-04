@@ -15,6 +15,7 @@ export interface TimerState {
   work_rounds_total: number; // total work rounds before long break
   session_work_count: number; // monotonic focus round count since last reset
   active_session_id: number | null;
+  last_completed_session_id: number | null;
 }
 
 export interface ImportSummary {
@@ -30,6 +31,8 @@ export interface Settings {
   long_break_interval: number;
   short_breaks_enabled: boolean;
   long_breaks_enabled: boolean;
+  dial_countdown: boolean;
+  enable_extra_timer: boolean;
   auto_start_work: boolean;
   auto_start_break: boolean;
   tray_icon_enabled: boolean;
@@ -50,7 +53,6 @@ export interface Settings {
   theme_mode: string; // 'auto' | 'light' | 'dark'
   theme_light: string;
   theme_dark: string;
-  dial_countdown: boolean;
   language: string; // 'auto' | 'en' | 'es' | 'fr' | 'de' | 'ja'
   verbose_logging: boolean;
   check_for_updates: boolean;

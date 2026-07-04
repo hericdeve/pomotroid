@@ -18,8 +18,9 @@
   import { fade } from 'svelte/transition';
   import TimerDial from './TimerDial.svelte';
   import TimerDisplay from './TimerDisplay.svelte';
-  import TimerFooter from './TimerFooter.svelte';
-  import MiniControls from './MiniControls.svelte';
+  import TimerFooter from '$lib/components/TimerFooter.svelte';
+  import ExtraTimer from '$lib/components/ExtraTimer.svelte';
+  import MiniControls from '$lib/components/MiniControls.svelte';
   import Tooltip from './Tooltip.svelte';
   import type { UnlistenFn } from '@tauri-apps/api/event';
   import * as m from '$paraglide/messages.js';
@@ -134,10 +135,10 @@
 
 <div class="timer-outer" class:compact={isCompact}>
   <div class="timer" style="zoom: {uiScale}">
-    <!-- Dial + display stacked (display centered over dial) -->
     <div class="dial-stack">
       <TimerDial snap={state} countdown={$settings.dial_countdown} />
       <TimerDisplay {state} />
+      <ExtraTimer />
     </div>
 
     {#if !isCompact}

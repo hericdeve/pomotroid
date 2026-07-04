@@ -15,6 +15,7 @@ const initial: TimerState = {
   work_rounds_total: 4,
   session_work_count: 1,
   active_session_id: null,
+  last_completed_session_id: null,
 };
 
 export const timerState = writable<TimerState>(initial);
