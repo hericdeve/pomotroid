@@ -43,7 +43,7 @@ pub fn complete_session(
 // Extended Session CRUD
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SessionRow {
     pub id: i64,
     pub uuid: String,
@@ -756,4 +756,85 @@ mod tests {
         assert_eq!(stats.completed_work_sessions, 1.0);
         assert_eq!(stats.total_work_secs, 1500);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Import / Export helpers
+// ---------------------------------------------------------------------------
+
+/// Returned by `import_sessions` to report how many rows were inserted vs skipped.
+#[derive(Debug, Serialize)]
+pub struct ImportSummary {
+    pub imported: u32,
+    pub skipped: u32,
+}
+
+/// Export: fetch all non-deleted sessions ordered by `started_at ASC`.
+pub fn export_sessions(conn: &Connection) -> Result<Vec<SessionRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed,
+                subject, subject_topic, study_type, notes, updated_at, deleted_at
+         FROM sessions
+         WHERE deleted_at IS NULL
+         ORDER BY started_at ASC",
+    )?;
+    let iter = stmt.query_map([], |row| {
+        Ok(SessionRow {
+            id: row.get(0)?,
+            uuid: row.get(1)?,
+            started_at: row.get(2)?,
+            ended_at: row.get(3)?,
+            round_type: row.get(4)?,
+            duration_secs: row.get(5)?,
+            completed: row.get::<_, i64>(6)? != 0,
+            subject: row.get(7)?,
+            subject_topic: row.get(8)?,
+            study_type: row.get(9)?,
+            notes: row.get(10)?,
+            updated_at: row.get(11)?,
+            deleted_at: row.get(12)?,
+        })
+    })?;
+    let mut sessions = Vec::new();
+    for row in iter {
+        sessions.push(row?);
+    }
+    Ok(sessions)
+}
+
+/// Import: insert `sessions` into the DB, skipping any whose UUID already exists.
+/// Returns counts of how many were inserted vs skipped.
+pub fn import_sessions(conn: &Connection, sessions: &[SessionRow]) -> Result<ImportSummary> {
+    let mut imported = 0u32;
+    let mut skipped = 0u32;
+
+    for s in sessions {
+        // INSERT OR IGNORE skips the row if the UUID unique constraint fires.
+        let affected = conn.execute(
+            "INSERT OR IGNORE INTO sessions (
+                uuid, started_at, ended_at, round_type, duration_secs, completed,
+                subject, subject_topic, study_type, notes, updated_at, deleted_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                s.uuid,
+                s.started_at,
+                s.ended_at,
+                s.round_type,
+                s.duration_secs,
+                s.completed as i64,
+                s.subject,
+                s.subject_topic,
+                s.study_type,
+                s.notes,
+                s.updated_at,
+                s.deleted_at,
+            ],
+        )?;
+        if affected > 0 {
+            imported += 1;
+        } else {
+            skipped += 1;
+        }
+    }
+    Ok(ImportSummary { imported, skipped })
 }

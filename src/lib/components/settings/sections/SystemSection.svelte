@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { settings } from '$lib/stores/settings';
-  import { setSetting, resetSettings, clearSessionHistory, traySupported, sessionsImportXlsx } from '$lib/ipc';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { setSetting, resetSettings, clearSessionHistory, traySupported, sessionsImportXlsx, sessionsExport, sessionsImport } from '$lib/ipc';
+  import { open, save } from '@tauri-apps/plugin-dialog';
   import SettingsToggle from '$lib/components/settings/SettingsToggle.svelte';
   import * as m from '$paraglide/messages.js';
   import { setLocale } from '$lib/locale.svelte.js';
@@ -71,6 +71,42 @@
     confirmingClear = false;
   }
 
+  async function handleExport() {
+    const path = await save({
+      filters: [{ name: 'Pomotroid JSON', extensions: ['json'] }],
+      defaultPath: `pomotroid-export-${new Date().toISOString().slice(0, 10)}.json`
+    });
+    if (path) {
+      try {
+        const count = await sessionsExport(path);
+        exportFeedback = `Exported ${count} session${count !== 1 ? 's' : ''}.`;
+        setTimeout(() => (exportFeedback = ''), 4000);
+      } catch (e) {
+        console.error('Export failed', e);
+        exportFeedback = `Export failed: ${e}`;
+        setTimeout(() => (exportFeedback = ''), 6000);
+      }
+    }
+  }
+
+  async function handleJsonImport() {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: 'Pomotroid JSON', extensions: ['json'] }]
+    });
+    if (file) {
+      try {
+        const result = await sessionsImport(file as string);
+        importFeedback = `Imported ${result.imported} session${result.imported !== 1 ? 's' : ''}${result.skipped > 0 ? `, skipped ${result.skipped} duplicate${result.skipped !== 1 ? 's' : ''}` : ''}.`;
+        setTimeout(() => (importFeedback = ''), 5000);
+      } catch (e) {
+        console.error('Import failed', e);
+        importFeedback = `Import failed: ${e}`;
+        setTimeout(() => (importFeedback = ''), 6000);
+      }
+    }
+  }
+
   async function handleImport() {
     const file = await open({
       multiple: false,
@@ -86,6 +122,9 @@
       }
     }
   }
+
+  let exportFeedback = $state('');
+  let importFeedback = $state('');
 
   async function toggle(dbKey: string, current: boolean) {
     const updated = await setSetting(dbKey, current ? 'false' : 'true');
@@ -265,6 +304,31 @@
   <div class="group-heading">{m.system_group_data()}</div>
 
   <div class="data-group">
+    <!-- Export -->
+    <div class="data-action-row">
+      <div class="data-action-info">
+        <span class="data-action-label">Export Sessions</span>
+        <span class="data-action-desc">Save all sessions to a .pomotroid.json file</span>
+      </div>
+      <button class="data-action-btn" onclick={handleExport}>Export</button>
+    </div>
+    {#if exportFeedback}
+      <p class="data-feedback success">{exportFeedback}</p>
+    {/if}
+
+    <!-- Import -->
+    <div class="data-action-row">
+      <div class="data-action-info">
+        <span class="data-action-label">Import Sessions</span>
+        <span class="data-action-desc">Restore from a .pomotroid.json export file</span>
+      </div>
+      <button class="data-action-btn" onclick={handleJsonImport}>Import</button>
+    </div>
+    {#if importFeedback}
+      <p class="data-feedback success">{importFeedback}</p>
+    {/if}
+
+    <!-- Clear history -->
     {#if !confirmingClear}
       <button class="data-row" onclick={() => (confirmingClear = true)}>
         <span>Clear Session History</span>
@@ -280,6 +344,8 @@
         </div>
       </div>
     {/if}
+
+    <!-- Reset settings -->
     {#if !confirmingReset}
       <button class="data-row" onclick={() => (confirmingReset = true)}>
         <span>{m.about_reset_all()}</span>
@@ -293,8 +359,14 @@
         </div>
       </div>
     {/if}
-    <button class="data-row" onclick={handleImport}>
-      <span>Import Data (.xlsx)</span>
+
+    <!-- Legacy xlsx import -->
+    <div class="legacy-divider">
+      <span>Legacy</span>
+    </div>
+    <button class="data-row deprecated" onclick={handleImport}>
+      <span>Import from spreadsheet (.xlsx)</span>
+      <span class="deprecated-tag">Deprecated</span>
     </button>
   </div>
 </div>
@@ -529,5 +601,103 @@
   .confirm-destructive:hover {
     background: color-mix(in oklch, var(--color-accent) 10%, transparent);
     border-color: var(--color-accent);
+  }
+
+  /* Export / Import action rows */
+  .data-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--color-separator);
+    gap: 12px;
+  }
+
+  .data-action-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .data-action-label {
+    font-size: 0.85rem;
+    color: var(--color-foreground);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .data-action-desc {
+    font-size: 0.75rem;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    opacity: 0.6;
+  }
+
+  .data-action-btn {
+    flex-shrink: 0;
+    background: color-mix(in oklch, var(--color-accent) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-accent) 35%, transparent);
+    border-radius: 5px;
+    color: var(--color-accent);
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 5px 14px;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
+  }
+
+  .data-action-btn:hover {
+    background: color-mix(in oklch, var(--color-accent) 22%, transparent);
+    border-color: var(--color-accent);
+  }
+
+  .data-feedback {
+    font-size: 0.78rem;
+    padding: 6px 16px 8px;
+    border-bottom: 1px solid var(--color-separator);
+    margin: 0;
+  }
+
+  .data-feedback.success {
+    color: var(--color-short-round, #3baf82);
+  }
+
+  /* Legacy divider */
+  .legacy-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px 4px;
+    border-top: 1px solid var(--color-separator);
+  }
+
+  .legacy-divider span {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    opacity: 0.45;
+  }
+
+  /* Deprecated row styling */
+  .data-row.deprecated {
+    justify-content: space-between;
+    opacity: 0.65;
+  }
+
+  .deprecated-tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: color-mix(in oklch, var(--color-foreground) 50%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-foreground) 20%, transparent);
+    border-radius: 3px;
+    padding: 1px 6px;
+    flex-shrink: 0;
   }
 </style>

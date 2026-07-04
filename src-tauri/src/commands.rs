@@ -16,6 +16,7 @@ use crate::themes::{self, Theme};
 use crate::timer::{TimerController, TimerSnapshot};
 use crate::tray::{self, TrayState};
 use crate::websocket::{self, WsState};
+use crate::io as pomotroid_io;
 
 // ---------------------------------------------------------------------------
 // CMD-01 — Timer commands
@@ -335,7 +336,8 @@ pub fn sessions_clear(db: State<'_, DbState>, app: AppHandle) -> Result<(), Stri
     Ok(())
 }
 
-/// Imports legacy sessions from an `.xlsx` file.
+/// **Deprecated.** Legacy migration import from an `.xlsx` spreadsheet.
+/// Use `sessions_import` with a `.pomotroid.json` file instead.
 /// Expects columns: Início, Duração (minutos), Matéria, Conteúdo, Tipo, Anotações
 #[tauri::command]
 pub fn sessions_import_xlsx(path: String, db: State<'_, DbState>, app: AppHandle) -> Result<u32, String> {
@@ -439,6 +441,45 @@ pub fn sessions_import_xlsx(path: String, db: State<'_, DbState>, app: AppHandle
     }
     
     Ok(imported)
+}
+
+// ---------------------------------------------------------------------------
+// CMD-04b — Definitive import / export commands
+// ---------------------------------------------------------------------------
+
+/// Export all non-deleted sessions to a `.pomotroid.json` file at `path`.
+/// Returns the number of sessions written.
+#[tauri::command]
+pub fn sessions_export(path: String, db: State<'_, DbState>) -> Result<u32, String> {
+    log::info!("[sessions] exporting to {path}");
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let sessions = queries::export_sessions(&conn).map_err(|e| e.to_string())?;
+    let count = sessions.len() as u32;
+
+    let envelope = pomotroid_io::ExportEnvelope {
+        pomotroid_export: pomotroid_io::FORMAT_VERSION.to_string(),
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        schema_version: 7,
+        sessions,
+    };
+
+    pomotroid_io::write_export(&path, &envelope)?;
+    log::info!("[sessions] exported {count} sessions to {path}");
+    Ok(count)
+}
+
+/// Import sessions from a `.pomotroid.json` file at `path`.
+/// Skips any session whose UUID already exists in the DB.
+/// Emits `sessions:imported` on success so the UI can refresh.
+#[tauri::command]
+pub fn sessions_import(path: String, db: State<'_, DbState>, app: AppHandle) -> Result<queries::ImportSummary, String> {
+    log::info!("[sessions] importing from {path}");
+    let envelope = pomotroid_io::read_import(&path)?;
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let summary = queries::import_sessions(&conn, &envelope.sessions).map_err(|e| e.to_string())?;
+    log::info!("[sessions] import complete: imported={} skipped={}", summary.imported, summary.skipped);
+    app.emit("sessions:imported", ()).ok();
+    Ok(summary)
 }
 
 // CMD-05 — Stats commands

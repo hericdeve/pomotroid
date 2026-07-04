@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod commands;
 pub mod db;
+pub mod io;
 pub mod notifications;
 pub mod settings;
 pub mod shortcuts;
@@ -26,7 +27,7 @@ use commands::{
     notification_show,
     settings_get, settings_reset_defaults, settings_set,
     shortcuts_reload,
-    sessions_clear, sessions_import_xlsx,
+    sessions_clear, sessions_import_xlsx, sessions_export, sessions_import,
     session_get, session_update, session_create_manual, session_get_subjects, session_get_topics, sessions_get_history,
     stats_get_detailed, stats_get_heatmap,
     themes_list,
@@ -383,6 +384,8 @@ pub fn run() {
             // Sessions
             sessions_clear,
             sessions_import_xlsx,
+            sessions_export,
+            sessions_import,
             session_get,
             session_update,
             session_create_manual,

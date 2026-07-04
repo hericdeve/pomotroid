@@ -17,6 +17,11 @@ export interface TimerState {
   active_session_id: number | null;
 }
 
+export interface ImportSummary {
+  imported: number;
+  skipped: number;
+}
+
 /** Mirrors Rust `Settings` struct returned by `settings_get`. */
 export interface Settings {
   time_work_secs: number;

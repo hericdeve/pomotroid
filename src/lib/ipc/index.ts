@@ -17,6 +17,7 @@ import type {
   CreateManualSessionPayload,
   SessionFilter,
   SessionHistoryPage,
+  ImportSummary,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -82,7 +83,14 @@ export const appVersion = () => invoke<string>('app_version');
 // --- Sessions commands ---
 
 export const clearSessionHistory = () => invoke<void>('sessions_clear');
+/** @deprecated Use sessionsImport with a .pomotroid.json file instead. */
 export const sessionsImportXlsx = (path: string) => invoke<number>('sessions_import_xlsx', { path });
+
+/** Export all sessions to a `.pomotroid.json` file. Returns the count written. */
+export const sessionsExport = (path: string) => invoke<number>('sessions_export', { path });
+
+/** Import sessions from a `.pomotroid.json` file. Skips duplicate UUIDs. */
+export const sessionsImport = (path: string) => invoke<ImportSummary>('sessions_import', { path });
 export const getSession = (id: number) => invoke<SessionRow | null>('session_get', { id });
 export const updateSession = (id: number, payload: UpdateSessionPayload) => invoke<void>('session_update', { id, payload });
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
