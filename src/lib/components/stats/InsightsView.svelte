@@ -244,7 +244,7 @@
           <h3>Time by Day of Week</h3>
         </div>
         <div class="vertical-chart-container">
-          <svg viewBox="0 0 280 {CHART_H + 40}" class="vertical-svg">
+          <svg width="280" height="{CHART_H + 40}" viewBox="0 0 280 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_day_of_week as secs, i}
               {@const h = Math.max(2, (secs / maxDayTime) * CHART_H)}
               {@const x = i * 40 + 10}
@@ -273,7 +273,7 @@
           <h3>Time by Hour of Day</h3>
         </div>
         <div class="vertical-chart-container hour-chart-wrap">
-          <svg viewBox="0 0 528 {CHART_H + 40}" class="vertical-svg">
+          <svg width="528" height="{CHART_H + 40}" viewBox="0 0 528 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_hour_of_day as secs, i}
               {@const h = Math.max(2, (secs / maxHourTime) * CHART_H)}
               {@const x = i * 22 + 4}
@@ -555,12 +555,11 @@
     padding-top: 16px;
   }
   .vertical-svg {
-    width: 100%;
-    height: 100%;
+    display: block;
     overflow: visible;
   }
   .hour-chart-wrap .vertical-svg {
-    min-width: 480px; /* Force scroll if too narrow */
+    /* Auto horizontal scroll driven by actual pixel width */
   }
   
   .v-bar {
