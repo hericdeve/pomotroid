@@ -4,16 +4,16 @@
   import Titlebar from '$lib/components/Titlebar.svelte';
   import Timer from '$lib/components/Timer.svelte';
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
-  import { showTagModal } from '$lib/stores/pendingTags';
+  import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
   import { resolveThemeName } from '$lib/utils/theme';
   import { isMac } from '$lib/utils/platform';
   import { setLocale } from '$lib/locale.svelte.js';
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import type { UnlistenFn } from '@tauri-apps/api/event';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { info, error as logError } from '@tauri-apps/plugin-log';
   import { createLocalShortcutHandler } from '$lib/utils/localShortcuts';
 
@@ -152,6 +152,22 @@
             updated.find((t) => t.name === resolveThemeName($settings, dark)) ?? updated[0];
           if (current) applyTheme(current);
         })
+      );
+      // Listen for palette:start events from the command palette window.
+      cleanups.push(
+        await listen<{ subject: string; subject_topic: string; study_type: string; notes: string }>(
+          'palette:start',
+          (event) => {
+            const p = event.payload;
+            pendingTags.set({
+              subject: p.subject || '',
+              subject_topic: p.subject_topic || '',
+              study_type: p.study_type || '',
+              notes: p.notes || '',
+            });
+            timerToggle();
+          }
+        )
       );
     })();
 

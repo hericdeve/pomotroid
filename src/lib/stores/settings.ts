@@ -44,6 +44,7 @@ const defaults: Settings = {
   local_shortcut_volume_up: 'ArrowUp',
   local_shortcut_mute: 'm',
   local_shortcut_fullscreen: 'F11',
+  local_shortcut_palette: 'p',
   enable_window_controls: true,
   history_show_breaks: true,
 };

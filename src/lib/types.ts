@@ -65,6 +65,7 @@ export interface Settings {
   local_shortcut_volume_up: string;
   local_shortcut_mute: string;
   local_shortcut_fullscreen: string;
+  local_shortcut_palette: string;
   history_show_breaks: boolean;
 }
 

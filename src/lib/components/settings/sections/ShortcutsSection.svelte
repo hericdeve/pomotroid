@@ -109,6 +109,14 @@
         onchange={(v) => setLocalShortcut('local_shortcut_fullscreen', v)}
       />
     </div>
+
+    <div class="row">
+      <span class="label">Open command palette</span>
+      <LocalShortcutInput
+        value={$settings.local_shortcut_palette}
+        onchange={(v) => setLocalShortcut('local_shortcut_palette', v)}
+      />
+    </div>
   </div>
 
   <!-- Global shortcuts second -->

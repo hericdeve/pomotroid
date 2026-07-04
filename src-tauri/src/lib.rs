@@ -33,6 +33,7 @@ use commands::{
     themes_list,
     timer_get_state, timer_reset, timer_restart_round, timer_skip, timer_toggle,
     window_set_visibility,
+    palette_open,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -337,7 +338,7 @@ pub fn run() {
                             let _ = win_for_close.hide();
                         } else {
                             // Main window is truly closing — close child windows if open.
-                            for label in ["settings", "stats"] {
+                            for label in ["settings", "stats", "palette"] {
                                 if let Some(win) = app_for_close.get_webview_window(label) {
                                     let _ = win.close();
                                 }
@@ -401,6 +402,7 @@ pub fn run() {
             stats_get_insights,
             // Window
             window_set_visibility,
+            palette_open,
             // Shortcuts
             shortcuts_reload,
             // Audio

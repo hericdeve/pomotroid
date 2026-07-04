@@ -548,6 +548,65 @@ pub fn window_set_visibility(visible: bool, app: AppHandle) -> Result<(), String
     Ok(())
 }
 
+/// Open (or focus) the floating command palette window centered on the monitor
+/// that currently contains the cursor. Intended to be triggered by a local
+/// keyboard shortcut so Hyprland can dispatch it via `send_shortcut`.
+#[tauri::command]
+pub fn palette_open(app: AppHandle) -> Result<(), String> {
+    // If already open, just show and focus it.
+    if let Some(existing) = app.get_webview_window("palette") {
+        existing.show().map_err(|e| e.to_string())?;
+        existing.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    const PAL_W: f64 = 640.0;
+    const PAL_H: f64 = 62.0; // collapsed height; JS expands when dropdown opens
+
+    // Find the monitor that contains the cursor position.
+    let cursor = app.cursor_position().unwrap_or_default();
+    let monitors = app.available_monitors().unwrap_or_default();
+    let monitor = monitors
+        .into_iter()
+        .find(|m| {
+            let pos = m.position();
+            let size = m.size();
+            let scale = m.scale_factor();
+            let x0 = pos.x as f64;
+            let y0 = pos.y as f64;
+            let x1 = x0 + size.width as f64 / scale;
+            let y1 = y0 + size.height as f64 / scale;
+            cursor.x >= x0 && cursor.x < x1 && cursor.y >= y0 && cursor.y < y1
+        })
+        .or_else(|| app.primary_monitor().ok().flatten());
+
+    let (win_x, win_y) = match monitor {
+        Some(m) => {
+            let pos = m.position();
+            let size = m.size();
+            let scale = m.scale_factor();
+            let cx = pos.x as f64 + size.width as f64 / scale / 2.0;
+            let cy = pos.y as f64 + size.height as f64 / scale / 2.0;
+            (cx - PAL_W / 2.0, cy - PAL_H / 2.0)
+        }
+        None => (200.0, 200.0),
+    };
+
+    tauri::WebviewWindowBuilder::new(&app, "palette", tauri::WebviewUrl::App("/palette".into()))
+        .title("Pomotroid — Command Palette")
+        .inner_size(PAL_W, PAL_H)
+        .position(win_x, win_y)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // CMD-07 — Audio commands
 // ---------------------------------------------------------------------------

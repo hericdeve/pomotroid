@@ -4,6 +4,7 @@
 
 import { timerToggle, timerRestartRound, timerSkip, setSetting } from '$lib/ipc';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { invoke } from '@tauri-apps/api/core';
 import type { Settings } from '$lib/types';
 
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta', 'CapsLock']);
@@ -95,6 +96,9 @@ export function createLocalShortcutHandler(state: LocalShortcutState): (e: Keybo
       const next = !state.getFullscreen();
       state.setFullscreen(next);
       getCurrentWebviewWindow().setFullscreen(next);
+    } else if (key === s.local_shortcut_palette) {
+      e.preventDefault();
+      invoke('palette_open').catch(console.error);
     }
   };
 }
