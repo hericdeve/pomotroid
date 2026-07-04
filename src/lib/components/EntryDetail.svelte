@@ -23,13 +23,7 @@
   let topicOptions = $state<string[]>([]);
   
   const DEFAULT_STUDY_TYPES = [
-    'None / Uncategorized',
-    'Exercise',
-    'Reading',
-    'Review',
-    'Classroom',
-    'Video',
-    'Flash Cards'
+    'None / Uncategorized'
   ];
   let studyTypeOptions = $state<string[]>([...DEFAULT_STUDY_TYPES]);
 
