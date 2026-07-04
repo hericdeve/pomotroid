@@ -325,7 +325,12 @@ fn listen_events(
                     if let Ok(conn) = db.lock() {
                         let _ = queries::complete_session(&conn, session_id, !was_skipped);
                     }
-                    shared.lock().unwrap().last_completed_session_id = Some(session_id);
+                    if !was_skipped {
+                        shared.lock().unwrap().last_completed_session_id = Some(session_id);
+                    }
+                }
+                if was_skipped {
+                    shared.lock().unwrap().last_completed_session_id = None;
                 }
 
                 // Advance sequence.
@@ -462,6 +467,7 @@ fn listen_events(
                     let mut s = shared.lock().unwrap();
                     s.elapsed_secs = 0;
                     s.is_running = false;
+                    s.last_completed_session_id = None;
                 }
                 let snapshot = build_snapshot(&sequence, &settings, &shared);
                 let _ = app.emit("timer:reset", snapshot);
