@@ -195,25 +195,29 @@
       <DropdownSelect bind:value={filterStudyType} options={studyTypes} placeholder="All Types" />
     </div>
 
-    <div class="filter-row">
-      <div class="quick-select">
-        <button class:active={quickMode === 'day'} onclick={() => applyQuickMode('day')}>Day</button>
-        <button class:active={quickMode === 'week'} onclick={() => applyQuickMode('week')}>Week</button>
-        <button class:active={quickMode === 'year'} onclick={() => applyQuickMode('year')}>Year</button>
-        <button class:active={quickMode === 'all'} onclick={() => applyQuickMode('all')}>All Time</button>
+    <div class="filter-row date-controls">
+      <div class="quick-modes">
+        <button class="btn btn-small" class:active={quickMode === 'day'} onclick={() => applyQuickMode('day')}>Day</button>
+        <button class="btn btn-small" class:active={quickMode === 'week'} onclick={() => applyQuickMode('week')}>Week</button>
+        <button class="btn btn-small" class:active={quickMode === 'year'} onclick={() => applyQuickMode('year')}>Year</button>
+        <button class="btn btn-small" class:active={quickMode === 'all'} onclick={() => applyQuickMode('all')}>All Time</button>
       </div>
 
-      <div class="date-range">
-        <button class="nav-btn" disabled={quickMode === 'all'} onclick={() => shiftPeriod(-1)}>&#9664;</button>
-        {#if quickMode === 'all'}
-          <div class="all-time-badge">All Time History</div>
-        {:else}
-          <input type="date" bind:value={dateFromStr} class="custom-input date-input" />
-          <span>to</span>
-          <input type="date" bind:value={dateToStr} class="custom-input date-input" />
-        {/if}
-        <button class="nav-btn" disabled={quickMode === 'all'} onclick={() => shiftPeriod(1)}>&#9654;</button>
-      </div>
+      {#if quickMode !== 'all'}
+        <div class="date-shifters">
+          <button class="btn btn-icon btn-small" aria-label="Previous Period" onclick={() => shiftPeriod(-1)}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <div class="custom-dates">
+            <input type="date" bind:value={dateFromStr} class="date-input" aria-label="From Date" />
+            <span class="date-sep">to</span>
+            <input type="date" bind:value={dateToStr} class="date-input" aria-label="To Date" />
+          </div>
+          <button class="btn btn-icon btn-small" aria-label="Next Period" onclick={() => shiftPeriod(1)}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6" /></svg>
+          </button>
+        </div>
+      {/if}
 
       <div class="pagination">
         <button disabled={offset === 0} onclick={() => offset = Math.max(0, offset - limit)}>&#9664; Prev</button>
@@ -445,46 +449,66 @@
     margin: 10px 0;
   }
 
-  .quick-select {
+  .date-controls {
+    flex: 1;
+    justify-content: space-between;
+  }
+  .quick-modes {
     display: flex;
     gap: 4px;
+    background: var(--color-background);
+    padding: 4px;
+    border-radius: 6px;
   }
-
-  .quick-select button {
-    background: var(--color-hover);
-    color: var(--color-foreground);
-    border: 1px solid var(--color-separator);
+  .btn-small {
     padding: 4px 10px;
+    font-size: 0.85rem;
+    border: none;
+    background: transparent;
+    color: var(--color-foreground-darker);
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.8rem;
+    transition: all 0.2s;
   }
-
-  .quick-select button.active {
+  .btn-small:hover {
+    color: var(--color-foreground);
+    background: var(--color-hover);
+  }
+  .btn-small.active {
     background: var(--color-focus-round);
     color: var(--color-background);
-    border-color: var(--color-focus-round);
+    font-weight: 600;
   }
-
-  .date-range {
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+  }
+  .date-shifters {
     display: flex;
     align-items: center;
     gap: 8px;
+    background: var(--color-background);
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .custom-dates {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .date-input {
+    background: transparent;
+    border: 1px solid var(--color-separator);
+    color: var(--color-foreground);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+  .date-sep {
     font-size: 0.85rem;
     color: var(--color-foreground-darker);
-  }
-
-  .nav-btn {
-    background: none;
-    border: none;
-    color: var(--color-foreground-darker);
-    cursor: pointer;
-    padding: 4px;
-  }
-
-  .nav-btn:disabled {
-    opacity: 0.3;
-    cursor: default;
   }
 
   .list-container {
