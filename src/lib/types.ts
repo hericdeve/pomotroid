@@ -63,6 +63,7 @@ export interface Settings {
   local_shortcut_volume_up: string;
   local_shortcut_mute: string;
   local_shortcut_fullscreen: string;
+  history_show_breaks: boolean;
 }
 
 /** Returned by `check_update` — describes an available update. */
@@ -160,6 +161,7 @@ export interface SessionFilter {
   study_type?: string | null;
   date_from?: number | null;
   date_to?: number | null;
+  show_breaks?: boolean;
 }
 
 export interface SessionHistoryPage {

@@ -40,4 +40,5 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("local_shortcut_volume_up", "ArrowUp"),
     ("local_shortcut_mute", "m"),
     ("local_shortcut_fullscreen", "F11"),
+    ("history_show_breaks", "true"),
 ];

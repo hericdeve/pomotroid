@@ -76,6 +76,7 @@ pub struct SessionFilter {
     pub study_type: Option<String>,
     pub date_from: Option<i64>,
     pub date_to: Option<i64>,
+    pub show_breaks: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -128,7 +129,12 @@ pub fn get_history(
         count_query.push_str(&sql);
         params.push(d_to.into());
     }
-
+    if let Some(false) = filter.show_breaks {
+        let sql = " AND round_type = 'work'";
+        query.push_str(sql);
+        count_query.push_str(sql);
+    }
+    
     let total: u32 = conn.query_row(&count_query, rusqlite::params_from_iter(params.iter()), |row| row.get(0))?;
 
     let sql = format!(" ORDER BY started_at DESC LIMIT ?{} OFFSET ?{}", params.len() + 1, params.len() + 2);

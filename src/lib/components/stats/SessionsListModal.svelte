@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { sessionsGetHistory } from '$lib/ipc';
   import type { SessionRow, SessionHistoryPage } from '$lib/types';
+  import { settings } from '$lib/stores/settings';
 
   let { 
     dateFrom, 
@@ -44,7 +45,8 @@
     try {
       history = await sessionsGetHistory(limit, offset, {
         date_from: dateFrom,
-        date_to: dateTo
+        date_to: dateTo,
+        show_breaks: $settings.history_show_breaks
       });
     } catch (e) {
       console.error('Failed to load sessions for modal', e);

@@ -4,6 +4,7 @@
   import DropdownSelect from '$lib/components/DropdownSelect.svelte';
   import type { SessionRow, SessionFilter, SessionHistoryPage } from '$lib/types';
   import * as m from '$paraglide/messages.js';
+  import { settings } from '$lib/stores/settings';
 
   let { onEditSession }: { onEditSession: (id: number) => void } = $props();
 
@@ -87,7 +88,8 @@
         subject_topic: filterTopic || null,
         study_type: filterStudyType || null,
         date_from,
-        date_to
+        date_to,
+        show_breaks: $settings.history_show_breaks
       };
 
       history = await sessionsGetHistory(limit, offset, filter);

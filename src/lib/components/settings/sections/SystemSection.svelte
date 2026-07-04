@@ -301,6 +301,14 @@
     />
   {/if}
 
+  <div class="group-heading">History</div>
+  <SettingsToggle
+    label="Show breaks in history"
+    description="Include short and long breaks in your session history"
+    checked={$settings.history_show_breaks}
+    onclick={() => toggle('history_show_breaks', $settings.history_show_breaks)}
+  />
+
   <div class="group-heading">{m.system_group_data()}</div>
 
   <div class="data-group">
