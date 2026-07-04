@@ -597,9 +597,9 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
         .inner_size(PAL_W, PAL_H)
         .position(win_x, win_y)
         .decorations(false)
+        .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
-        .resizable(false)
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;

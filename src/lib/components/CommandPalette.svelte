@@ -14,7 +14,7 @@
   let input = $state('');
   let parsed = $derived(parse(input));
   let inputEl: HTMLInputElement | undefined;
-  let dropdownEl: HTMLDivElement | undefined;
+  let dropdownEl: HTMLDivElement | undefined = $state();
   let activeIndex = $state(-1);
 
   // Autocomplete data
@@ -201,6 +201,7 @@
           class="dropdown-item"
           class:active={i === activeIndex}
           role="option"
+          tabindex="-1"
           aria-selected={i === activeIndex}
           onmousedown={() => selectSuggestion(suggestion)}
           onmouseenter={() => activeIndex = i}
