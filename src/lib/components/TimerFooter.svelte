@@ -5,6 +5,7 @@
   import { settings } from '$lib/stores/settings';
   import * as m from '$paraglide/messages.js';
   import Tooltip from './Tooltip.svelte';
+  import SessionTagModal from './SessionTagModal.svelte';
 
   interface Props {
     snap: TimerState;
@@ -12,36 +13,7 @@
 
   let { snap }: Props = $props();
 
-  let showVolume = $state(false);
-
-  // Local volume for immediate slider feedback — avoids waiting for the
-  // async IPC round-trip before the thumb visually moves.
-  let localVolume = $state($settings.volume);
-  $effect(() => {
-    localVolume = $settings.volume;
-  });
-
-  // Remembered pre-mute level so the button can restore it on unmute.
-  let premuteVolume = $state<number | null>(null);
-
-  function handleVolumeChange(e: Event) {
-    const val = (e.target as HTMLInputElement).valueAsNumber;
-    localVolume = val;
-    setSetting('volume', String(Math.round(val * 100)));
-  }
-
-  function toggleMute() {
-    if (localVolume === 0) {
-      const restore = premuteVolume ?? 1.0;
-      premuteVolume = null;
-      localVolume = restore;
-      setSetting('volume', String(Math.round(restore * 100)));
-    } else {
-      premuteVolume = localVolume;
-      localVolume = 0;
-      setSetting('volume', '0');
-    }
-  }
+  let showTagModal = $state(false);
 </script>
 
 <!-- Round counter: X/Y when long breaks are active; labelled session count otherwise -->
@@ -66,69 +38,23 @@
   </button>
 </Tooltip>
 
-<!-- Volume -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="volume-wrapper">
-  <Tooltip text={localVolume === 0 ? m.tooltip_unmute() : m.tooltip_mute()}>
-    <button
-      class="btn-icon"
-      onclick={toggleMute}
-      aria-label={localVolume === 0 ? 'Unmute' : 'Mute'}
-      onmouseenter={() => (showVolume = true)}
-      onmouseleave={() => (showVolume = false)}
-    >
-      {#if localVolume === 0}
-        <svg width="16" height="16" viewBox="0 0 16 16">
-          <polygon points="1,5 5,5 10,1 10,15 5,11 1,11" fill="currentColor" />
-          <line
-            x1="12"
-            y1="5"
-            x2="16"
-            y2="11"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-          <line
-            x1="16"
-            y1="5"
-            x2="12"
-            y2="11"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-      {:else}
-        <svg width="16" height="16" viewBox="0 0 16 16">
-          <polygon points="1,5 5,5 10,1 10,15 5,11 1,11" fill="currentColor" />
-          <path
-            d="M12,5 Q15,8 12,11"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-      {/if}
+<!-- Tag Button -->
+{#if snap.active_session_id !== null}
+  <Tooltip text="Tag Active Session">
+    <button class="btn-icon" onclick={() => (showTagModal = true)} aria-label="Tag Session">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M14.5,2.5 L10,2.5 C9.73,2.5 9.48,2.61 9.29,2.8 L2.8,9.29 C2.41,9.68 2.41,10.31 2.8,10.7 L7.3,15.2 C7.69,15.59 8.31,15.59 8.7,15.2 L15.2,8.7 C15.39,8.51 15.5,8.27 15.5,8 L15.5,3.5 C15.5,2.95 15.05,2.5 14.5,2.5 Z M12.5,5.5 C11.95,5.5 11.5,5.05 11.5,4.5 C11.5,3.95 11.95,3.5 12.5,3.5 C13.05,3.5 13.5,3.95 13.5,4.5 C13.5,5.05 13.05,5.5 12.5,5.5 Z"/>
+      </svg>
     </button>
   </Tooltip>
+{/if}
 
-  {#if showVolume}
-    <div class="volume-slider-wrapper">
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value={localVolume}
-        oninput={handleVolumeChange}
-        class="volume-slider"
-        aria-label="Volume"
-      />
-    </div>
-  {/if}
-</div>
+{#if showTagModal && snap.active_session_id !== null}
+  <SessionTagModal 
+    onClose={() => (showTagModal = false)} 
+    sessionId={snap.active_session_id} 
+  />
+{/if}
 
 <style>
   .rounds {
@@ -178,38 +104,4 @@
     background: var(--color-hover);
   }
 
-  .volume-wrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .volume-slider-wrapper {
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 8px;
-    background: var(--color-background-light);
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-    /* Fixed size to contain the rotated slider without layout overflow. */
-    width: 36px;
-    height: 100px;
-  }
-
-  .volume-slider {
-    /* Rotate a normal horizontal slider so it appears vertical.
-       Unlike writing-mode, transform preserves correct pointer-event
-       mapping on WebKit: dragging up increases value, dragging down
-       decreases it. */
-    width: 80px;
-    transform: rotate(-90deg);
-    cursor: pointer;
-    accent-color: var(--color-accent);
-  }
 </style>
