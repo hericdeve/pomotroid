@@ -128,6 +128,27 @@ export interface HeatmapStats {
   longest_streak: number;
 }
 
+export interface SubjectInsight {
+  subject: string;
+  focus_secs: number;
+}
+
+export interface TopicInsight {
+  topic: string;
+  focus_secs: number;
+}
+
+export interface StudyTypeInsight {
+  study_type: string;
+  focus_secs: number;
+}
+
+export interface InsightsStats {
+  top_subjects: SubjectInsight[];
+  top_topics: TopicInsight[];
+  top_study_types: StudyTypeInsight[];
+}
+
 // ---------------------------------------------------------------------------
 // Extended Sessions types
 // ---------------------------------------------------------------------------

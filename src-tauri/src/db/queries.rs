@@ -865,3 +865,99 @@ pub fn import_sessions(conn: &Connection, sessions: &[SessionRow]) -> Result<Imp
     }
     Ok(ImportSummary { imported, skipped })
 }
+
+// ---------------------------------------------------------------------------
+// Insights
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+pub struct SubjectInsight {
+    pub subject: String,
+    pub focus_secs: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TopicInsight {
+    pub topic: String,
+    pub focus_secs: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StudyTypeInsight {
+    pub study_type: String,
+    pub focus_secs: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InsightsStats {
+    pub top_subjects: Vec<SubjectInsight>,
+    pub top_topics: Vec<TopicInsight>,
+    pub top_study_types: Vec<StudyTypeInsight>,
+}
+
+pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<InsightsStats> {
+    let mut base_query = String::from("FROM sessions WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
+    let mut params = Vec::<rusqlite::types::Value>::new();
+
+    if let Some(subject) = &filter.subject {
+        let sql = format!(" AND subject = ?{}", params.len() + 1);
+        base_query.push_str(&sql);
+        params.push(subject.clone().into());
+    }
+    if let Some(topic) = &filter.subject_topic {
+        let sql = format!(" AND subject_topic = ?{}", params.len() + 1);
+        base_query.push_str(&sql);
+        params.push(topic.clone().into());
+    }
+    if let Some(stype) = &filter.study_type {
+        let sql = format!(" AND study_type = ?{}", params.len() + 1);
+        base_query.push_str(&sql);
+        params.push(stype.clone().into());
+    }
+    if let Some(d_from) = filter.date_from {
+        let sql = format!(" AND started_at >= ?{}", params.len() + 1);
+        base_query.push_str(&sql);
+        params.push(d_from.into());
+    }
+    if let Some(d_to) = filter.date_to {
+        let sql = format!(" AND started_at <= ?{}", params.len() + 1);
+        base_query.push_str(&sql);
+        params.push(d_to.into());
+    }
+
+    // Top Subjects
+    let subject_query = format!("SELECT COALESCE(subject, 'Uncategorized'), SUM(duration_secs) {} GROUP BY COALESCE(subject, 'Uncategorized') ORDER BY SUM(duration_secs) DESC", base_query);
+    let mut stmt = conn.prepare(&subject_query)?;
+    let top_subjects = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+        Ok(SubjectInsight {
+            subject: row.get(0)?,
+            focus_secs: row.get(1)?,
+        })
+    })?.filter_map(Result::ok).collect();
+
+    // Top Topics
+    let topic_query = format!("SELECT COALESCE(subject_topic, 'Uncategorized'), SUM(duration_secs) {} GROUP BY COALESCE(subject_topic, 'Uncategorized') ORDER BY SUM(duration_secs) DESC", base_query);
+    let mut stmt = conn.prepare(&topic_query)?;
+    let top_topics = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+        Ok(TopicInsight {
+            topic: row.get(0)?,
+            focus_secs: row.get(1)?,
+        })
+    })?.filter_map(Result::ok).collect();
+
+    // Top Study Types
+    let type_query = format!("SELECT COALESCE(study_type, 'None / Uncategorized'), SUM(duration_secs) {} GROUP BY COALESCE(study_type, 'None / Uncategorized') ORDER BY SUM(duration_secs) DESC", base_query);
+    let mut stmt = conn.prepare(&type_query)?;
+    let top_study_types = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+        Ok(StudyTypeInsight {
+            study_type: row.get(0)?,
+            focus_secs: row.get(1)?,
+        })
+    })?.filter_map(Result::ok).collect();
+
+    Ok(InsightsStats {
+        top_subjects,
+        top_topics,
+        top_study_types,
+    })
+}

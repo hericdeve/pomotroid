@@ -958,6 +958,11 @@ pub struct HeatmapStats {
     pub longest_streak: u32,
 }
 
+#[tauri::command]
+pub fn stats_get_insights(db: State<'_, DbState>, filter: queries::SessionFilter) -> Result<queries::InsightsStats, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::get_insights_stats(&conn, &filter).map_err(|e| e.to_string())
+}
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;

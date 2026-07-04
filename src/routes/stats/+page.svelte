@@ -26,11 +26,12 @@
   import WeeklyView from '$lib/components/stats/WeeklyView.svelte';
   import YearlyView from '$lib/components/stats/YearlyView.svelte';
   import HistoryView from '$lib/components/stats/HistoryView.svelte';
+  import InsightsView from '$lib/components/stats/InsightsView.svelte';
   import ManualEntryModal from '$lib/components/ManualEntryModal.svelte';
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
   import SessionsListModal from '$lib/components/stats/SessionsListModal.svelte';
 
-  type Tab = 'today' | 'week' | 'alltime' | 'history';
+  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights';
 
   let activeTab = $state<Tab>('today');
   let detailed = $state<DetailedStats | null>(null);
@@ -187,6 +188,9 @@
       <button class="tab" class:active={activeTab === 'history'} onclick={() => switchTab('history')}
         >History</button
       >
+      <button class="tab" class:active={activeTab === 'insights'} onclick={() => switchTab('insights')}
+        >Insights</button
+      >
     </div>
     <button class="btn-manual" onclick={() => showManualEntry = true} title="Manual Entry" aria-label="Manual Entry">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -205,8 +209,10 @@
         <WeeklyView week={detailed?.week ?? null} streak={detailed?.streak ?? null} onBarClick={(r) => listModalTimeRange = r} />
       {:else if activeTab === 'alltime'}
         <YearlyView {heatmap} onBarClick={(r) => listModalTimeRange = r} />
-      {:else}
+      {:else if activeTab === 'history'}
         <HistoryView onEditSession={(id) => editingSessionId = id} />
+      {:else}
+        <InsightsView />
       {/if}
     {/key}
   </div>

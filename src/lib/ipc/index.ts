@@ -18,6 +18,7 @@ import type {
   SessionFilter,
   SessionHistoryPage,
   ImportSummary,
+  InsightsStats,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -108,6 +109,8 @@ export const statsGetDetailed = () => invoke<DetailedStats>('stats_get_detailed'
 /** Heatmap entries + lifetime totals (All Time tab). */
 export const statsGetHeatmap = () => invoke<HeatmapStats>('stats_get_heatmap');
 
+/** Insights distribution stats (Insights tab). */
+export const statsGetInsights = (filter: SessionFilter) => invoke<InsightsStats>('stats_get_insights', { filter });
 // --- Platform commands ---
 
 export const accessibilityTrusted = () => invoke<boolean>('accessibility_trusted');

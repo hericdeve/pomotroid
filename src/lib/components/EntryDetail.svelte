@@ -73,7 +73,7 @@
   
   function handleTypeCommit(val: string) {
     localStudyType = val;
-    handleBlur();
+    triggerSave();
   }
   
   function handleTypeChange() {
