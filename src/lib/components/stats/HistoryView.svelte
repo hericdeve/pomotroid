@@ -22,7 +22,7 @@
   
   let quickMode = $state<'day' | 'week' | 'year' | 'all'>('all');
 
-  let history = $state<SessionHistoryPage>({ sessions: [], total: 0 });
+  let history = $state<SessionHistoryPage>({ sessions: [], total: 0, total_work_rounds: 0, total_focus_secs: 0, longest_streak: 0 });
   let loading = $state(false);
 
   const studyTypes = [
@@ -254,7 +254,7 @@
   <div class="totals">
     <div class="total-card" style="--delay: 0ms">
       <span class="total-label">{m.stats_total_rounds()}</span>
-      <span class="total-value">{history.total.toLocaleString()}</span>
+      <span class="total-value">{history.total_work_rounds.toLocaleString()}</span>
     </div>
     <div class="total-divider"></div>
     <div class="total-card" style="--delay: 60ms">

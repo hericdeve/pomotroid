@@ -82,6 +82,7 @@ pub struct SessionFilter {
 pub struct SessionHistoryPage {
     pub sessions: Vec<SessionRow>,
     pub total: u32,
+    pub total_work_rounds: u32,
     pub total_focus_secs: u64,
     pub longest_streak: u32,
 }
@@ -160,7 +161,7 @@ pub fn get_history(
     }
 
     // Compute stats for all filtered WORK sessions
-    let mut stats_query = String::from("SELECT started_at, duration_secs FROM sessions WHERE deleted_at IS NULL AND round_type = 'work'");
+    let mut stats_query = String::from("SELECT started_at, duration_secs FROM sessions WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
     let mut stats_params = Vec::<rusqlite::types::Value>::new();
 
     if let Some(subject) = &filter.subject {
@@ -191,6 +192,9 @@ pub fn get_history(
     
     stats_query.push_str(" ORDER BY started_at ASC");
 
+    let time_work_secs: u32 = conn.query_row("SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'", [], |r| r.get(0)).unwrap_or(1500);
+
+    let mut total_work_rounds = 0u32;
     let mut total_focus_secs = 0u64;
     let mut days_set = std::collections::BTreeSet::new();
 
@@ -204,6 +208,8 @@ pub fn get_history(
     for row in stats_iter {
         if let Ok((started_at, duration)) = row {
             total_focus_secs += duration as u64;
+            let rounds = std::cmp::max(1, (duration as f64 / time_work_secs as f64).round() as u32);
+            total_work_rounds += rounds;
             if let Some(dt) = chrono::DateTime::from_timestamp(started_at, 0) {
                 let local = dt.with_timezone(&chrono::Local);
                 days_set.insert(local.format("%Y-%m-%d").to_string());
@@ -218,6 +224,7 @@ pub fn get_history(
     Ok(SessionHistoryPage { 
         sessions, 
         total,
+        total_work_rounds,
         total_focus_secs,
         longest_streak: streak_info.longest
     })
