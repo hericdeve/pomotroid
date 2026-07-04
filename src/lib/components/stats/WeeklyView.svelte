@@ -66,7 +66,7 @@
   <div class="summary">
     <div class="summary-item">
       <span class="summary-label">{m.stats_this_week()}</span>
-      <span class="summary-value">{totalWeek} {m.stats_rounds().toLowerCase()}</span>
+      <span class="summary-value">{Number(totalWeek).toLocaleString(undefined, { maximumFractionDigits: 1 })} {m.stats_rounds().toLowerCase()}</span>
     </div>
     {#if streak}
       <div class="summary-item streak">
@@ -128,7 +128,7 @@
             <!-- Round count label above bar -->
             {#if day.rounds > 0}
               <text x={x + BAR_W / 2} y={y - 5} text-anchor="middle" class="count-label"
-                >{day.rounds}</text
+                >{Number(day.rounds).toLocaleString(undefined, { maximumFractionDigits: 1 })}</text
               >
             {/if}
 

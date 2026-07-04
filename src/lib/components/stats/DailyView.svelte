@@ -51,7 +51,7 @@
   <div class="cards">
     <div class="card" style="--delay: 0ms">
       <span class="card-label">{m.stats_rounds()}</span>
-      <span class="card-value">{today?.rounds ?? '—'}</span>
+      <span class="card-value">{today ? Number(today.rounds).toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</span>
     </div>
     <div class="card-divider"></div>
     <div class="card" style="--delay: 60ms">

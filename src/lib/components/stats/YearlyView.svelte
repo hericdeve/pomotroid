@@ -134,7 +134,7 @@
     const text =
       cell.count === 0
         ? `${cell.date}: ${m.stats_no_sessions_today().toLowerCase()}`
-        : `${cell.date}: ${cell.count} ${cell.count === 1 ? m.stats_rounds().toLowerCase().replace(/s$/, '') : m.stats_rounds().toLowerCase()}`;
+        : `${cell.date}: ${Number(cell.count).toLocaleString(undefined, { maximumFractionDigits: 1 })} ${cell.count === 1 ? m.stats_rounds().toLowerCase().replace(/s$/, '') : m.stats_rounds().toLowerCase()}`;
     tooltip = { x: cellRect.left + CELL / 2, y: cellRect.top - 8, text };
   }
 
@@ -267,7 +267,7 @@
                 class:interactive={cell.count > 0 && !cell.dimmed && onBarClick}
                 role={cell.count > 0 && !cell.dimmed && onBarClick ? "button" : "img"}
                 tabindex={cell.count > 0 && !cell.dimmed && onBarClick ? 0 : -1}
-                aria-label="{cell.date}: {cell.count} {m.stats_rounds().toLowerCase()}"
+                aria-label="{cell.date}: {Number(cell.count).toLocaleString(undefined, { maximumFractionDigits: 1 })} {m.stats_rounds().toLowerCase()}"
                 onmouseenter={(e) => showTooltip(e, cell)}
                 onmouseleave={() => {
                   tooltip = null;
@@ -312,7 +312,7 @@
     <div class="totals">
       <div class="total-card" style="--delay: 0ms">
         <span class="total-label">{m.stats_total_rounds()}</span>
-        <span class="total-value">{heatmap.total_rounds.toLocaleString()}</span>
+        <span class="total-value">{heatmap ? Number(heatmap.total_rounds).toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'}</span>
       </div>
       <div class="total-divider"></div>
       <div class="total-card" style="--delay: 60ms">

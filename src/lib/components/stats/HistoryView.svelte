@@ -258,7 +258,7 @@
   <div class="totals">
     <div class="total-card" style="--delay: 0ms">
       <span class="total-label">{m.stats_total_rounds()}</span>
-      <span class="total-value">{history.total_work_rounds.toLocaleString()}</span>
+      <span class="total-value">{Number(history.total_work_rounds).toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
     </div>
     <div class="total-divider"></div>
     <div class="total-card" style="--delay: 60ms">
