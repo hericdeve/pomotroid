@@ -148,21 +148,19 @@
         <button class="btn btn-small" class:active={quickMode === 'all'} onclick={() => applyQuickMode('all')}>All Time</button>
       </div>
 
-      {#if quickMode !== 'all'}
-        <div class="date-shifters">
-          <button class="btn btn-icon btn-small" aria-label="Previous Period" onclick={() => shiftPeriod(-1)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-          <div class="custom-dates">
-            <input type="date" bind:value={dateFromStr} class="date-input" aria-label="From Date" />
-            <span class="date-sep">to</span>
-            <input type="date" bind:value={dateToStr} class="date-input" aria-label="To Date" />
-          </div>
-          <button class="btn btn-icon btn-small" aria-label="Next Period" onclick={() => shiftPeriod(1)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6" /></svg>
-          </button>
+      <div class="date-shifters" style:visibility={quickMode === 'all' ? 'hidden' : 'visible'}>
+        <button class="btn btn-icon btn-small" aria-label="Previous Period" onclick={() => shiftPeriod(-1)}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+        <div class="custom-dates">
+          <input type="date" bind:value={dateFromStr} class="date-input" aria-label="From Date" />
+          <span class="date-sep">to</span>
+          <input type="date" bind:value={dateToStr} class="date-input" aria-label="To Date" />
         </div>
-      {/if}
+        <button class="btn btn-icon btn-small" aria-label="Next Period" onclick={() => shiftPeriod(1)}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      </div>
     </div>
   </div>
 
