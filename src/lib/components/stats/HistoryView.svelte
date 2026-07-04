@@ -279,6 +279,8 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
     box-sizing: border-box;
   }
 

@@ -81,11 +81,13 @@
       title: 'Pomotroid — Statistics',
       width: 840,
       height: 520,
+      minWidth: 600,
+      minHeight: 400,
       decorations: isMac,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       titleBarStyle: isMac ? ('Overlay' as any) : undefined,
       hiddenTitle: isMac ? true : undefined,
-      resizable: false,
+      resizable: true,
       visible: false,
     });
   }

@@ -126,7 +126,9 @@
     flex-direction: column;
     gap: 0;
     height: 100%;
+    min-height: 0;
     padding: 0;
+    overflow: hidden;
     animation: app-fade-in 0.2s ease;
   }
 
@@ -218,6 +220,8 @@
   .chart-wrap {
     overflow-x: auto;
     overflow-y: hidden;
+    min-height: 0;
+    flex-shrink: 0;
   }
 
   .chart {

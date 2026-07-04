@@ -228,7 +228,7 @@
   .window {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh;
     background: var(--color-background);
     color: var(--color-foreground);
     animation: app-fade-in 0.18s ease;
@@ -345,8 +345,17 @@
   /* ── Content ───────────────────────────────────────────── */
   .content {
     flex: 1;
+    min-height: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    align-items: center;
+  }
+
+  .content > :global(*) {
+    width: 100%;
+    max-width: 900px;
+    flex: 1;
+    min-height: 0;
   }
 </style>

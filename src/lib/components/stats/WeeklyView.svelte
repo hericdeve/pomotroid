@@ -155,6 +155,8 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
     animation: app-fade-in 0.2s ease;
   }
 
