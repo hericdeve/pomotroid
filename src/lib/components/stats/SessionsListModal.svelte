@@ -96,6 +96,13 @@
               <div class="details">
                 <div class="primary">
                   <span class="type">{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</span>
+                  {#if row.round_type === 'work'}
+                    {#if row.completed}
+                      <span class="status-badge complete" title="Completed">✓</span>
+                    {:else}
+                      <span class="status-badge incomplete" title="Incomplete">✕</span>
+                    {/if}
+                  {/if}
                   <span class="duration">&bull; {formatDuration(row.duration_secs)}</span>
                 </div>
                 <div class="secondary">
@@ -245,8 +252,27 @@
   .primary {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.9rem;
+    gap: 8px;
+    font-weight: 500;
+  }
+  
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: bold;
+  }
+  .status-badge.complete {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+  }
+  .status-badge.incomplete {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
   }
 
   .type {
@@ -255,7 +281,8 @@
   }
 
   .duration {
-    color: var(--color-foreground-darker);
+    font-weight: 500;
+    color: var(--color-foreground);
     font-size: 0.85rem;
   }
 

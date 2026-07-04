@@ -233,6 +233,7 @@
           <tr>
             <th>Date</th>
             <th>Type</th>
+            <th>Status</th>
             <th>Duration</th>
             <th>Subject</th>
             <th>Topic</th>
@@ -244,6 +245,15 @@
             <tr onclick={() => onEditSession(row.id)}>
               <td>{formatUnix(row.started_at)}</td>
               <td>{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</td>
+              <td>
+                {#if row.round_type === 'work'}
+                  {#if row.completed}
+                    <span class="status-badge complete" title="Completed">✓</span>
+                  {:else}
+                    <span class="status-badge incomplete" title="Incomplete">✕</span>
+                  {/if}
+                {/if}
+              </td>
               <td>{formatDuration(row.duration_secs)}</td>
               <td>{row.subject || '-'}</td>
               <td>{row.subject_topic || '-'}</td>
