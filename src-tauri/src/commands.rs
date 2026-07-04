@@ -482,7 +482,7 @@ pub fn stats_get_heatmap(db: State<'_, DbState>) -> Result<HeatmapStats, String>
     Ok(HeatmapStats {
         entries,
         total_rounds: raw.completed_work_sessions as u32,
-        total_hours: (raw.total_work_secs / 3600) as u32,
+        total_focus_secs: raw.total_work_secs as u64,
         longest_streak: streak.longest,
     })
 }
@@ -901,7 +901,7 @@ pub struct DetailedStats {
 pub struct HeatmapStats {
     pub entries: Vec<queries::HeatmapEntry>,
     pub total_rounds: u32,
-    pub total_hours: u32,
+    pub total_focus_secs: u64,
     pub longest_streak: u32,
 }
 

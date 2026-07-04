@@ -113,8 +113,10 @@
     ].join('-');
   }
 
-  function fmtHours(h: number): string {
-    return h >= 1000 ? `${(h / 1000).toFixed(1)}k` : String(h);
+  function fmtDuration(secs: number): string {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    return `${h.toLocaleString()}h ${m}m`;
   }
 
   const LEVEL_FILL = ['var(--heat-0)', 'var(--heat-1)', 'var(--heat-2)', 'var(--heat-3)'] as const;
@@ -314,8 +316,8 @@
       </div>
       <div class="total-divider"></div>
       <div class="total-card" style="--delay: 60ms">
-        <span class="total-label">{m.stats_focus_hours()}</span>
-        <span class="total-value">{fmtHours(heatmap.total_hours)}</span>
+        <span class="total-label">{m.stats_focus_time()}</span>
+        <span class="total-value">{fmtDuration(heatmap.total_focus_secs)}</span>
       </div>
       <div class="total-divider"></div>
       <div class="total-card" style="--delay: 120ms">

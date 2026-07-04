@@ -117,7 +117,7 @@ export interface DetailedStats {
 export interface HeatmapStats {
   entries: HeatmapEntry[];
   total_rounds: number;
-  total_hours: number;
+  total_focus_secs: number;
   longest_streak: number;
 }
 
