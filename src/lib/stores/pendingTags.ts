@@ -13,3 +13,5 @@ export const pendingTags = writable<PendingTags>({
   study_type: '',
   notes: '',
 });
+
+export const showTagModal = writable<boolean>(false);

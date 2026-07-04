@@ -3,6 +3,9 @@
   import { onMount } from 'svelte';
   import Titlebar from '$lib/components/Titlebar.svelte';
   import Timer from '$lib/components/Timer.svelte';
+  import SessionTagModal from '$lib/components/SessionTagModal.svelte';
+  import { showTagModal } from '$lib/stores/pendingTags';
+  import { timerState } from '$lib/stores/timer';
   import { getSettings, getThemes, onSettingsChanged, onThemesChanged } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
@@ -184,6 +187,12 @@
   <main class:compact={isCompact}>
     <Timer {isCompact} {uiScale} />
   </main>
+  {#if $showTagModal}
+    <SessionTagModal 
+      onClose={() => ($showTagModal = false)} 
+      sessionId={$timerState.active_session_id} 
+    />
+  {/if}
 </div>
 
 <style>
