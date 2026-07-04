@@ -104,6 +104,14 @@
 </script>
 
 <div class="section">
+  <div class="group-heading">Window Options</div>
+  <SettingsToggle
+    label="Window Controls (Minimize, Maximize, Close)"
+    description="Show client side window decorations"
+    checked={$settings.enable_window_controls}
+    onclick={() => toggle('enable_window_controls', $settings.enable_window_controls)}
+  />
+
   <div class="group-heading">{m.system_group_integrations()}</div>
 
   <SettingsToggle

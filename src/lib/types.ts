@@ -50,6 +50,7 @@ export interface Settings {
   verbose_logging: boolean;
   check_for_updates: boolean;
   global_shortcuts_enabled: boolean;
+  enable_window_controls: boolean;
   local_shortcut_toggle: string;
   local_shortcut_reset: string;
   local_shortcut_skip: string;

@@ -211,86 +211,100 @@
       {@render statsBtn()}
       {@render settingsBtn()}
     {:else}
-      <button class="btn-icon" onclick={minimize} aria-label="Minimize">
-        <svg width="12" height="12" viewBox="0 0 12 12">
-          <line
-            x1="1"
-            y1="6"
-            x2="11"
-            y2="6"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-      </button>
-      <button
-        class="btn-icon"
-        onclick={toggleMaximize}
-        aria-label={maximized ? 'Restore' : 'Maximize'}
-      >
-        {#if maximized}
+      {#if $settings.enable_window_controls}
+        <button class="btn-icon" onclick={minimize} aria-label="Minimize">
           <svg width="12" height="12" viewBox="0 0 12 12">
-            <rect
-              x="3"
-              y="1"
-              width="8"
-              height="8"
-              rx="1"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            />
-            <path
-              d="M1 4 L1 11 L8 11"
-              fill="none"
+            <line
+              x1="1"
+              y1="6"
+              x2="11"
+              y2="6"
               stroke="currentColor"
               stroke-width="1.5"
               stroke-linecap="round"
-              stroke-linejoin="round"
             />
           </svg>
-        {:else}
+        </button>
+        <button
+          class="btn-icon"
+          onclick={toggleMaximize}
+          aria-label={maximized ? 'Restore' : 'Maximize'}
+        >
+          {#if maximized}
+            <svg width="12" height="12" viewBox="0 0 12 12">
+              <rect
+                x="3"
+                y="1"
+                width="8"
+                height="8"
+                rx="1"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              <path
+                d="M1 4 L1 11 L8 11"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M11 4 L11 9 L8 9"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M4 1 L4 4 L8 4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          {:else}
+            <svg width="12" height="12" viewBox="0 0 12 12">
+              <rect
+                x="1"
+                y="1"
+                width="10"
+                height="10"
+                rx="1"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+            </svg>
+          {/if}
+        </button>
+        <button class="btn-icon close-btn" onclick={close} aria-label="Close">
           <svg width="12" height="12" viewBox="0 0 12 12">
-            <rect
-              x="1"
-              y="1"
-              width="10"
-              height="10"
-              rx="1"
-              fill="none"
+            <line
+              x1="1"
+              y1="1"
+              x2="11"
+              y2="11"
               stroke="currentColor"
               stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <line
+              x1="11"
+              y1="1"
+              x2="1"
+              y2="11"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
             />
           </svg>
-        {/if}
-      </button>
-      <button
-        class="btn-icon close"
-        onclick={close}
-        aria-label="Close"
-      >
-        <svg width="12" height="12" viewBox="0 0 12 12">
-          <line
-            x1="1"
-            y1="1"
-            x2="11"
-            y2="11"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-          <line
-            x1="11"
-            y1="1"
-            x2="1"
-            y2="11"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-      </button>
+        </button>
+      {/if}
     {/if}
   </div>
 </nav>

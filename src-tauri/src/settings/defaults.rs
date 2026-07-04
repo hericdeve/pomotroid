@@ -29,6 +29,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("language", "auto"),
     ("verbose_logging", "false"),
     ("check_for_updates", "true"),
+    ("enable_window_controls", "true"),
     ("global_shortcuts_enabled", "false"),
     ("short_breaks_enabled", "true"),
     ("long_breaks_enabled", "true"),
