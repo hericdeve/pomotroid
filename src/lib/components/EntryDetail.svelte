@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSessionSubjects, getSessionTopics } from '$lib/ipc';
+  import { getSessionSubjects, getSessionTopics, getSessionStudyTypes } from '$lib/ipc';
   import type { UpdateSessionPayload } from '$lib/types';
   import AutocompleteInput from './AutocompleteInput.svelte';
 
@@ -21,8 +21,8 @@
 
   let subjectOptions = $state<string[]>([]);
   let topicOptions = $state<string[]>([]);
-
-  const studyTypes = [
+  
+  const DEFAULT_STUDY_TYPES = [
     'None / Uncategorized',
     'Exercise',
     'Reading',
@@ -31,6 +31,7 @@
     'Video',
     'Flash Cards'
   ];
+  let studyTypeOptions = $state<string[]>([...DEFAULT_STUDY_TYPES]);
 
   // Convert incoming nulls to defaults for form fields
   let localSubject = $state(payload.subject || '');
@@ -45,6 +46,12 @@
         topicOptions = await getSessionTopics(localSubject);
       } else {
         topicOptions = await getSessionTopics();
+      }
+      const fetchedTypes = await getSessionStudyTypes();
+      if (fetchedTypes && fetchedTypes.length > 0) {
+        // Merge fetched types with defaults, avoiding duplicates
+        const unique = new Set([...DEFAULT_STUDY_TYPES, ...fetchedTypes]);
+        studyTypeOptions = Array.from(unique);
       }
     } catch (err) {
       console.error('Failed to fetch subjects/topics:', err);
@@ -68,6 +75,11 @@
   function handleTopicCommit(val: string) {
     localTopic = val;
     triggerSave();
+  }
+  
+  function handleTypeCommit(val: string) {
+    localStudyType = val;
+    handleBlur();
   }
   
   function handleTypeChange() {
@@ -115,11 +127,12 @@
 
   <div class="form-group">
     <label>Study Type</label>
-    <select class="custom-select" bind:value={localStudyType} onchange={handleTypeChange}>
-      {#each studyTypes as type}
-        <option value={type}>{type}</option>
-      {/each}
-    </select>
+    <AutocompleteInput
+      bind:value={localStudyType}
+      options={studyTypeOptions}
+      placeholder="e.g. Exercise"
+      oncommit={handleTypeCommit}
+    />
   </div>
 
   <div class="form-group">

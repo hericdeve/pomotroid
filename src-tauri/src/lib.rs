@@ -28,7 +28,7 @@ use commands::{
     settings_get, settings_reset_defaults, settings_set,
     shortcuts_reload,
     sessions_clear, sessions_import_xlsx, sessions_export, sessions_import,
-    session_get, session_update, session_delete, session_create_manual, session_get_subjects, session_get_topics, sessions_get_history,
+    session_get, session_update, session_delete, session_create_manual, session_get_subjects, session_get_topics, session_get_study_types, sessions_get_history,
     stats_get_detailed, stats_get_heatmap,
     themes_list,
     timer_get_state, timer_reset, timer_restart_round, timer_skip, timer_toggle,
@@ -392,6 +392,7 @@ pub fn run() {
             session_create_manual,
             session_get_subjects,
             session_get_topics,
+            session_get_study_types,
             sessions_get_history,
             // Stats
             stats_get_detailed,

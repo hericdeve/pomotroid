@@ -97,6 +97,7 @@ export const sessionDelete = (id: number) => invoke<void>('session_delete', { id
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
 export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');
 export const getSessionTopics = (subject?: string) => invoke<string[]>('session_get_topics', { subject });
+export const getSessionStudyTypes = () => invoke<string[]>('session_get_study_types');
 export const sessionsGetHistory = (limit: number, offset: number, filter: SessionFilter) => invoke<SessionHistoryPage>('sessions_get_history', { limit, offset, filter });
 
 // --- Stats commands ---

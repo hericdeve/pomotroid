@@ -931,6 +931,12 @@ pub fn session_get_topics(subject: Option<String>, db: State<'_, DbState>) -> Re
     queries::get_distinct_topics(&conn, subject.as_deref()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn session_get_study_types(db: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::get_distinct_study_types(&conn).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Stats payload types
 // ---------------------------------------------------------------------------

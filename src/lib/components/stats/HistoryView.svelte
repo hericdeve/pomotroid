@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { getSessionSubjects, getSessionTopics, sessionsGetHistory } from '$lib/ipc';
+  import { getSessionSubjects, getSessionTopics, getSessionStudyTypes, sessionsGetHistory } from '$lib/ipc';
   import DropdownSelect from '$lib/components/DropdownSelect.svelte';
   import type { SessionRow, SessionFilter, SessionHistoryPage } from '$lib/types';
   import * as m from '$paraglide/messages.js';
@@ -26,7 +26,7 @@
   let history = $state<SessionHistoryPage>({ sessions: [], total: 0, total_work_rounds: 0, total_focus_secs: 0, longest_streak: 0 });
   let loading = $state(false);
 
-  const studyTypes = [
+  const DEFAULT_STUDY_TYPES = [
     'None / Uncategorized',
     'Exercise',
     'Reading',
@@ -35,6 +35,7 @@
     'Video',
     'Flash Cards'
   ];
+  let studyTypes = $state<string[]>([...DEFAULT_STUDY_TYPES]);
 
   function formatUnix(ts: number) {
     const d = new Date(ts * 1000);
@@ -63,6 +64,12 @@
       topics = await getSessionTopics(filterSubject);
     } else {
       topics = await getSessionTopics();
+    }
+    
+    const fetchedTypes = await getSessionStudyTypes();
+    if (fetchedTypes && fetchedTypes.length > 0) {
+      const unique = new Set([...DEFAULT_STUDY_TYPES, ...fetchedTypes]);
+      studyTypes = Array.from(unique);
     }
   }
 

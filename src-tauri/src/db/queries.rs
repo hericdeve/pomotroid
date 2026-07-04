@@ -366,6 +366,18 @@ pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<V
     Ok(topics)
 }
 
+pub fn get_distinct_study_types(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT study_type FROM sessions WHERE study_type IS NOT NULL AND study_type != '' ORDER BY study_type COLLATE NOCASE ASC"
+    )?;
+    let rows = stmt.query_map([], |r| r.get(0))?;
+    let mut types = Vec::new();
+    for row in rows {
+        types.push(row?);
+    }
+    Ok(types)
+}
+
 // ---------------------------------------------------------------------------
 // Stats queries
 // ---------------------------------------------------------------------------
