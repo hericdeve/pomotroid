@@ -98,10 +98,7 @@
           class="chart"
         >
           {#each days as day, i}
-            {@const barH = Math.max(
-              day.rounds > 0 ? 4 : 0,
-              Math.round((day.rounds / maxRounds) * CHART_H)
-            )}
+            {@const barH = day.rounds > 0 ? Math.max(1, (day.rounds / maxRounds) * CHART_H) : 0}
             {@const x = i * (BAR_W + BAR_GAP)}
             {@const y = CHART_H - barH}
 

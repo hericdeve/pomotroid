@@ -55,6 +55,7 @@
 
       insights = await statsGetInsights(filter);
     } catch (e) {
+      console.log("Insights:", insights);
       console.error('Failed to load insights', e);
     } finally {
       loading = false;
@@ -244,20 +245,22 @@
         <div class="vertical-chart-container">
           <svg width="280" height="{CHART_H + 40}" viewBox="0 0 280 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_day_of_week as secs, i}
-              {@const h = Math.max(2, (secs / maxDayTime) * CHART_H)}
+              {@const h = secs > 0 ? Math.max(1, (secs / maxDayTime) * CHART_H) : 0}
               {@const x = i * 40 + 10}
               {@const y = CHART_H - h}
+              {@const cx = x + 10}
+              {@const tooltipX = Math.max(0, Math.min(cx - 30, 280 - 60))}
               
               <!-- Hoverable Group -->
               <g class="chart-group">
                 <rect {x} {y} width="20" height={h} fill={colors[i % colors.length]} rx="3" class="v-bar" />
-                <text x={x + 10} y={CHART_H + 18} text-anchor="middle" class="axis-label">{days[i]}</text>
+                <text x={cx} y={CHART_H + 18} text-anchor="middle" class="axis-label">{days[i]}</text>
                 
                 <!-- Tooltip Overlay (CSS managed) -->
                 <rect x={i * 40} y="0" width="40" height={CHART_H + 40} fill="transparent" class="hover-area" />
                 <g class="tooltip">
-                  <rect x={x + 10} y={y - 30} width="60" height="24" rx="4" fill="var(--color-background)" transform="translate(-30, 0)" />
-                  <text x={x + 10} y={y - 14} text-anchor="middle" class="tooltip-text">{fmtTime(secs)}</text>
+                  <rect x={tooltipX} y={y - 30} width="60" height="24" rx="4" fill="var(--color-background)" />
+                  <text x={tooltipX + 30} y={y - 14} text-anchor="middle" class="tooltip-text">{fmtTime(secs)}</text>
                 </g>
               </g>
             {/each}
@@ -273,22 +276,24 @@
         <div class="vertical-chart-container hour-chart-wrap">
           <svg width="528" height="{CHART_H + 40}" viewBox="0 0 528 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_hour_of_day as secs, i}
-              {@const h = Math.max(2, (secs / maxHourTime) * CHART_H)}
+              {@const h = secs > 0 ? Math.max(1, (secs / maxHourTime) * CHART_H) : 0}
               {@const x = i * 22 + 4}
               {@const y = CHART_H - h}
+              {@const cx = x + 7}
+              {@const tooltipX = Math.max(0, Math.min(cx - 25, 528 - 50))}
               
               <g class="chart-group">
                 <rect {x} {y} width="14" height={h} fill={colors[(i + 4) % colors.length]} rx="2" class="v-bar" />
                 {#if i % 4 === 0}
-                  <text x={x + 7} y={CHART_H + 18} text-anchor="middle" class="axis-label">
+                  <text x={cx} y={CHART_H + 18} text-anchor="middle" class="axis-label">
                     {i === 0 ? '12A' : i < 12 ? `${i}A` : i === 12 ? '12P' : `${i-12}P`}
                   </text>
                 {/if}
                 
                 <rect x={i * 22} y="0" width="22" height={CHART_H + 40} fill="transparent" class="hover-area" />
                 <g class="tooltip">
-                  <rect x={x + 7} y={y - 30} width="50" height="24" rx="4" fill="var(--color-background)" transform="translate(-25, 0)" />
-                  <text x={x + 7} y={y - 14} text-anchor="middle" class="tooltip-text">{fmtTime(secs)}</text>
+                  <rect x={tooltipX} y={y - 30} width="50" height="24" rx="4" fill="var(--color-background)" />
+                  <text x={tooltipX + 25} y={y - 14} text-anchor="middle" class="tooltip-text">{fmtTime(secs)}</text>
                 </g>
               </g>
             {/each}

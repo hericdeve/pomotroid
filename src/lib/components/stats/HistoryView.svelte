@@ -326,35 +326,10 @@
     flex-wrap: wrap;
   }
 
-  .custom-input {
-    background: var(--color-hover);
-    color: var(--color-foreground);
-    border: 1px solid var(--color-separator);
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    outline: none;
-    flex: 1;
-    min-width: 120px;
-  }
-
   .date-input {
     flex: none;
     min-width: 115px;
     width: 115px;
-  }
-
-  .all-time-badge {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 230px;
-    background: var(--color-hover);
-    color: var(--color-foreground);
-    border: 1px solid var(--color-separator);
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 0.85rem;
   }
 
   .pagination {
