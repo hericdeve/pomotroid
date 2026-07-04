@@ -208,9 +208,13 @@
 
       <div class="date-range">
         <button class="nav-btn" disabled={quickMode === 'all'} onclick={() => shiftPeriod(-1)}>&#9664;</button>
-        <input type="date" bind:value={dateFromStr} class="custom-input date-input" />
-        <span>to</span>
-        <input type="date" bind:value={dateToStr} class="custom-input date-input" />
+        {#if quickMode === 'all'}
+          <div class="all-time-badge">All Time History</div>
+        {:else}
+          <input type="date" bind:value={dateFromStr} class="custom-input date-input" />
+          <span>to</span>
+          <input type="date" bind:value={dateToStr} class="custom-input date-input" />
+        {/if}
         <button class="nav-btn" disabled={quickMode === 'all'} onclick={() => shiftPeriod(1)}>&#9654;</button>
       </div>
     </div>
@@ -320,6 +324,19 @@
     flex: none;
     min-width: 130px;
     width: 130px;
+  }
+
+  .all-time-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 280px;
+    background: var(--color-hover);
+    color: var(--color-foreground);
+    border: 1px solid var(--color-separator);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
   }
 
   .quick-select {
