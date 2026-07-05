@@ -572,7 +572,7 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
             }
         }
         existing.set_focus().map_err(|e| e.to_string())?;
-        let _ = existing.emit("palette:opened", ());
+        let _ = app.emit("palette:opened", ());
         return Ok(());
     }
         
@@ -606,7 +606,7 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
 
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
-    let _ = win.emit("palette:opened", ());
+    let _ = app.emit("palette:opened", ());
 
     Ok(())
 }

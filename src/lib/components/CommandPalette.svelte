@@ -56,7 +56,14 @@
 
   async function loadRecentEntries() {
     try {
-      const history = await sessionsGetHistory(20, 0, {});
+      const history = await sessionsGetHistory(20, 0, {
+        subject: null,
+        subject_topic: null,
+        study_type: null,
+        date_from: null,
+        date_to: null,
+        show_breaks: null
+      });
       const entries = new Set<string>();
       for (const session of history.sessions) {
         if (!session.subject && !session.subject_topic && !session.study_type && !session.notes) continue;
@@ -82,7 +89,9 @@
         entries.add(cmd.trim());
       }
       recentEntries = Array.from(entries).slice(0, 10);
+      info(`Loaded recent entries: ${JSON.stringify(recentEntries)}, from sessions: ${history.sessions.length}`);
     } catch (e) {
+      recentEntries = [`focus Error: ${e}`];
       logError(`Failed to load recent entries: ${e}`);
     }
   }
@@ -187,12 +196,17 @@
     info(`SUBMIT CALLED: ${JSON.stringify(parsed)}`);
     if (!parsed.canSubmit) return;
     try {
+      const submittedCmd = input.trim();
       await invoke('palette_submit', {
         subject: parsed.subject,
         subjectTopic: parsed.topic,
         studyType: parsed.studyType,
         notes: parsed.note,
       });
+      input = '';
+      
+      const newRecents = [submittedCmd, ...recentEntries.filter(c => c !== submittedCmd)].slice(0, 10);
+      recentEntries = newRecents;
     } catch (e) {
       logError(`Failed to submit palette: ${e}`);
     }
@@ -223,8 +237,10 @@
     };
 
     lockFocus();
+    loadRecentEntries();
 
     const unlistenOpened = listen('palette:opened', () => {
+      input = '';
       lastKeydown = '';
       loadRecentEntries();
       lockFocus();

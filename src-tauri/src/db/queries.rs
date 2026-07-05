@@ -137,7 +137,7 @@ pub fn get_history(
     
     let total: u32 = conn.query_row(&count_query, rusqlite::params_from_iter(params.iter()), |row| row.get(0))?;
 
-    let sql = format!(" ORDER BY started_at DESC LIMIT ?{} OFFSET ?{}", params.len() + 1, params.len() + 2);
+    let sql = format!(" ORDER BY started_at DESC, id DESC LIMIT ?{} OFFSET ?{}", params.len() + 1, params.len() + 2);
     query.push_str(&sql);
     params.push(limit.into());
     params.push(offset.into());

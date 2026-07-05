@@ -92,7 +92,13 @@ export function parse(input: string): ParsedPalette {
      result.activeQuery = '';
   }
 
-  result.canSubmit = result.command === 'focus' && result.subject.trim().length > 0;
+  const stripQuotes = (s: string) => s.replace(/^["'](.*)["']$/, '$1').trim();
+  result.subject = stripQuotes(result.subject);
+  result.topic = stripQuotes(result.topic);
+  result.studyType = stripQuotes(result.studyType);
+  result.note = stripQuotes(result.note);
+
+  result.canSubmit = result.command === 'focus' && result.subject.length > 0;
   return result;
 }
 
