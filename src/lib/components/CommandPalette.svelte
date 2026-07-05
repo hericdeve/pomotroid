@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { LogicalSize } from '@tauri-apps/api/dpi';
-  import { emit } from '@tauri-apps/api/event';
+  import { emit, listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { info, error as logError } from '@tauri-apps/plugin-log';
   import { getSessionSubjects, getSessionTopics, getSessionStudyTypes } from '$lib/ipc';
@@ -53,6 +53,7 @@
     }
   }
 
+  let lastKeydown = '';
   let lastActiveField: ActiveField | null = null;
   $effect(() => {
     if (parsed.activeField !== lastActiveField) {
@@ -60,6 +61,30 @@
       loadSuggestions(parsed);
     }
   });
+  
+  function handleWindowKeydown(e: KeyboardEvent) {
+    lastKeydown = e.key;
+  }
+
+  function handleWindowKeyup(e: KeyboardEvent) {
+    // Workaround for WebKitGTK/Wayland bug: the very first printable keystroke's 
+    // `keydown` and `keypress` events are frequently swallowed by the Input Method (ibus/fcitx)
+    // when a window is first mapped. The `keyup` event, however, survives.
+    // If we see a `keyup` for a printable character but we didn't see its `keydown`, 
+    // it was swallowed. We inject it manually.
+    if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (lastKeydown !== e.key) {
+        if (input.length === 0 && inputEl?.value === '') {
+          input = e.key;
+          setTimeout(() => {
+            inputEl?.setSelectionRange(1, 1);
+          }, 0);
+        }
+      }
+    }
+    // Always clear lastKeydown on keyup
+    lastKeydown = '';
+  }
 
   function handleInput() {
     activeIndex = -1;
@@ -144,15 +169,31 @@
   onMount(() => {
     inputEl?.focus();
 
-    const unlisten = getCurrentWebviewWindow().onFocusChanged(({ payload: focused }) => {
-      if (!focused) close();
+    const unlistenOpened = listen('palette:opened', () => {
+      lastKeydown = '';
+      setTimeout(() => {
+        inputEl?.focus();
+      }, 50);
+    });
+
+    const unlistenFocus = getCurrentWebviewWindow().onFocusChanged(({ payload: focused }) => {
+      if (!focused) {
+        close();
+      } else {
+        setTimeout(() => {
+          inputEl?.focus();
+        }, 10);
+      }
     });
 
     return () => {
-      unlisten.then((f) => f());
+      unlistenOpened.then((f) => f());
+      unlistenFocus.then((f) => f());
     };
   });
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} onkeyup={handleWindowKeyup} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="palette">
