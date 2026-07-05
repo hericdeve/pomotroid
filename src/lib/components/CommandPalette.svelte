@@ -67,13 +67,23 @@
   }
 
   function handleWindowKeyup(e: KeyboardEvent) {
-    // Workaround for WebKitGTK/Wayland bug: the very first printable keystroke's 
-    // `keydown` and `keypress` events are frequently swallowed by the Input Method (ibus/fcitx)
-    // when a window is first mapped. The `keyup` event, however, survives.
-    // If we see a `keyup` for a printable character but we didn't see its `keydown`, 
-    // it was swallowed. We inject it manually.
-    if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      if (lastKeydown !== e.key) {
+    // Workaround for WebKitGTK/Wayland bug: the very first keystroke's 
+    // `keydown` event is frequently swallowed by the Input Method (ibus/fcitx).
+    // If we see a `keyup` but we didn't see its `keydown`, it was swallowed.
+    if (lastKeydown !== e.key) {
+      if (e.key === 'Escape') {
+        close();
+      } else if (e.key === 'Enter') {
+        if (parsed.suggestions.length > 0) {
+          executeCommand(parsed.suggestions[selectedIndex]);
+        }
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        const newIndex = selectedIndex + step;
+        if (newIndex >= 0 && newIndex < parsed.suggestions.length) {
+          selectedIndex = newIndex;
+        }
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (input.length === 0 && inputEl?.value === '') {
           input = e.key;
           setTimeout(() => {
