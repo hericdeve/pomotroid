@@ -2,6 +2,7 @@
   import { settings } from '$lib/stores/settings';
   import { setSetting } from '$lib/ipc';
   import SettingsToggle from '$lib/components/settings/SettingsToggle.svelte';
+  import { getMaxSessionRounds } from '$lib/stores/sessionGoal';
   import * as m from '$paraglide/messages.js';
 
   const MIN_SECS = 60; // 1:00
@@ -13,6 +14,7 @@
   let shortMins = $derived(Math.round($settings.time_short_break_secs / 60));
   let longMins = $derived(Math.round($settings.time_long_break_secs / 60));
   let rounds = $derived($settings.long_break_interval);
+  const maxSessionRounds = $derived(getMaxSessionRounds($settings));
 
   // Per-row edit state: the raw text the user is currently typing.
   let workEdit = $state<string | null>(null);
@@ -301,13 +303,13 @@
       <input
         type="range"
         min="1"
-        max="99"
+        max={maxSessionRounds}
         step="1"
         value={$settings.session_goal_rounds}
         class="slider"
         oninput={(e) => handleChange('session_goal_rounds', (e.target as HTMLInputElement).valueAsNumber)}
       />
-      <div class="bar bar--rounds" style="width: {barWidth($settings.session_goal_rounds, 1, 99)}"></div>
+      <div class="bar bar--rounds" style="width: {barWidth($settings.session_goal_rounds, 1, maxSessionRounds)}"></div>
     </div>
   </div>
 

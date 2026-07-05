@@ -1,7 +1,7 @@
 <script lang="ts">
   import { setSetting } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
-  import { sessionGoalRounds } from '$lib/stores/sessionGoal';
+  import { sessionGoalRounds, getMaxSessionRounds } from '$lib/stores/sessionGoal';
   import type { TimerState } from '$lib/types';
 
   interface Props {
@@ -15,10 +15,12 @@
   let goalInput = $state<number | null>($sessionGoalRounds);
   const activeGoal = $derived(goalInput || 1);
 
+  const maxRounds = $derived(getMaxSessionRounds($settings));
+
   // Apply goal change immediately to the live store if valid
   function applyGoal() {
     if (goalInput !== null) {
-      const clamped = Math.max(1, Math.min(99, Math.round(goalInput)));
+      const clamped = Math.max(1, Math.min(maxRounds, Math.round(goalInput)));
       sessionGoalRounds.set(clamped);
     }
   }
@@ -27,7 +29,7 @@
     if (goalInput === null) {
       goalInput = $sessionGoalRounds;
     } else {
-      goalInput = Math.max(1, Math.min(99, Math.round(goalInput)));
+      goalInput = Math.max(1, Math.min(maxRounds, Math.round(goalInput)));
       sessionGoalRounds.set(goalInput);
     }
   }
@@ -38,7 +40,12 @@
 
   // ── Derived stats ──────────────────────────────────────────────────────────
 
-  const completedRounds = $derived(snap.session_work_count);
+  // Only count a round as completed once it is finished (i.e. we are on a break, or we have started the next one)
+  const completedRounds = $derived(
+    snap.round_type === 'work' 
+      ? Math.max(0, snap.session_work_count - 1) 
+      : snap.session_work_count
+  );
 
   // How many long breaks and short breaks across the whole goal
   function computeBreaks(goal: number) {
@@ -208,7 +215,7 @@
             id="goal-input"
             type="number"
             min="1"
-            max="99"
+            max={maxRounds}
             bind:value={goalInput}
             oninput={applyGoal}
             onchange={applyGoal}

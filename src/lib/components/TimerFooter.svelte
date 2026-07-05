@@ -17,6 +17,12 @@
 
   let hasTags = $derived(!!($pendingTags.subject || $pendingTags.subject_topic || $pendingTags.study_type || $pendingTags.notes));
 
+  const completedRounds = $derived(
+    snap.round_type === 'work'
+      ? Math.max(0, snap.session_work_count - 1)
+      : snap.session_work_count
+  );
+
   async function handleReset() {
     if (snap.active_session_id !== null) {
       updateSession(snap.active_session_id, {
@@ -41,7 +47,7 @@
 <!-- Session goal counter: X / N — click to open goal details dialog -->
 <Tooltip text="Session goal — click for details">
   <button class="rounds btn-goal" onclick={() => ($showGoalModal = true)} aria-label="Session goal progress">
-    {snap.session_work_count} / {$sessionGoalRounds}
+    {completedRounds} / {$sessionGoalRounds}
   </button>
 </Tooltip>
 
