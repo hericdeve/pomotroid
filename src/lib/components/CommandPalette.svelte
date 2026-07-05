@@ -28,9 +28,11 @@
   // Computed suggestions for the current active field
   let suggestions = $derived(getSuggestions(parsed));
   let filteredSuggestions = $derived(
-    suggestions.filter(s => s.toLowerCase().includes(parsed.activeQuery.toLowerCase()))
+    input.length === 0
+      ? COMMAND_SUGGESTIONS // Show commands by default when empty
+      : suggestions.filter(s => s.toLowerCase().includes(parsed.activeQuery.toLowerCase()))
   );
-  let showDropdown = $derived(filteredSuggestions.length > 0 && input.length > 0);
+  let showDropdown = $derived(filteredSuggestions.length > 0);
 
   function getSuggestions(p: ParsedPalette): string[] {
     if (p.activeField === 'command') return COMMAND_SUGGESTIONS;
@@ -141,10 +143,16 @@
 
   onMount(() => {
     inputEl?.focus();
+
+    const unlisten = getCurrentWebviewWindow().onFocusChanged(({ payload: focused }) => {
+      if (!focused) close();
+    });
+
+    return () => {
+      unlisten.then((f) => f());
+    };
   });
 </script>
-
-<svelte:window onblur={handleWindowBlur} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="palette">

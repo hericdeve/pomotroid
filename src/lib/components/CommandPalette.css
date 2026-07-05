@@ -1,4 +1,4 @@
-  .palette {
+.palette {
     display: flex;
     flex-direction: column;
     background: var(--color-background);
@@ -9,6 +9,7 @@
       0 8px 32px color-mix(in oklch, black 40%, transparent),
       0 2px 8px color-mix(in oklch, black 20%, transparent);
     font-family: 'Mona Sans', system-ui, sans-serif;
+    height: 100vh;
   }
 
   .input-row {

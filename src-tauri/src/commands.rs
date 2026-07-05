@@ -574,6 +574,7 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
         .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
+        // .visible(false) // Must be hidden so layer shell can init before mapping
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -583,7 +584,7 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
         if let Ok(gtk_window) = win.gtk_window() {
             gtk_layer_shell::init_for_window(&gtk_window);
             gtk_layer_shell::set_layer(&gtk_window, Layer::Overlay);
-            gtk_layer_shell::set_keyboard_mode(&gtk_window, KeyboardMode::OnDemand);
+            gtk_layer_shell::set_keyboard_mode(&gtk_window, KeyboardMode::Exclusive);
             
             gtk_layer_shell::set_anchor(&gtk_window, Edge::Top, true);
             gtk_layer_shell::set_anchor(&gtk_window, Edge::Bottom, false);
