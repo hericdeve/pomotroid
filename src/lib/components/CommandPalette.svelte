@@ -6,7 +6,7 @@
   import { emit, listen } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { info, error as logError } from '@tauri-apps/plugin-log';
-  import { getSessionSubjects, getSessionTopics, getSessionStudyTypes } from '$lib/ipc';
+  import { getSessionSubjects, getSessionTopics, getSessionStudyTypes, sessionsGetHistory } from '$lib/ipc';
   import { parse, completeSuggestion, fieldLabel, type ParsedPalette, type ActiveField } from '$lib/utils/paletteParser';
 
   const STUDY_TYPES_FALLBACK = ['Exercise', 'Reading', 'Review', 'Classroom', 'Video', 'Flash Cards'];
@@ -24,12 +24,13 @@
   let subjects = $state<string[]>([]);
   let topics = $state<string[]>([]);
   let studyTypes = $state<string[]>(STUDY_TYPES_FALLBACK);
+  let recentEntries = $state<string[]>([]);
 
   // Computed suggestions for the current active field
   let suggestions = $derived(getSuggestions(parsed));
   let filteredSuggestions = $derived(
     input.length === 0
-      ? COMMAND_SUGGESTIONS // Show commands by default when empty
+      ? recentEntries // Show recent entries by default when empty
       : suggestions.filter(s => s.toLowerCase().includes(parsed.activeQuery.toLowerCase()))
   );
   let showDropdown = $derived(filteredSuggestions.length > 0);
@@ -50,6 +51,39 @@
     } else if (p.activeField === 'studyType') {
       const custom = await getSessionStudyTypes().catch(() => []);
       studyTypes = [...new Set([...STUDY_TYPES_FALLBACK, ...custom])];
+    }
+  }
+
+  async function loadRecentEntries() {
+    try {
+      const history = await sessionsGetHistory(20, 0, {});
+      const entries = new Set<string>();
+      for (const session of history.sessions) {
+        if (!session.subject && !session.subject_topic && !session.study_type && !session.notes) continue;
+        
+        let s = session.subject || '';
+        if (s && s.includes(' ')) s = `"${s}"`;
+
+        let topic = session.subject_topic || '';
+        if (topic && topic.includes(' ')) topic = `"${topic}"`;
+
+        let study = session.study_type || '';
+        if (study && study.includes(' ')) study = `"${study}"`;
+
+        let note = session.notes || '';
+        if (note && note.includes(' ')) note = `"${note}"`;
+        
+        let cmd = `focus`;
+        if (s) cmd += ` ${s}`;
+        if (topic) cmd += ` -t ${topic}`;
+        if (study) cmd += ` -s ${study}`;
+        if (note) cmd += ` -n ${note}`;
+        
+        entries.add(cmd.trim());
+      }
+      recentEntries = Array.from(entries).slice(0, 10);
+    } catch (e) {
+      logError(`Failed to load recent entries: ${e}`);
     }
   }
 
@@ -140,7 +174,11 @@
   }
 
   function selectSuggestion(value: string) {
-    input = completeSuggestion(input, parsed, value);
+    if (input.length === 0 && value.startsWith('focus')) {
+      input = value;
+    } else {
+      input = completeSuggestion(input, parsed, value);
+    }
     activeIndex = -1;
     inputEl?.focus();
   }
@@ -188,6 +226,7 @@
 
     const unlistenOpened = listen('palette:opened', () => {
       lastKeydown = '';
+      loadRecentEntries();
       lockFocus();
     });
 
