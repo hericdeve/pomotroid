@@ -4,7 +4,9 @@
   import Titlebar from '$lib/components/Titlebar.svelte';
   import Timer from '$lib/components/Timer.svelte';
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
+  import SessionGoalModal from '$lib/components/SessionGoalModal.svelte';
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
+  import { showGoalModal } from '$lib/stores/sessionGoal';
   import { timerState } from '$lib/stores/timer';
   import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerSkip, timerRestartRound } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
@@ -230,6 +232,12 @@
     <SessionTagModal 
       onClose={() => ($showTagModal = false)} 
       sessionId={$timerState.active_session_id} 
+    />
+  {/if}
+  {#if $showGoalModal}
+    <SessionGoalModal
+      snap={$timerState}
+      onClose={() => ($showGoalModal = false)}
     />
   {/if}
 </div>

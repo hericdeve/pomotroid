@@ -8,7 +8,6 @@
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { updateSession } from '$lib/ipc';
   import { sessionGoalRounds, showGoalModal } from '$lib/stores/sessionGoal';
-  import SessionGoalModal from './SessionGoalModal.svelte';
 
   interface Props {
     snap: TimerState;
@@ -62,10 +61,7 @@
   </button>
 </Tooltip>
 
-<!-- Session Goal Modal -->
-{#if $showGoalModal}
-  <SessionGoalModal {snap} onClose={() => ($showGoalModal = false)} />
-{/if}
+
 
 <style>
   .rounds {
