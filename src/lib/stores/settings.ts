@@ -47,6 +47,7 @@ const defaults: Settings = {
   local_shortcut_palette: 'p',
   enable_window_controls: true,
   history_show_breaks: true,
+  session_goal_rounds: 8,
 };
 
 export const settings = writable<Settings>(defaults);

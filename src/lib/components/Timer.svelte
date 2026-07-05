@@ -28,6 +28,7 @@
   import { pendingTags } from '$lib/stores/pendingTags';
   import { get } from 'svelte/store';
   import { updateSession } from '$lib/ipc';
+  import { sessionGoalRounds } from '$lib/stores/sessionGoal';
 
   interface Props {
     isCompact?: boolean;
@@ -73,6 +74,9 @@
     (async () => {
       const initial = await getTimerState();
       timerState.set(initial);
+
+      // Initialize session goal from current settings default
+      sessionGoalRounds.set(get(settings).session_goal_rounds);
 
       cleanups.push(
         await onTimerTick(({ elapsed_secs, total_secs, active_session_id }) => {
@@ -124,6 +128,8 @@
         }),
         await onTimerReset((snap) => {
           timerState.set(snap);
+          // Restore goal to the persisted default when the timer is reset
+          sessionGoalRounds.set(get(settings).session_goal_rounds);
         })
       );
     })();

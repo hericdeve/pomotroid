@@ -69,6 +69,8 @@ pub struct Settings {
     /// Last known window height (physical pixels). `None` = use OS default.
     pub window_height: Option<u32>,
     pub history_show_breaks: bool,
+    /// Default number of work rounds for a full study session goal.
+    pub session_goal_rounds: u32,
 }
 
 impl Default for Settings {
@@ -132,6 +134,7 @@ impl Default for Settings {
             window_width: None,
             window_height: None,
             history_show_breaks: true,
+            session_goal_rounds: 8,
         }
     }
 }
@@ -261,6 +264,7 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         window_width: parse_opt_u32(&map, "window_width"),
         window_height: parse_opt_u32(&map, "window_height"),
         history_show_breaks: parse_bool(&map, "history_show_breaks", d.history_show_breaks),
+        session_goal_rounds: parse_u32(&map, "session_goal_rounds", d.session_goal_rounds),
     })
 }
 

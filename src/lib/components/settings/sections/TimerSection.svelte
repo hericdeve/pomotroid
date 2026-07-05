@@ -291,6 +291,26 @@
     </div>
   </div>
 
+  <!-- Session goal rounds -->
+  <div class="slider-row">
+    <div class="slider-meta">
+      <span class="slider-label">Session goal (rounds)</span>
+      <span class="slider-value slider-value--static">{$settings.session_goal_rounds}</span>
+    </div>
+    <div class="slider-wrap">
+      <input
+        type="range"
+        min="1"
+        max="99"
+        step="1"
+        value={$settings.session_goal_rounds}
+        class="slider"
+        oninput={(e) => handleChange('session_goal_rounds', (e.target as HTMLInputElement).valueAsNumber)}
+      />
+      <div class="bar bar--rounds" style="width: {barWidth($settings.session_goal_rounds, 1, 99)}"></div>
+    </div>
+  </div>
+
   <SettingsToggle
     label={m.timer_toggle_auto_start_work()}
     description={m.timer_toggle_auto_start_work_desc()}
