@@ -134,10 +134,32 @@ const MIGRATION_8: &str = "
     INSERT INTO schema_version VALUES (8);
 ";
 
+/// Add weekly_goal column to subjects table
+const MIGRATION_9: &str = "
+    ALTER TABLE subjects ADD COLUMN weekly_goal INTEGER;
+    
+    INSERT INTO schema_version VALUES (9);
+";
+
+/// Create scheduled_blocks table
+const MIGRATION_10: &str = "
+    CREATE TABLE scheduled_blocks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subject TEXT NOT NULL,
+        day_of_week INTEGER NOT NULL,
+        start_minute INTEGER NOT NULL,
+        end_minute INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    
+    INSERT INTO schema_version VALUES (10);
+";
+
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
 pub fn run(conn: &Connection) -> Result<()> {
     let version = current_version(conn)?;
+
 
     if version < 1 {
         log::info!("[db/migrations] applying MIGRATION_1: initial schema");
@@ -187,6 +209,18 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_8 complete");
     }
 
+    if version < 9 {
+        log::info!("[db/migrations] applying MIGRATION_9: add weekly_goal to subjects");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_9} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_9 complete");
+    }
+
+    if version < 10 {
+        log::info!("[db/migrations] applying MIGRATION_10: create scheduled_blocks table");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_10} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_10 complete");
+    }
+
     Ok(())
 }
 
@@ -222,7 +256,7 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 8);
+        assert_eq!(v, 9);
     }
 
     #[test]

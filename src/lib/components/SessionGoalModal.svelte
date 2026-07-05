@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { setSetting } from '$lib/ipc';
+  import { setSetting, subjectGetWeeklyProgress } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
   import { sessionGoalRounds, getMaxSessionRounds } from '$lib/stores/sessionGoal';
-  import type { TimerState } from '$lib/types';
+  import { pendingTags } from '$lib/stores/pendingTags';
+  import type { TimerState, SubjectWeeklyProgress } from '$lib/types';
 
   interface Props {
     snap: TimerState;
@@ -188,6 +189,22 @@
       ? snap.work_rounds_total - snap.work_round_number + 1
       : null
   );
+
+  // Weekly Subject Progress
+  let weeklyProgress = $state<SubjectWeeklyProgress | null>(null);
+
+  $effect(() => {
+    if ($pendingTags.subject) {
+      subjectGetWeeklyProgress($pendingTags.subject).then(prog => {
+        weeklyProgress = prog;
+      }).catch(err => {
+        console.error("Failed to load weekly progress:", err);
+      });
+    } else {
+      weeklyProgress = null;
+    }
+  });
+
 </script>
 
 <div class="modal-overlay" role="presentation" onclick={onClose}>
@@ -225,6 +242,24 @@
           <div class="progress-fill" style="width: {progressPct}%"></div>
         </div>
       </div>
+
+      <!-- Weekly Progress (Only if subject is active and has a goal) -->
+      {#if weeklyProgress && weeklyProgress.goal}
+        <div class="weekly-section">
+          <div class="progress-label weekly-label">
+            <span class="progress-text">
+              <span class="weekly-subject">{$pendingTags.subject}</span> Weekly Goal:
+              <span class="progress-completed">{weeklyProgress.completed}</span>
+              <span class="progress-sep"> / </span>
+              <span class="progress-goal">{weeklyProgress.goal}</span>
+              <span class="progress-unit"> rounds</span>
+            </span>
+          </div>
+          <div class="progress-track weekly-track">
+            <div class="progress-fill weekly-fill" style="width: {Math.min(100, (weeklyProgress.completed / weeklyProgress.goal) * 100)}%"></div>
+          </div>
+        </div>
+      {/if}
 
       <!-- Stat table -->
       <div class="stats-section">
@@ -401,6 +436,35 @@
     background: var(--color-focus-round);
     border-radius: 3px;
     transition: width 0.4s ease;
+  }
+
+  /* ── Weekly Progress ───────────────────────────── */
+  .weekly-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--color-background-light, rgba(255,255,255,0.03));
+    border: 1px dashed var(--color-subtext, rgba(255,255,255,0.1));
+    border-radius: 6px;
+  }
+
+  .weekly-label .progress-text {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .weekly-subject {
+    font-weight: 600;
+    color: var(--color-focus-round);
+  }
+
+  .weekly-track {
+    height: 4px;
+  }
+
+  .weekly-fill {
+    background: var(--color-foreground-darker, rgba(255,255,255,0.4));
   }
 
   /* ── Stats table ───────────────────────────────── */

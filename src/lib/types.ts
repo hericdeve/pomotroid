@@ -148,6 +148,20 @@ export interface SubjectStats {
   name: string;
   color: string | null;
   pomodoro_count: number;
+  weekly_goal?: number | null;
+}
+
+export interface SubjectWeeklyProgress {
+  goal: number | null;
+  completed: number;
+}
+
+export interface ScheduledBlock {
+  id: number;
+  subject: string;
+  day_of_week: number;
+  start_minute: number;
+  end_minute: number;
 }
 
 // ---------------------------------------------------------------------------

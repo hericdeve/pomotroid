@@ -8,7 +8,8 @@
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { showGoalModal } from '$lib/stores/sessionGoal';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerSkip, timerRestartRound } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerSkip, timerRestartRound, scheduleGetAll } from '$lib/ipc';
+  import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
   import { resolveThemeName } from '$lib/utils/theme';
@@ -43,6 +44,40 @@
   // dial upward so the whitespace sits at the bottom rather than being
   // split equally — compensates for the visual weight of the titlebar.
   const COMPACT_BOTTOM_PAD = 48;
+
+  // Smart Schedule Detection state
+  let scheduleBlocks = $state<ScheduledBlock[]>([]);
+  let activeScheduledSubject = $state<string | null>(null);
+
+  function checkSchedule() {
+    const now = new Date();
+    // JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat
+    // Our DB format: 0=Mon, ..., 6=Sun
+    const jsDay = now.getDay();
+    const currentDay = jsDay === 0 ? 6 : jsDay - 1;
+    const currentMinute = now.getHours() * 60 + now.getMinutes();
+
+    const activeBlock = scheduleBlocks.find(b => 
+      b.day_of_week === currentDay && 
+      currentMinute >= b.start_minute && 
+      currentMinute < b.end_minute
+    );
+    activeScheduledSubject = activeBlock ? activeBlock.subject : null;
+  }
+
+  function handleStartScheduled() {
+    if (activeScheduledSubject) {
+      pendingTags.set({
+        subject: activeScheduledSubject,
+        subject_topic: '',
+        study_type: '',
+        notes: ''
+      });
+      if (!$timerState.is_running) {
+        timerToggle();
+      }
+    }
+  }
 
   $effect(() => {
     function update() {
@@ -107,6 +142,20 @@
         const osDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const active = themes.find((t) => t.name === resolveThemeName(s, osDark)) ?? themes[0];
         if (active) applyTheme(active);
+        
+        // Load schedule and start interval checking
+        scheduleBlocks = await scheduleGetAll();
+        checkSchedule();
+        const intervalId = setInterval(() => {
+          checkSchedule();
+          // Optionally refresh schedule every minute in case Stats updated it
+          scheduleGetAll().then(blocks => {
+            scheduleBlocks = blocks;
+            checkSchedule();
+          }).catch(console.error);
+        }, 60_000);
+        cleanups.push(() => clearInterval(intervalId));
+
         await getCurrentWebviewWindow().show();
         await info(`[main] initialized, theme=${active?.name ?? 'none'}`);
       } catch (e) {
@@ -224,7 +273,15 @@
 {/if}
 
 <div class="app">
-  <Titlebar />
+  <Titlebar {isFullscreen} {isCompact} />
+  <!-- Smart Suggestion -->
+  {#if activeScheduledSubject && !$timerState.is_running && !$timerState.active_session_id && !isCompact}
+    <div class="smart-suggestion">
+      <button class="ghost-btn" onclick={handleStartScheduled}>
+        Start {activeScheduledSubject} session
+      </button>
+    </div>
+  {/if}
   <main class:compact={isCompact}>
     <Timer {isCompact} {uiScale} />
   </main>
@@ -333,5 +390,41 @@
     width: 10px;
     height: 10px;
     cursor: sw-resize;
+  }
+
+  .smart-suggestion {
+    position: absolute;
+    top: 48px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    z-index: 50;
+    pointer-events: none;
+  }
+
+  .ghost-btn {
+    pointer-events: auto;
+    background: transparent;
+    color: var(--color-subtext);
+    border: 1px solid transparent;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  .ghost-btn:hover {
+    color: var(--color-text);
+    border-color: var(--color-subtext);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 </style>

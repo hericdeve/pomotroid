@@ -375,6 +375,7 @@ pub struct SubjectStats {
     pub name: String,
     pub color: Option<String>,
     pub pomodoro_count: u32,
+    pub weekly_goal: Option<u32>,
 }
 
 pub fn subjects_get_all(conn: &Connection) -> Result<Vec<SubjectStats>> {
@@ -383,7 +384,8 @@ pub fn subjects_get_all(conn: &Connection) -> Result<Vec<SubjectStats>> {
             sb.id, 
             sb.name, 
             sb.color,
-            COUNT(se.id) as pomodoro_count
+            COUNT(se.id) as pomodoro_count,
+            sb.weekly_goal
          FROM subjects sb
          LEFT JOIN sessions se ON se.subject = sb.name AND se.round_type = 'work' AND se.completed = 1 AND se.deleted_at IS NULL
          GROUP BY sb.id
@@ -396,6 +398,7 @@ pub fn subjects_get_all(conn: &Connection) -> Result<Vec<SubjectStats>> {
             name: row.get(1)?,
             color: row.get(2)?,
             pomodoro_count: row.get(3)?,
+            weekly_goal: row.get(4)?,
         })
     })?;
 
@@ -412,6 +415,41 @@ pub fn subject_create(conn: &Connection, name: &str) -> Result<i64> {
         params![name.trim(), unix_now()],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+pub fn subject_set_weekly_goal(conn: &Connection, name: &str, goal: Option<u32>) -> Result<()> {
+    conn.execute(
+        "UPDATE subjects SET weekly_goal = ?1 WHERE name = ?2",
+        params![goal, name.trim()],
+    )?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubjectWeeklyProgress {
+    pub goal: Option<u32>,
+    pub completed: u32,
+}
+
+pub fn subject_get_weekly_progress(conn: &Connection, name: &str) -> Result<SubjectWeeklyProgress> {
+    let goal: Option<u32> = conn.query_row(
+        "SELECT weekly_goal FROM subjects WHERE name = ?1",
+        params![name.trim()],
+        |r| r.get(0)
+    ).optional()?.flatten();
+
+    let completed: u32 = conn.query_row(
+        "SELECT COUNT(id) FROM sessions 
+         WHERE subject = ?1 
+         AND round_type = 'work' 
+         AND completed = 1 
+         AND deleted_at IS NULL
+         AND date(started_at, 'unixepoch', 'localtime') >= date('now', 'localtime', '-3 days', 'weekday 4', '-3 days')",
+        params![name.trim()],
+        |r| r.get(0)
+    ).unwrap_or(0);
+
+    Ok(SubjectWeeklyProgress { goal, completed })
 }
 
 pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<Vec<String>> {
@@ -1026,4 +1064,80 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
         by_day_of_week,
         by_hour_of_day,
     })
+}
+
+// ---------------------------------------------------------------------------
+// SCHEDULED BLOCKS
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ScheduledBlock {
+    pub id: i64,
+    pub subject: String,
+    pub day_of_week: i32,
+    pub start_minute: i32,
+    pub end_minute: i32,
+}
+
+pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, subject, day_of_week, start_minute, end_minute 
+         FROM scheduled_blocks 
+         ORDER BY day_of_week ASC, start_minute ASC"
+    )?;
+    
+    let rows = stmt.query_map([], |row| {
+        Ok(ScheduledBlock {
+            id: row.get(0)?,
+            subject: row.get(1)?,
+            day_of_week: row.get(2)?,
+            start_minute: row.get(3)?,
+            end_minute: row.get(4)?,
+        })
+    })?;
+
+    let mut blocks = Vec::new();
+    for b in rows {
+        blocks.push(b?);
+    }
+    Ok(blocks)
+}
+
+pub fn schedule_add_block(
+    conn: &Connection, 
+    subject: &str, 
+    day_of_week: i32, 
+    start_minute: i32, 
+    end_minute: i32
+) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO scheduled_blocks (subject, day_of_week, start_minute, end_minute, created_at) 
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![subject.trim(), day_of_week, start_minute, end_minute, unix_now()],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn schedule_delete_block(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute(
+        "DELETE FROM scheduled_blocks WHERE id = ?1",
+        params![id],
+    )?;
+    Ok(())
+}
+
+pub fn schedule_update_block(
+    conn: &Connection, 
+    id: i64, 
+    day_of_week: i32, 
+    start_minute: i32, 
+    end_minute: i32
+) -> Result<()> {
+    conn.execute(
+        "UPDATE scheduled_blocks 
+         SET day_of_week = ?1, start_minute = ?2, end_minute = ?3 
+         WHERE id = ?4",
+        params![day_of_week, start_minute, end_minute, id],
+    )?;
+    Ok(())
 }

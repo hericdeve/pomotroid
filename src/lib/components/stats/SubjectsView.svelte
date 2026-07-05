@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { subjectsGetAll, subjectCreate, subjectDelete } from '$lib/ipc';
+  import { subjectsGetAll, subjectCreate, subjectDelete, subjectSetWeeklyGoal } from '$lib/ipc';
   import type { SubjectStats } from '$lib/types';
   import { error as logError } from '@tauri-apps/plugin-log';
 
@@ -47,6 +47,17 @@
     }
   }
 
+  async function handleGoalChange(subject: SubjectStats, newGoal: number | null) {
+    try {
+      await subjectSetWeeklyGoal(subject.name, newGoal);
+      subject.weekly_goal = newGoal;
+    } catch (e) {
+      logError(`Failed to set weekly goal: ${e}`);
+      alert(`Failed to set weekly goal: ${e}`);
+      await loadSubjects(); // Reload to revert invalid state
+    }
+  }
+
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       handleCreate();
@@ -80,6 +91,7 @@
           <tr>
             <th>Subject</th>
             <th>Pomodoros</th>
+            <th>Weekly Goal</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -91,6 +103,22 @@
                 <span class="badge" class:zero={subject.pomodoro_count === 0}>
                   {subject.pomodoro_count}
                 </span>
+              </td>
+              <td class="goal-col">
+                <input 
+                  type="number" 
+                  min="1"
+                  class="goal-input"
+                  value={subject.weekly_goal ?? ''} 
+                  placeholder="—"
+                  onchange={(e) => {
+                    const val = e.currentTarget.value;
+                    const goal = val ? parseInt(val, 10) : null;
+                    if (goal !== subject.weekly_goal) {
+                      handleGoalChange(subject, goal);
+                    }
+                  }}
+                />
               </td>
               <td class="actions-col">
                 <button 
@@ -203,17 +231,52 @@
   }
 
   .name-col {
-    width: 60%;
+    width: 50%;
     font-weight: 500;
   }
 
   .count-col {
+    width: 15%;
+  }
+
+  .goal-col {
     width: 20%;
   }
 
   .actions-col {
-    width: 20%;
+    width: 15%;
     text-align: right;
+  }
+
+  .goal-input {
+    width: 60px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--color-text);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    text-align: center;
+    /* hide browser spin arrows */
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .goal-input::-webkit-inner-spin-button,
+  .goal-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+  }
+
+  .goal-input:hover {
+    border-color: var(--color-subtext);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .goal-input:focus {
+    outline: none;
+    border-color: var(--color-focus-round);
+    background: var(--color-background);
   }
 
   .badge {

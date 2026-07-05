@@ -20,6 +20,8 @@ import type {
   ImportSummary,
   InsightsStats,
   SubjectStats,
+  SubjectWeeklyProgress,
+  ScheduledBlock,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -102,9 +104,19 @@ export const getSessionSubjects = () => invoke<string[]>('session_get_subjects')
 export const subjectsGetAll = () => invoke<SubjectStats[]>('subjects_get_all');
 export const subjectCreate = (name: string) => invoke<number>('subject_create', { name });
 export const subjectDelete = (name: string) => invoke<void>('subject_delete', { name });
+export const subjectSetWeeklyGoal = (name: string, goal: number | null) => invoke<void>('subject_set_weekly_goal', { name, goal });
+export const subjectGetWeeklyProgress = (name: string) => invoke<SubjectWeeklyProgress>('subject_get_weekly_progress', { name });
 export const getSessionTopics = (subject?: string) => invoke<string[]>('session_get_topics', { subject });
 export const getSessionStudyTypes = () => invoke<string[]>('session_get_study_types');
 export const sessionsGetHistory = (limit: number, offset: number, filter: SessionFilter) => invoke<SessionHistoryPage>('sessions_get_history', { limit, offset, filter });
+
+// --- Schedule commands ---
+export const scheduleGetAll = () => invoke<ScheduledBlock[]>('schedule_get_all');
+export const scheduleAddBlock = (subject: string, dayOfWeek: number, startMinute: number, endMinute: number) => 
+  invoke<number>('schedule_add_block', { subject, dayOfWeek, startMinute, endMinute });
+export const scheduleDeleteBlock = (id: number) => invoke<void>('schedule_delete_block', { id });
+export const scheduleUpdateBlock = (id: number, dayOfWeek: number, startMinute: number, endMinute: number) => 
+  invoke<void>('schedule_update_block', { id, dayOfWeek, startMinute, endMinute });
 
 // --- Stats commands ---
 

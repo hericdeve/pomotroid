@@ -1049,6 +1049,18 @@ pub fn subject_delete(name: String, db: State<'_, DbState>) -> Result<(), String
 }
 
 #[tauri::command]
+pub fn subject_set_weekly_goal(name: String, goal: Option<u32>, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::subject_set_weekly_goal(&conn, &name, goal).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn subject_get_weekly_progress(name: String, db: State<'_, DbState>) -> Result<queries::SubjectWeeklyProgress, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::subject_get_weekly_progress(&conn, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn sessions_get_history(
     limit: u32,
     offset: u32,
@@ -1096,6 +1108,48 @@ pub struct HeatmapStats {
 pub fn stats_get_insights(db: State<'_, DbState>, filter: queries::SessionFilter) -> Result<queries::InsightsStats, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     queries::get_insights_stats(&conn, &filter).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// SCHEDULED BLOCKS
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn schedule_get_all(db: State<'_, DbState>) -> Result<Vec<queries::ScheduledBlock>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::schedule_get_all(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn schedule_add_block(
+    subject: String, 
+    day_of_week: i32, 
+    start_minute: i32, 
+    end_minute: i32, 
+    db: State<'_, DbState>
+) -> Result<i64, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::schedule_add_block(&conn, &subject, day_of_week, start_minute, end_minute)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn schedule_delete_block(id: i64, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::schedule_delete_block(&conn, id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn schedule_update_block(
+    id: i64, 
+    day_of_week: i32, 
+    start_minute: i32, 
+    end_minute: i32, 
+    db: State<'_, DbState>
+) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::schedule_update_block(&conn, id, day_of_week, start_minute, end_minute)
+        .map_err(|e| e.to_string())
 }
 #[cfg(test)]
 mod tests {

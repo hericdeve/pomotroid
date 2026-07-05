@@ -31,8 +31,9 @@
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
   import SessionsListModal from '$lib/components/stats/SessionsListModal.svelte';
   import SubjectsView from '$lib/components/stats/SubjectsView.svelte';
+  import PlanningView from '$lib/components/stats/PlanningView.svelte';
 
-  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights' | 'subjects';
+  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights' | 'subjects' | 'planning';
 
   let activeTab = $state<Tab>('today');
   let detailed = $state<DetailedStats | null>(null);
@@ -195,6 +196,9 @@
       <button class="tab" class:active={activeTab === 'subjects'} onclick={() => switchTab('subjects')}
         >Subjects</button
       >
+      <button class="tab" class:active={activeTab === 'planning'} onclick={() => switchTab('planning')}
+        >Planning</button
+      >
     </div>
     <button class="btn-manual" onclick={() => showManualEntry = true} title="Manual Entry" aria-label="Manual Entry">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -217,8 +221,10 @@
         <HistoryView onEditSession={(id) => editingSessionId = id} />
       {:else if activeTab === 'insights'}
         <InsightsView />
-      {:else}
+      {:else if activeTab === 'subjects'}
         <SubjectsView />
+      {:else}
+        <PlanningView />
       {/if}
     {/key}
   </div>
