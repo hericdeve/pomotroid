@@ -1016,6 +1016,37 @@ pub fn session_get_subjects(db: State<'_, DbState>) -> Result<Vec<String>, Strin
     let conn = db.lock().map_err(|e| e.to_string())?;
     queries::get_distinct_subjects(&conn).map_err(|e| e.to_string())
 }
+#[tauri::command]
+pub fn subjects_get_all(db: State<'_, DbState>) -> Result<Vec<queries::SubjectStats>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::subjects_get_all(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn subject_create(name: String, db: State<'_, DbState>) -> Result<i64, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::subject_create(&conn, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn subject_delete(name: String, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    
+    // Check if there are any pomodoros
+    let count: u32 = conn.query_row(
+        "SELECT COUNT(id) FROM sessions WHERE subject = ?1 AND round_type = 'work' AND deleted_at IS NULL",
+        rusqlite::params![name],
+        |r| r.get(0),
+    ).map_err(|e| e.to_string())?;
+    
+    if count > 0 {
+        return Err("Cannot delete subject with existing pomodoros".to_string());
+    }
+    
+    conn.execute("DELETE FROM subjects WHERE name = ?1", rusqlite::params![name])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 #[tauri::command]
 pub fn sessions_get_history(

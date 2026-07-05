@@ -19,6 +19,7 @@ import type {
   SessionHistoryPage,
   ImportSummary,
   InsightsStats,
+  SubjectStats,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -98,6 +99,9 @@ export const sessionAddExtraTime = (id: number, extraSecs: number) => invoke<voi
 export const sessionDelete = (id: number) => invoke<void>('session_delete', { id });
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
 export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');
+export const subjectsGetAll = () => invoke<SubjectStats[]>('subjects_get_all');
+export const subjectCreate = (name: string) => invoke<number>('subject_create', { name });
+export const subjectDelete = (name: string) => invoke<void>('subject_delete', { name });
 export const getSessionTopics = (subject?: string) => invoke<string[]>('session_get_topics', { subject });
 export const getSessionStudyTypes = () => invoke<string[]>('session_get_study_types');
 export const sessionsGetHistory = (limit: number, offset: number, filter: SessionFilter) => invoke<SessionHistoryPage>('sessions_get_history', { limit, offset, filter });

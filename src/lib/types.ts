@@ -142,6 +142,13 @@ export interface InsightsStats {
   by_hour_of_day: number[];
 }
 
+export interface SubjectStats {
+  id: number;
+  name: string;
+  color: string | null;
+  pomodoro_count: number;
+}
+
 // ---------------------------------------------------------------------------
 // Extended Sessions types
 // ---------------------------------------------------------------------------

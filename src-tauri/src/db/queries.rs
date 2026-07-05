@@ -282,6 +282,14 @@ pub fn delete_session(conn: &Connection, id: i64) -> Result<()> {
 }
 
 pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload) -> Result<()> {
+    if let Some(subject_name) = &payload.subject {
+        if !subject_name.trim().is_empty() {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO subjects (name, created_at) VALUES (?1, ?2)",
+                params![subject_name.trim(), unix_now()],
+            );
+        }
+    }
     conn.execute(
         "UPDATE sessions SET
             subject = ?1,
@@ -311,6 +319,15 @@ pub fn add_extra_time_to_session(conn: &Connection, id: i64, extra_secs: i64) ->
 }
 
 pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayload) -> Result<i64> {
+    if let Some(subject_name) = &payload.subject {
+        if !subject_name.trim().is_empty() {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO subjects (name, created_at) VALUES (?1, ?2)",
+                params![subject_name.trim(), unix_now()],
+            );
+        }
+    }
+
     let uuid = uuid::Uuid::new_v4().to_string();
     let ended_at = payload.started_at + (payload.duration_secs as i64);
     
@@ -342,7 +359,7 @@ pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayl
 
 pub fn get_distinct_subjects(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT subject FROM sessions WHERE subject IS NOT NULL AND subject != '' ORDER BY subject COLLATE NOCASE ASC"
+        "SELECT name FROM subjects ORDER BY name COLLATE NOCASE ASC"
     )?;
     let rows = stmt.query_map([], |r| r.get(0))?;
     let mut subjects = Vec::new();
@@ -350,6 +367,51 @@ pub fn get_distinct_subjects(conn: &Connection) -> Result<Vec<String>> {
         subjects.push(row?);
     }
     Ok(subjects)
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubjectStats {
+    pub id: i64,
+    pub name: String,
+    pub color: Option<String>,
+    pub pomodoro_count: u32,
+}
+
+pub fn subjects_get_all(conn: &Connection) -> Result<Vec<SubjectStats>> {
+    let mut stmt = conn.prepare(
+        "SELECT 
+            sb.id, 
+            sb.name, 
+            sb.color,
+            COUNT(se.id) as pomodoro_count
+         FROM subjects sb
+         LEFT JOIN sessions se ON se.subject = sb.name AND se.round_type = 'work' AND se.completed = 1 AND se.deleted_at IS NULL
+         GROUP BY sb.id
+         ORDER BY sb.name COLLATE NOCASE ASC"
+    )?;
+    
+    let rows = stmt.query_map([], |row| {
+        Ok(SubjectStats {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            color: row.get(2)?,
+            pomodoro_count: row.get(3)?,
+        })
+    })?;
+
+    let mut subjects = Vec::new();
+    for row in rows {
+        subjects.push(row?);
+    }
+    Ok(subjects)
+}
+
+pub fn subject_create(conn: &Connection, name: &str) -> Result<i64> {
+    conn.execute(
+        "INSERT OR IGNORE INTO subjects (name, created_at) VALUES (?1, ?2)",
+        params![name.trim(), unix_now()],
+    )?;
+    Ok(conn.last_insert_rowid())
 }
 
 pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<Vec<String>> {
