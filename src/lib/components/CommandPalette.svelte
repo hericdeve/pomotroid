@@ -167,22 +167,25 @@
   }
 
   onMount(() => {
-    inputEl?.focus();
+    // Aggressive focus locking mechanism
+    const lockFocus = () => {
+      for (let i = 0; i < 10; i++) {
+        setTimeout(() => inputEl?.focus(), i * 15);
+      }
+    };
+
+    lockFocus();
 
     const unlistenOpened = listen('palette:opened', () => {
       lastKeydown = '';
-      setTimeout(() => {
-        inputEl?.focus();
-      }, 50);
+      lockFocus();
     });
 
     const unlistenFocus = getCurrentWebviewWindow().onFocusChanged(({ payload: focused }) => {
       if (!focused) {
         close();
       } else {
-        setTimeout(() => {
-          inputEl?.focus();
-        }, 10);
+        lockFocus();
       }
     });
 
@@ -203,6 +206,13 @@
       bind:this={inputEl}
       bind:value={input}
       oninput={handleInput}
+      onblur={() => {
+        // If the window itself is still focused, but the input lost focus (e.g. user clicked somewhere else in the palette),
+        // immediately steal the focus back. This ensures focus exclusivity.
+        if (document.hasFocus()) {
+          setTimeout(() => inputEl?.focus(), 0);
+        }
+      }}
       onkeydown={handleKeyDown}
       class="cmd-input"
       type="text"
