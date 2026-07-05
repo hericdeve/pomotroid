@@ -75,11 +75,12 @@
       timerState.set(initial);
 
       cleanups.push(
-        await onTimerTick(({ elapsed_secs, total_secs }) => {
+        await onTimerTick(({ elapsed_secs, total_secs, active_session_id }) => {
           timerState.update((s) => ({
             ...s,
             elapsed_secs,
             total_secs,
+            active_session_id,
             is_running: true,
             is_paused: false,
           }));

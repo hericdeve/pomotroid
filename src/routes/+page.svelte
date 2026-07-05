@@ -6,7 +6,7 @@
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerSkip, timerRestartRound } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
   import { resolveThemeName } from '$lib/utils/theme';
@@ -158,7 +158,7 @@
       cleanups.push(
         await listen<{ subject: string; subject_topic: string; study_type: string; notes: string }>(
           'palette:start',
-          (event) => {
+          async (event) => {
             const p = event.payload;
             pendingTags.set({
               subject: p.subject || '',
@@ -166,9 +166,24 @@
               study_type: p.study_type || '',
               notes: p.notes || '',
             });
-            // If the timer is stopped, start it
-            if (!get(timerState).is_running) {
-              timerToggle();
+
+            const state = get(timerState);
+            const isBreak = state.round_type === 'short_break' || state.round_type === 'long_break';
+
+            if (isBreak) {
+              await timerSkip();
+              setTimeout(() => {
+                timerToggle();
+              }, 50);
+            } else {
+              if (state.elapsed_secs > 0) {
+                await timerRestartRound();
+              }
+              // timerRestartRound stops the timer. We want it to start ticking immediately, 
+              // or if it was already stopped at 0:00, we want it to start ticking.
+              setTimeout(() => {
+                timerToggle();
+              }, 50);
             }
           }
         )

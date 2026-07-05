@@ -268,10 +268,7 @@ fn listen_events(
                     s.elapsed_secs = elapsed_secs;
                     s.is_running = true;
                 }
-                let _ = app.emit(
-                    "timer:tick",
-                    serde_json::json!({ "elapsed_secs": elapsed_secs, "total_secs": total_secs }),
-                );
+
 
                 // --- Session recording: start on first tick of a new round ---
                 if elapsed_secs == 1 && current_session_id.is_none() {
@@ -293,6 +290,12 @@ fn listen_events(
                         }
                     }
                 }
+
+                let active_session_id = shared.lock().unwrap().active_session_id;
+                let _ = app.emit(
+                    "timer:tick",
+                    serde_json::json!({ "elapsed_secs": elapsed_secs, "total_secs": total_secs, "active_session_id": active_session_id }),
+                );
 
                 // --- Tick sound ---
                 let rt = sequence.lock().unwrap().current_round.as_str().to_string();

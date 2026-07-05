@@ -589,7 +589,6 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         use gtk_layer_shell::{Layer, KeyboardMode, Edge};
-        use gtk::prelude::*;
         
         if let Ok(gtk_window) = win.gtk_window() {
             gtk_layer_shell::init_for_window(&gtk_window);

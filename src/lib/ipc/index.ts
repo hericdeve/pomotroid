@@ -132,9 +132,9 @@ export const installUpdate = () => invoke<void>('install_update');
 // --- Event listeners ---
 
 export const onTimerTick = (
-  cb: (payload: { elapsed_secs: number; total_secs: number }) => void
+  cb: (payload: { elapsed_secs: number; total_secs: number; active_session_id: number | null }) => void
 ): Promise<UnlistenFn> =>
-  listen<{ elapsed_secs: number; total_secs: number }>('timer:tick', (e) => cb(e.payload));
+  listen<{ elapsed_secs: number; total_secs: number; active_session_id: number | null }>('timer:tick', (e) => cb(e.payload));
 
 export const onTimerPaused = (
   cb: (payload: { elapsed_secs: number }) => void
