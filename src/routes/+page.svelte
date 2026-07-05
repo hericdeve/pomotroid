@@ -14,6 +14,7 @@
   import { setLocale } from '$lib/locale.svelte.js';
   import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { get } from 'svelte/store';
   import { info, error as logError } from '@tauri-apps/plugin-log';
   import { createLocalShortcutHandler } from '$lib/utils/localShortcuts';
 
@@ -165,7 +166,10 @@
               study_type: p.study_type || '',
               notes: p.notes || '',
             });
-            timerToggle();
+            // If the timer is stopped, start it
+            if (!get(timerState).is_running) {
+              timerToggle();
+            }
           }
         )
       );

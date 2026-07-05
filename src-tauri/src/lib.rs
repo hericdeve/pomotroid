@@ -33,7 +33,7 @@ use commands::{
     themes_list,
     timer_get_state, timer_reset, timer_restart_round, timer_skip, timer_toggle,
     window_set_visibility,
-    palette_open,
+    palette_open, palette_close, palette_submit,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -403,6 +403,8 @@ pub fn run() {
             // Window
             window_set_visibility,
             palette_open,
+            palette_close,
+            palette_submit,
             // Shortcuts
             shortcuts_reload,
             // Audio

@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../../app.css';
+  import './palette.css';
   import { onMount } from 'svelte';
   import { getSettings, getThemes, onSettingsChanged, onThemesChanged } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
@@ -43,9 +44,3 @@
 </script>
 
 <CommandPalette />
-
-<style>
-  :global(body) {
-    background-color: transparent !important;
-  }
-</style>

@@ -561,7 +561,8 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
     }
 
     const PAL_W: f64 = 640.0;
-    const PAL_H: f64 = 62.0; // collapsed height; JS expands when dropdown opens
+    const PAL_H: f64 = 400.0; // max height for dropdown
+    const PAL_INPUT_H: f64 = 62.0; // height of the input row for centering
 
     // Find the monitor that contains the cursor position.
     let cursor = app.cursor_position().unwrap_or_default();
@@ -587,7 +588,8 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
             let scale = m.scale_factor();
             let cx = pos.x as f64 + size.width as f64 / scale / 2.0;
             let cy = pos.y as f64 + size.height as f64 / scale / 2.0;
-            (cx - PAL_W / 2.0, cy - PAL_H / 2.0)
+            // Center the input box on the screen, not the entire 400px window
+            (cx - PAL_W / 2.0, cy - PAL_INPUT_H / 2.0)
         }
         None => (200.0, 200.0),
     };
@@ -604,6 +606,39 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command]
+pub fn palette_close(app: AppHandle) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window("palette") {
+        existing.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn palette_submit(
+    app: AppHandle,
+    subject: String,
+    subject_topic: String,
+    study_type: String,
+    notes: String,
+) -> Result<(), String> {
+    app.emit(
+        "palette:start",
+        serde_json::json!({
+            "subject": subject,
+            "subject_topic": subject_topic,
+            "study_type": study_type,
+            "notes": notes,
+        }),
+    )
+    .map_err(|e| e.to_string())?;
+
+    if let Some(existing) = app.get_webview_window("palette") {
+        existing.close().map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
