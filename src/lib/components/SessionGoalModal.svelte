@@ -40,14 +40,16 @@
 
   // ── Derived stats ──────────────────────────────────────────────────────────
 
-  // Only count a round as completed once it is finished (i.e. we are on a break, or we have started the next one)
+  // Only count a round as completed once it is finished (on a break or the next work round started)
   const completedRounds = $derived(
-    snap.round_type === 'work' 
-      ? Math.max(0, snap.session_work_count - 1) 
+    snap.round_type === 'work'
+      ? Math.max(0, snap.session_work_count - 1)
       : snap.session_work_count
   );
 
-  // How many long breaks and short breaks across the whole goal
+  const remainingRounds = $derived(Math.max(0, activeGoal - completedRounds));
+
+  // How many long/short breaks span the whole goal (for total time display rows)
   function computeBreaks(goal: number) {
     const interval = $settings.long_break_interval;
     if (!$settings.long_breaks_enabled && !$settings.short_breaks_enabled) {
@@ -73,37 +75,90 @@
     return goal * $settings.time_work_secs;
   }
 
-  // Remaining from now
-  const remainingRounds = $derived(Math.max(0, activeGoal - completedRounds));
-  const remainingStudySecs = $derived(remainingRounds * $settings.time_work_secs);
-
+  // How many break-seconds remain AFTER a given number of completed rounds.
   function remainingBreakSecs(goal: number, completed: number): number {
     const interval = $settings.long_break_interval;
-    // work out how many breaks remain
     const total = Math.max(0, goal - 1);
     const done = Math.max(0, completed - 1);
     if (done >= total) return 0;
-
     if (!$settings.long_breaks_enabled && !$settings.short_breaks_enabled) return 0;
-
     if (!$settings.long_breaks_enabled) {
-      const bDone = done;
-      const bLeft = total - bDone;
-      return bLeft * $settings.time_short_break_secs;
+      return (total - done) * $settings.time_short_break_secs;
     }
-
-    const longDone = $settings.long_breaks_enabled ? Math.floor(done / interval) : 0;
+    const longDone = Math.floor(done / interval);
     const longTotal = Math.floor(total / interval);
     const shortDone = done - longDone;
     const shortTotal = total - longTotal;
-
     const longLeft = Math.max(0, longTotal - longDone);
     const shortLeft = Math.max(0, shortTotal - shortDone);
-
     return (
       longLeft * $settings.time_long_break_secs +
       shortLeft * $settings.time_short_break_secs
     );
+  }
+
+  // Duration of the break that immediately follows completing the Nth round.
+  function nextBreakDuration(completedSoFar: number): number {
+    if (!$settings.short_breaks_enabled && !$settings.long_breaks_enabled) return 0;
+    const nextCount = completedSoFar + 1;
+    if ($settings.long_breaks_enabled && nextCount % $settings.long_break_interval === 0) {
+      return $settings.time_long_break_secs;
+    }
+    return $settings.short_breaks_enabled ? $settings.time_short_break_secs : 0;
+  }
+
+  // ── Finish-time clock ──────────────────────────────────────────────────────
+  //
+  // `nowMs` is the epoch ms anchor for finish-time calculation.
+  //
+  // • RUNNING: no interval runs. `snap.elapsed_secs` increases 1/s via
+  //   timer:tick, which decreases `computeRemainingMs()` by exactly 1 s,
+  //   making `nowMs + computeRemainingMs()` perfectly stable.
+  //
+  // • PAUSED / IDLE (elapsed=0, not running): the backend emits no ticks, so
+  //   `snap` is frozen. A 1-s interval advances `nowMs` so the finish time
+  //   drifts forward by 1 s per real second — reflecting the actual delay.
+  //
+  // • On every state transition `nowMs` is re-anchored to Date.now() so
+  //   there is no discontinuous jump when switching between states.
+
+  let nowMs = $state(Date.now());
+
+  $effect(() => {
+    const isIdle = !snap.is_running && snap.elapsed_secs === 0;
+    const isDelaying = snap.is_paused || isIdle;
+
+    // Re-anchor on every state transition (no jump between modes).
+    nowMs = Date.now();
+
+    if (isDelaying) {
+      const id = setInterval(() => {
+        nowMs = Date.now();
+      }, 1000);
+      return () => clearInterval(id);
+    }
+    // Running: elapsed_secs cancels out the passage of nowMs — no interval needed.
+  });
+
+  // Remaining milliseconds from nowMs, correctly accounting for the
+  // already-elapsed portion of the current active round or break.
+  function computeRemainingMs(): number {
+    const currentRoundRemSecs = Math.max(0, snap.total_secs - snap.elapsed_secs);
+
+    if (snap.round_type === 'work') {
+      // Current work round in progress → remaining of this round, then all
+      // future full work rounds, then the break right after this round, then
+      // all further future breaks.
+      const futureWorkSecs = Math.max(0, remainingRounds - 1) * $settings.time_work_secs;
+      const immediateBreakSecs = remainingRounds > 0 ? nextBreakDuration(completedRounds) : 0;
+      const futureBreakSecs = remainingBreakSecs(activeGoal, completedRounds + 1);
+      return (currentRoundRemSecs + futureWorkSecs + immediateBreakSecs + futureBreakSecs) * 1000;
+    } else {
+      // On a break → wait for it to end, then all remaining work+breaks.
+      const futureWorkSecs = remainingRounds * $settings.time_work_secs;
+      const futureBreakSecs = remainingBreakSecs(activeGoal, completedRounds);
+      return (currentRoundRemSecs + futureWorkSecs + futureBreakSecs) * 1000;
+    }
   }
 
   // ── Format helpers ─────────────────────────────────────────────────────────
@@ -115,20 +170,17 @@
     return `${m}m`;
   }
 
-  function formatFinishTime(remainStudy: number, remainBreak: number): string {
-    const totalRemaining = remainStudy + remainBreak;
-    const now = new Date();
-    const finish = new Date(now.getTime() + totalRemaining * 1000);
-    return finish.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
   // ── Reactive stat rows ─────────────────────────────────────────────────────
   const studyTotal = $derived(totalStudySecs(activeGoal));
   const breakTotal = $derived(totalBreakSecs(activeGoal));
   const sessionTotal = $derived(studyTotal + breakTotal);
-  const remBreak = $derived(remainingBreakSecs(activeGoal, completedRounds));
-  const finishTime = $derived(formatFinishTime(remainingStudySecs, remBreak));
   const progressPct = $derived(activeGoal > 0 ? Math.min(100, (completedRounds / activeGoal) * 100) : 0);
+
+  // Finish time: stable while running, drifts forward while paused or idle.
+  const finishTime = $derived(() => {
+    const finishEpoch = nowMs + computeRemainingMs();
+    return new Date(finishEpoch).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  });
 
   // Current sub-cycle info
   const roundsUntilLongBreak = $derived(
@@ -191,7 +243,7 @@
         <div class="stat-divider"></div>
         <div class="stat-row">
           <span class="stat-label">Estimated finish</span>
-          <span class="stat-value highlight">{finishTime}</span>
+          <span class="stat-value highlight">{finishTime()}</span>
         </div>
         {#if roundsUntilLongBreak !== null}
           <div class="stat-row">
