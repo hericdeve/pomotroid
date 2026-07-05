@@ -67,6 +67,7 @@ export interface Settings {
   local_shortcut_fullscreen: string;
   local_shortcut_palette: string;
   history_show_breaks: boolean;
+  session_goal_rounds: number;
 }
 
 /** Returned by `check_update` — describes an available update. */
