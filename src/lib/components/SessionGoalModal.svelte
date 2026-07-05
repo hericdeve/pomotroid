@@ -12,17 +12,28 @@
   let { snap, onClose }: Props = $props();
 
   // Local editable goal value — starts from the active store
-  let goalInput = $state($sessionGoalRounds);
+  let goalInput = $state<number | null>($sessionGoalRounds);
+  const activeGoal = $derived(goalInput || 1);
 
-  // Clamp and apply goal change immediately to the live store
-  function applyGoal(val: number) {
-    const clamped = Math.max(1, Math.min(99, Math.round(val) || 1));
-    goalInput = clamped;
-    sessionGoalRounds.set(clamped);
+  // Apply goal change immediately to the live store if valid
+  function applyGoal() {
+    if (goalInput !== null) {
+      const clamped = Math.max(1, Math.min(99, Math.round(goalInput)));
+      sessionGoalRounds.set(clamped);
+    }
+  }
+
+  function handleBlur() {
+    if (goalInput === null) {
+      goalInput = $sessionGoalRounds;
+    } else {
+      goalInput = Math.max(1, Math.min(99, Math.round(goalInput)));
+      sessionGoalRounds.set(goalInput);
+    }
   }
 
   async function setAsDefault() {
-    await setSetting('session_goal_rounds', goalInput.toString());
+    await setSetting('session_goal_rounds', activeGoal.toString());
   }
 
   // ── Derived stats ──────────────────────────────────────────────────────────
@@ -56,7 +67,7 @@
   }
 
   // Remaining from now
-  const remainingRounds = $derived(Math.max(0, goalInput - completedRounds));
+  const remainingRounds = $derived(Math.max(0, activeGoal - completedRounds));
   const remainingStudySecs = $derived(remainingRounds * $settings.time_work_secs);
 
   function remainingBreakSecs(goal: number, completed: number): number {
@@ -105,12 +116,12 @@
   }
 
   // ── Reactive stat rows ─────────────────────────────────────────────────────
-  const studyTotal = $derived(totalStudySecs(goalInput));
-  const breakTotal = $derived(totalBreakSecs(goalInput));
+  const studyTotal = $derived(totalStudySecs(activeGoal));
+  const breakTotal = $derived(totalBreakSecs(activeGoal));
   const sessionTotal = $derived(studyTotal + breakTotal);
-  const remBreak = $derived(remainingBreakSecs(goalInput, completedRounds));
+  const remBreak = $derived(remainingBreakSecs(activeGoal, completedRounds));
   const finishTime = $derived(formatFinishTime(remainingStudySecs, remBreak));
-  const progressPct = $derived(goalInput > 0 ? Math.min(100, (completedRounds / goalInput) * 100) : 0);
+  const progressPct = $derived(activeGoal > 0 ? Math.min(100, (completedRounds / activeGoal) * 100) : 0);
 
   // Current sub-cycle info
   const roundsUntilLongBreak = $derived(
@@ -144,7 +155,7 @@
           <span class="progress-text">
             <span class="progress-completed">{completedRounds}</span>
             <span class="progress-sep"> / </span>
-            <span class="progress-goal">{goalInput}</span>
+            <span class="progress-goal">{activeGoal}</span>
             <span class="progress-unit"> rounds</span>
           </span>
           <span class="progress-remaining">
@@ -199,8 +210,9 @@
             min="1"
             max="99"
             bind:value={goalInput}
-            oninput={() => applyGoal(goalInput)}
-            onchange={() => applyGoal(goalInput)}
+            oninput={applyGoal}
+            onchange={applyGoal}
+            onblur={handleBlur}
           />
           <span class="goal-unit">rounds</span>
           <button class="btn-default" onclick={setAsDefault} title="Save as default in settings">
