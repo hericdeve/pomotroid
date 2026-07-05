@@ -168,12 +168,14 @@
             });
 
             const state = get(timerState);
-            const isBreak = state.round_type === 'short_break' || state.round_type === 'long_break';
+            const isBreak = state.round_type === 'short-break' || state.round_type === 'long-break';
 
             if (isBreak) {
               await timerSkip();
               setTimeout(() => {
-                timerToggle();
+                if (!get(timerState).is_running) {
+                  timerToggle();
+                }
               }, 50);
             } else {
               if (state.elapsed_secs > 0) {
@@ -182,7 +184,9 @@
               // timerRestartRound stops the timer. We want it to start ticking immediately, 
               // or if it was already stopped at 0:00, we want it to start ticking.
               setTimeout(() => {
-                timerToggle();
+                if (!get(timerState).is_running) {
+                  timerToggle();
+                }
               }, 50);
             }
           }
