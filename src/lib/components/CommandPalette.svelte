@@ -126,27 +126,24 @@
   async function close() {
     try {
       await invoke('palette_close');
+      input = '';
     } catch (e) {
       logError(`Failed to close palette: ${e}`);
-      getCurrentWebviewWindow().close();
+      getCurrentWebviewWindow().hide();
+      input = '';
     }
-  }
-
-  // Close on blur (click outside)
-  function handleWindowBlur() {
-    close();
   }
 
   onMount(() => {
     inputEl?.focus();
-    window.addEventListener('blur', handleWindowBlur);
-    return () => window.removeEventListener('blur', handleWindowBlur);
   });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="palette">
-  <div class="input-row">
+<div class="backdrop" onmousedown={close}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="palette" onmousedown={(e) => e.stopPropagation()}>
+    <div class="input-row">
     <span class="prompt">&gt;</span>
     <input
       bind:this={inputEl}
@@ -198,6 +195,7 @@
       {/each}
     </div>
   {/if}
+  </div>
 </div>
 
 <script lang="ts" module>

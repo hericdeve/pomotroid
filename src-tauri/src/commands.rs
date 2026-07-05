@@ -553,13 +553,6 @@ pub fn window_set_visibility(visible: bool, app: AppHandle) -> Result<(), String
 /// keyboard shortcut so Hyprland can dispatch it via `send_shortcut`.
 #[tauri::command]
 pub fn palette_open(app: AppHandle) -> Result<(), String> {
-    // If already open, just show and focus it.
-    if let Some(existing) = app.get_webview_window("palette") {
-        existing.show().map_err(|e| e.to_string())?;
-        existing.set_focus().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
     const PAL_W: f64 = 640.0;
     const PAL_H: f64 = 400.0; // max height for dropdown
     const PAL_INPUT_H: f64 = 62.0; // height of the input row for centering
@@ -581,30 +574,49 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
         })
         .or_else(|| app.primary_monitor().ok().flatten());
 
-    let (win_x, win_y) = match monitor {
+    let (win_x, win_y, win_w, win_h) = match monitor {
         Some(m) => {
             let pos = m.position();
             let size = m.size();
             let scale = m.scale_factor();
-            let cx = pos.x as f64 + size.width as f64 / scale / 2.0;
-            let cy = pos.y as f64 + size.height as f64 / scale / 2.0;
-            // Center the input box on the screen, not the entire 400px window
-            (cx - PAL_W / 2.0, cy - PAL_INPUT_H / 2.0)
+            (
+                pos.x as f64,
+                pos.y as f64,
+                size.width as f64 / scale,
+                size.height as f64 / scale,
+            )
         }
-        None => (200.0, 200.0),
+        None => (200.0, 200.0, 640.0, 400.0),
     };
 
-    tauri::WebviewWindowBuilder::new(&app, "palette", tauri::WebviewUrl::App("/palette".into()))
+    // If already open, just update position, show and focus it.
+    // If it's already visible AND focused, toggle it off!
+    if let Some(existing) = app.get_webview_window("palette") {
+        if existing.is_visible().unwrap_or(false) && existing.is_focused().unwrap_or(false) {
+            existing.hide().map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+
+        let _ = existing.set_size(tauri::Size::Logical(tauri::LogicalSize::new(win_w, win_h)));
+        let _ = existing.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(win_x, win_y)));
+        existing.show().map_err(|e| e.to_string())?;
+        existing.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let win = tauri::WebviewWindowBuilder::new(&app, "palette", tauri::WebviewUrl::App("/palette".into()))
         .title("Pomotroid — Command Palette")
-        .inner_size(PAL_W, PAL_H)
+        .inner_size(win_w, win_h)
         .position(win_x, win_y)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
-        .visible(false)
         .build()
         .map_err(|e| e.to_string())?;
+
+    win.show().map_err(|e| e.to_string())?;
+    win.set_focus().map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -612,7 +624,7 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn palette_close(app: AppHandle) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window("palette") {
-        existing.close().map_err(|e| e.to_string())?;
+        existing.hide().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -637,7 +649,7 @@ pub fn palette_submit(
     .map_err(|e| e.to_string())?;
 
     if let Some(existing) = app.get_webview_window("palette") {
-        existing.close().map_err(|e| e.to_string())?;
+        existing.hide().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
