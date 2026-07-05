@@ -563,11 +563,19 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
             return Ok(());
         }
         existing.show().map_err(|e| e.to_string())?;
+        
+        #[cfg(target_os = "linux")]
+        {
+            use gtk::prelude::*;
+            if let Ok(gtk_window) = existing.gtk_window() {
+                gtk_window.present();
+            }
+        }
         existing.set_focus().map_err(|e| e.to_string())?;
         let _ = existing.emit("palette:opened", ());
         return Ok(());
     }
-
+        
     let win = tauri::WebviewWindowBuilder::new(&app, "palette", tauri::WebviewUrl::App("/palette".into()))
         .title("Pomotroid — Command Palette")
         .inner_size(PAL_W, PAL_H)
@@ -575,17 +583,19 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
         .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
-        // .visible(false) // Must be hidden so layer shell can init before mapping
         .build()
         .map_err(|e| e.to_string())?;
 
     #[cfg(target_os = "linux")]
     {
         use gtk_layer_shell::{Layer, KeyboardMode, Edge};
+        use gtk::prelude::*;
+        
         if let Ok(gtk_window) = win.gtk_window() {
             gtk_layer_shell::init_for_window(&gtk_window);
             gtk_layer_shell::set_layer(&gtk_window, Layer::Overlay);
-            gtk_layer_shell::set_keyboard_mode(&gtk_window, KeyboardMode::Exclusive);
+            // OnDemand allows focus to yield on click outside
+            gtk_layer_shell::set_keyboard_mode(&gtk_window, KeyboardMode::OnDemand);
             
             gtk_layer_shell::set_anchor(&gtk_window, Edge::Top, true);
             gtk_layer_shell::set_anchor(&gtk_window, Edge::Bottom, false);

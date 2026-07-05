@@ -66,6 +66,28 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir)
                 .expect("failed to create app data directory");
 
+            #[cfg(target_os = "linux")]
+            {
+                use gtk::glib;
+                // Add a custom log handler to explicitly suppress the false-positive 
+                // GTK critical errors emitted by gtk-layer-shell when forcing 
+                // layer shell onto an already-mapped Tauri window.
+                glib::log_set_writer_func(|log_level, fields| {
+                    for field in fields {
+                        if field.key() == "MESSAGE" {
+                            if let Some(msg) = field.value_str() {
+                                if msg.contains("custom_shell_surface_init: assertion") || 
+                                   msg.contains("GtkWindow is not a layer surface") 
+                                {
+                                    return glib::LogWriterOutput::Handled;
+                                }
+                            }
+                        }
+                    }
+                    glib::log_writer_default(log_level, fields)
+                });
+            }
+
             // --- Database ---
             let db = match db::open(&app_data_dir) {
                 Ok(d) => {
