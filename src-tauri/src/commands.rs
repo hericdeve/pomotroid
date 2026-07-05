@@ -555,50 +555,13 @@ pub fn window_set_visibility(visible: bool, app: AppHandle) -> Result<(), String
 pub fn palette_open(app: AppHandle) -> Result<(), String> {
     const PAL_W: f64 = 640.0;
     const PAL_H: f64 = 400.0; // max height for dropdown
-    const PAL_INPUT_H: f64 = 62.0; // height of the input row for centering
 
-    // Find the monitor that contains the cursor position.
-    let cursor = app.cursor_position().unwrap_or_default();
-    let monitors = app.available_monitors().unwrap_or_default();
-    let monitor = monitors
-        .into_iter()
-        .find(|m| {
-            let pos = m.position();
-            let size = m.size();
-            let scale = m.scale_factor();
-            let x0 = pos.x as f64;
-            let y0 = pos.y as f64;
-            let x1 = x0 + size.width as f64 / scale;
-            let y1 = y0 + size.height as f64 / scale;
-            cursor.x >= x0 && cursor.x < x1 && cursor.y >= y0 && cursor.y < y1
-        })
-        .or_else(|| app.primary_monitor().ok().flatten());
-
-    let (win_x, win_y, win_w, win_h) = match monitor {
-        Some(m) => {
-            let pos = m.position();
-            let size = m.size();
-            let scale = m.scale_factor();
-            (
-                pos.x as f64,
-                pos.y as f64,
-                size.width as f64 / scale,
-                size.height as f64 / scale,
-            )
-        }
-        None => (200.0, 200.0, 640.0, 400.0),
-    };
-
-    // If already open, just update position, show and focus it.
-    // If it's already visible AND focused, toggle it off!
+    // If already open, just show and focus it.
     if let Some(existing) = app.get_webview_window("palette") {
         if existing.is_visible().unwrap_or(false) && existing.is_focused().unwrap_or(false) {
             existing.hide().map_err(|e| e.to_string())?;
             return Ok(());
         }
-
-        let _ = existing.set_size(tauri::Size::Logical(tauri::LogicalSize::new(win_w, win_h)));
-        let _ = existing.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(win_x, win_y)));
         existing.show().map_err(|e| e.to_string())?;
         existing.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
@@ -606,14 +569,29 @@ pub fn palette_open(app: AppHandle) -> Result<(), String> {
 
     let win = tauri::WebviewWindowBuilder::new(&app, "palette", tauri::WebviewUrl::App("/palette".into()))
         .title("Pomotroid — Command Palette")
-        .inner_size(win_w, win_h)
-        .position(win_x, win_y)
+        .inner_size(PAL_W, PAL_H)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
         .skip_taskbar(true)
         .build()
         .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    {
+        use gtk_layer_shell::{Layer, KeyboardMode, Edge};
+        if let Ok(gtk_window) = win.gtk_window() {
+            gtk_layer_shell::init_for_window(&gtk_window);
+            gtk_layer_shell::set_layer(&gtk_window, Layer::Overlay);
+            gtk_layer_shell::set_keyboard_mode(&gtk_window, KeyboardMode::OnDemand);
+            
+            gtk_layer_shell::set_anchor(&gtk_window, Edge::Top, true);
+            gtk_layer_shell::set_anchor(&gtk_window, Edge::Bottom, false);
+            gtk_layer_shell::set_anchor(&gtk_window, Edge::Left, false);
+            gtk_layer_shell::set_anchor(&gtk_window, Edge::Right, false);
+            gtk_layer_shell::set_margin(&gtk_window, Edge::Top, 150);
+        }
+    }
 
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;

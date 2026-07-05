@@ -134,16 +134,21 @@
     }
   }
 
+  // Close on blur (click outside)
+  function handleWindowBlur() {
+    close();
+  }
+
   onMount(() => {
     inputEl?.focus();
   });
 </script>
 
+<svelte:window onblur={handleWindowBlur} />
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="backdrop" onmousedown={close}>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="palette" onmousedown={(e) => e.stopPropagation()}>
-    <div class="input-row">
+<div class="palette">
+  <div class="input-row">
     <span class="prompt">&gt;</span>
     <input
       bind:this={inputEl}
@@ -195,7 +200,6 @@
       {/each}
     </div>
   {/if}
-  </div>
 </div>
 
 <script lang="ts" module>
