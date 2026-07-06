@@ -269,6 +269,10 @@
     background: var(--color-background);
   }
 
+  .goal-input:focus::placeholder {
+    color: transparent;
+  }
+
   .badge {
     display: inline-block;
     background: var(--color-focus-round);
