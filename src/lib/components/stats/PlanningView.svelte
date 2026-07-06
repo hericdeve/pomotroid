@@ -53,25 +53,42 @@
 
   function calculateAllocatedRounds(subjectName: string): number {
     const subjectBlocks = blocks.filter(b => b.subject === subjectName);
-    const totalMinutes = subjectBlocks.reduce((sum, b) => sum + (b.end_minute - b.start_minute), 0);
+    if (subjectBlocks.length === 0) return 0;
     
-    // Calculate how many minutes one round typically takes
     const workMins = $settings.time_work_secs / 60;
     const shortBreakMins = $settings.short_breaks_enabled ? ($settings.time_short_break_secs / 60) : 0;
     const longBreakMins = $settings.long_breaks_enabled ? ($settings.time_long_break_secs / 60) : 0;
     const interval = $settings.long_break_interval;
     
-    // Average minutes per round over a full interval cycle
-    let cycleMins = 0;
-    if (interval > 0) {
-       cycleMins = (workMins * interval) + (shortBreakMins * (interval - 1)) + longBreakMins;
-    } else {
-       cycleMins = workMins + shortBreakMins;
+    let totalRounds = 0;
+
+    for (const block of subjectBlocks) {
+      let remainingMins = block.end_minute - block.start_minute;
+      let roundsInBlock = 0;
+      let cyclePosition = 1; // 1-based, up to interval
+
+      while (remainingMins >= workMins) {
+        // Complete a work round
+        remainingMins -= workMins;
+        roundsInBlock++;
+        
+        // If we are out of time, no need to process the break
+        if (remainingMins <= 0) break;
+
+        // Take the appropriate break
+        if (interval > 0 && cyclePosition % interval === 0) {
+          remainingMins -= longBreakMins;
+          cyclePosition = 1; // Reset cycle after long break
+        } else {
+          remainingMins -= shortBreakMins;
+          cyclePosition++;
+        }
+      }
+      
+      totalRounds += roundsInBlock;
     }
-    const avgRoundMins = interval > 0 ? cycleMins / interval : cycleMins;
     
-    if (avgRoundMins === 0) return 0;
-    return Math.round(totalMinutes / avgRoundMins);
+    return totalRounds;
   }
 
   function handleDragStart(e: DragEvent, subject: SubjectStats) {
