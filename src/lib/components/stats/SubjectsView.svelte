@@ -121,17 +121,21 @@
               </td>
             </tr>
           {/each}
-          <tr>
-            <td colspan="4" class="add-row">
-              <div class="input-group">
+          <tr class="add-row">
+            <td colspan="4">
+              <div class="input-group add-subject-group">
                 <input 
                   type="text" 
+                  class="add-input"
                   bind:value={newSubjectName} 
-                  placeholder="New subject name..." 
+                  placeholder="+ Add new subject..." 
                   onkeydown={handleKeyDown}
                 />
-                <button class="btn-create" onclick={handleCreate} disabled={!newSubjectName.trim()}>
-                  Add Subject
+                <button class="btn-create icon-only" onclick={handleCreate} disabled={!newSubjectName.trim()} title="Add Subject">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
                 </button>
               </div>
             </td>
@@ -158,44 +162,62 @@
     align-items: center;
   }
   
-  .add-row {
-    background: var(--color-background-light, rgba(255,255,255,0.01));
+  .add-row td {
+    border-bottom: none;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
   }
 
-  input {
-    background: var(--color-background);
-    border: 1px solid var(--color-subtext);
+  .add-subject-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    width: 100%;
+  }
+
+  .add-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
     color: var(--color-text);
     padding: 0.5rem 0.75rem;
     border-radius: 4px;
-    font-size: 0.85rem;
-    width: 200px;
-    transition: border-color 0.2s;
+    font-size: 0.9rem;
+    transition: all 0.2s;
   }
   
-  input:focus {
+  .add-input:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .add-input:focus {
     outline: none;
     border-color: var(--color-focus-round);
+    background: var(--color-background);
   }
 
-  .btn-create {
-    background: var(--color-focus-round);
-    color: var(--color-background);
+  .btn-create.icon-only {
+    background: transparent;
+    color: var(--color-text);
+    opacity: 0.6;
     border: none;
     border-radius: 4px;
-    padding: 0.5rem 1rem;
-    font-size: 0.85rem;
-    font-weight: 600;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    transition: opacity 0.2s;
+    transition: all 0.2s;
   }
 
-  .btn-create:hover:not(:disabled) {
-    opacity: 0.9;
+  .btn-create.icon-only:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-focus-round);
+    opacity: 1;
   }
 
-  .btn-create:disabled {
-    opacity: 0.5;
+  .btn-create.icon-only:disabled {
+    opacity: 0.2;
     cursor: not-allowed;
   }
 
