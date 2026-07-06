@@ -431,7 +431,8 @@
   }
 
   .hour-cell.drag-over {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: inset 0 0 0 1px var(--color-subtext, rgba(255, 255, 255, 0.3));
   }
 
   .scheduled-block {

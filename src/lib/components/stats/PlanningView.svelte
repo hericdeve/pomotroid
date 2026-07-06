@@ -78,6 +78,32 @@
     if (e.dataTransfer) {
       e.dataTransfer.setData('application/json', JSON.stringify({ type: 'subject', data: subject.name }));
       e.dataTransfer.effectAllowed = 'copy';
+
+      // Create a more subtle, custom drag ghost
+      const dragGhost = document.createElement('div');
+      dragGhost.textContent = subject.name;
+      // Basic styling matching a generic subtle badge
+      dragGhost.style.backgroundColor = 'var(--color-focus-round)';
+      dragGhost.style.color = 'var(--color-background)';
+      dragGhost.style.padding = '4px 12px';
+      dragGhost.style.borderRadius = '4px';
+      dragGhost.style.fontSize = '12px';
+      dragGhost.style.fontWeight = '600';
+      dragGhost.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+      dragGhost.style.position = 'absolute';
+      dragGhost.style.top = '-1000px';
+      dragGhost.style.left = '-1000px';
+      dragGhost.style.opacity = '0.9';
+      
+      document.body.appendChild(dragGhost);
+      e.dataTransfer.setDragImage(dragGhost, 10, 10);
+
+      // Clean up after the browser captures the snapshot (setTimeout(0) runs after the current event loop)
+      setTimeout(() => {
+        if (document.body.contains(dragGhost)) {
+          document.body.removeChild(dragGhost);
+        }
+      }, 0);
     }
   }
 </script>
