@@ -12,7 +12,14 @@
 
   onMount(async () => {
     try {
-      subjects = await subjectsGetAll();
+      const data = await subjectsGetAll();
+      subjects = data.sort((a, b) => {
+        const aHasGoal = a.weekly_goal != null;
+        const bHasGoal = b.weekly_goal != null;
+        if (aHasGoal && !bHasGoal) return -1;
+        if (!aHasGoal && bHasGoal) return 1;
+        return a.name.localeCompare(b.name);
+      });
       blocks = await scheduleGetAll();
     } catch (e) {
       logError(`Failed to load planning data: ${e}`);
