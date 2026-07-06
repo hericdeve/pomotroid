@@ -390,15 +390,15 @@
 
   .calendar-header {
     display: flex;
-    border-bottom: 1px solid var(--color-subtext);
-    background: var(--color-background-light, rgba(255,255,255,0.02));
-    padding-right: 12px; /* scrollbar offset compensation */
+    border-bottom: 1px solid var(--color-separator);
+    background: transparent;
+    padding-right: 12px;
   }
 
   .time-column-header {
     width: 60px;
     flex-shrink: 0;
-    border-right: 1px solid var(--color-subtext);
+    border-right: 1px solid var(--color-separator);
   }
 
   .day-header {
@@ -406,7 +406,8 @@
     text-align: center;
     padding: 0.75rem 0;
     font-weight: 600;
-    border-right: 1px solid var(--color-subtext);
+    color: var(--color-foreground-darker);
+    border-right: 1px solid var(--color-separator);
   }
   .day-header:last-child {
     border-right: none;
@@ -426,8 +427,8 @@
   .time-labels {
     width: 60px;
     flex-shrink: 0;
-    border-right: 1px solid var(--color-subtext);
-    background: var(--color-background-light, rgba(255,255,255,0.01));
+    border-right: 1px solid var(--color-separator);
+    background: transparent;
   }
 
   .time-label {
@@ -435,9 +436,9 @@
     align-items: flex-start;
     justify-content: center;
     padding-top: 4px;
-    color: var(--color-subtext);
+    color: var(--color-foreground-darker);
     font-size: 0.75rem;
-    border-bottom: 1px solid transparent; /* matches right grid */
+    border-bottom: 1px solid transparent;
   }
 
   .days-columns {
@@ -447,7 +448,7 @@
 
   .day-column {
     flex: 1;
-    border-right: 1px solid var(--color-subtext);
+    border-right: 1px solid var(--color-separator);
     position: relative;
   }
   .day-column:last-child {
@@ -455,7 +456,7 @@
   }
 
   .hour-cell {
-    border-bottom: 1px solid var(--color-subtext);
+    border-bottom: 1px solid var(--color-separator);
     transition: background-color 0.1s;
   }
 
@@ -473,7 +474,6 @@
     border-radius: 4px;
     padding: 6px;
     overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     display: flex;
     flex-direction: column;
     z-index: 10;

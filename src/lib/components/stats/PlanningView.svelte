@@ -215,10 +215,8 @@
     width: 260px;
     display: flex;
     flex-direction: column;
-    background: var(--color-background);
-    border: 1px solid var(--color-subtext);
-    border-radius: 6px;
-    overflow: hidden;
+    background: transparent;
+    border-right: 1px solid var(--color-separator);
   }
 
   .sidebar-header {
@@ -244,16 +242,15 @@
 
   .subject-item {
     padding: 0.75rem;
-    border-radius: 8px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
     cursor: grab;
-    transition: all 0.2s;
+    transition: all 0.1s;
+    position: relative;
   }
 
   .subject-item:hover {
-    background: rgba(255,255,255,0.06);
-    border-color: var(--color-subtext, rgba(255,255,255,0.1));
+    background: var(--color-hover);
   }
 
   .subject-item:active {
@@ -286,7 +283,6 @@
   .allocation {
     display: flex;
     flex-direction: column;
-    gap: 4px;
   }
 
   .allocation-label {
@@ -308,14 +304,12 @@
   }
 
   .progress-track {
-    height: 4px;
-    background: var(--color-foreground-darker, rgba(255,255,255,0.1));
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .progress-track.over {
-    background: rgba(239, 68, 68, 0.2);
+    position: absolute;
+    bottom: 0;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    background: transparent;
   }
 
   .progress-fill {

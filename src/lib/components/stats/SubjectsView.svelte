@@ -200,9 +200,7 @@
   .subjects-list {
     flex: 1;
     overflow-y: auto;
-    border: 1px solid var(--color-subtext);
-    border-radius: 6px;
-    background: var(--color-background);
+    background: transparent;
   }
 
   table {
@@ -213,18 +211,17 @@
   th, td {
     padding: 0.75rem 1rem;
     text-align: left;
-    border-bottom: 1px solid var(--color-subtext);
-    font-size: 0.9rem;
+    border-bottom: 1px solid var(--color-separator);
+    font-size: 0.85rem;
   }
 
   th {
     font-weight: 600;
-    color: var(--color-text);
+    color: var(--color-foreground-darker);
     background: var(--color-background);
     position: sticky;
     top: 0;
     z-index: 1;
-    border-bottom: 2px solid var(--color-subtext);
   }
 
   .name-col {
@@ -282,17 +279,13 @@
 
   .badge {
     display: inline-block;
-    background: var(--color-focus-round);
-    color: var(--color-background);
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.8rem;
+    color: var(--color-foreground);
+    font-size: 0.85rem;
     font-weight: 600;
   }
   
   .badge.zero {
-    background: var(--color-subtext);
-    color: var(--color-background);
+    color: var(--color-foreground-darker);
   }
 
   .btn-delete {
