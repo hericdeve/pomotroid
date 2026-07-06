@@ -66,25 +66,9 @@
 </script>
 
 <div class="subjects-view">
-  <div class="header">
-    <div class="input-group">
-      <input 
-        type="text" 
-        bind:value={newSubjectName} 
-        placeholder="New subject name..." 
-        onkeydown={handleKeyDown}
-      />
-      <button class="btn-create" onclick={handleCreate} disabled={!newSubjectName.trim()}>
-        Add Subject
-      </button>
-    </div>
-  </div>
-
   <div class="subjects-list">
     {#if loading}
       <div class="empty">Loading...</div>
-    {:else if subjects.length === 0}
-      <div class="empty">No subjects found.</div>
     {:else}
       <table>
         <thead>
@@ -137,6 +121,21 @@
               </td>
             </tr>
           {/each}
+          <tr>
+            <td colspan="4" class="add-row">
+              <div class="input-group">
+                <input 
+                  type="text" 
+                  bind:value={newSubjectName} 
+                  placeholder="New subject name..." 
+                  onkeydown={handleKeyDown}
+                />
+                <button class="btn-create" onclick={handleCreate} disabled={!newSubjectName.trim()}>
+                  Add Subject
+                </button>
+              </div>
+            </td>
+          </tr>
         </tbody>
       </table>
     {/if}
@@ -153,14 +152,14 @@
     color: var(--color-text);
   }
 
-  .header {
-    display: flex;
-    justify-content: flex-end;
-  }
-
   .input-group {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
+  }
+  
+  .add-row {
+    background: var(--color-background-light, rgba(255,255,255,0.01));
   }
 
   input {

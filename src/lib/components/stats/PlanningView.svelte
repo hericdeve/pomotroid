@@ -128,10 +128,6 @@
 <div class="planning-view">
   <!-- Left Sidebar: Subjects -->
   <aside class="sidebar">
-    <div class="sidebar-header">
-      <h3>Subjects</h3>
-    </div>
-    
     <div class="subjects-list">
       {#if loading}
         <div class="empty">Loading...</div>
@@ -241,7 +237,7 @@
 
   .subject-item {
     padding: 0.75rem;
-    border-radius: 4px;
+    border-radius: 8px;
     background: rgba(255,255,255,0.03);
     border: 1px solid transparent;
     cursor: grab;
