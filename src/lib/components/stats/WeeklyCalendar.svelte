@@ -57,6 +57,7 @@
     currentStartMin: number;
     currentEndMin: number;
     calendarRect: DOMRect;
+    grabbedAsOverflow: boolean;
   } | null>(null);
 
   function handleDragOver(e: DragEvent, day: number, hour: number) {
@@ -120,7 +121,7 @@
   let isDraggingOrResizing = false;
   let selectedBlockForModal = $state<ScheduledBlock | null>(null);
 
-  function handleBlockMouseDown(e: MouseEvent, block: ScheduledBlock) {
+  function handleBlockMouseDown(e: MouseEvent, block: ScheduledBlock, isPrimary: boolean = true) {
     if (e.button !== 0) return; // Only left click
 
     const target = e.target as HTMLElement;
@@ -144,7 +145,8 @@
       currentDay: block.day_of_week,
       currentStartMin: block.start_minute,
       currentEndMin: block.end_minute,
-      calendarRect: calendarContainer.getBoundingClientRect()
+      calendarRect: calendarContainer.getBoundingClientRect(),
+      grabbedAsOverflow: !isPrimary
     };
 
     window.addEventListener('mousemove', handleBlockMouseMove);
@@ -161,6 +163,10 @@
     let newDay = Math.floor(offsetX / columnWidth);
     newDay = Math.max(0, Math.min(6, newDay)); // Clamp to 0-6
 
+    if (activeDrag.grabbedAsOverflow) {
+      newDay = (newDay - 1 + 7) % 7;
+    }
+
     // Calculate new time (Y-axis)
     const deltaY = e.clientY - activeDrag.initialY;
     const deltaMinutes = Math.floor(deltaY / PIXELS_PER_MINUTE);
@@ -169,8 +175,14 @@
     let newStart = activeDrag.startMin + snappedDelta;
     const duration = activeDrag.endMin - activeDrag.startMin;
     
-    if (newStart < 0) newStart = 0;
-    if (newStart + duration > 48 * 60) newStart = 48 * 60 - duration;
+    while (newStart >= 24 * 60) {
+      newStart -= 24 * 60;
+      newDay = (newDay + 1) % 7;
+    }
+    while (newStart < 0) {
+      newStart += 24 * 60;
+      newDay = (newDay - 1 + 7) % 7;
+    }
 
     activeDrag.currentDay = newDay;
     activeDrag.currentStartMin = newStart;
@@ -403,7 +415,7 @@
                 class:resizing={seg.isResizing}
                 class:dragging={seg.isDragging}
                 class:is-overflow={!seg.isPrimary}
-                onmousedown={(e) => handleBlockMouseDown(e, seg.block)}
+                onmousedown={(e) => handleBlockMouseDown(e, seg.block, seg.isPrimary)}
                 onclick={(e) => handleBlockClick(e, seg.block)}
                 style="top: {top}px; height: {height}px;"
                 title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)})"
