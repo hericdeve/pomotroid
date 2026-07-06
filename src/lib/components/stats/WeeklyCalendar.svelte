@@ -283,14 +283,14 @@
 </script>
 
 <div class="calendar-container">
-  <div class="calendar-header">
-    <div class="time-column-header"></div>
-    {#each DAYS as day}
-      <div class="day-header">{day}</div>
-    {/each}
-  </div>
-  
   <div class="calendar-body">
+    <div class="calendar-header">
+      <div class="time-column-header"></div>
+      {#each DAYS as day}
+        <div class="day-header">{day}</div>
+      {/each}
+    </div>
+    
     <!-- Background Grid -->
     <div class="grid-layer">
       <!-- Time Labels Column -->
@@ -391,8 +391,10 @@
   .calendar-header {
     display: flex;
     border-bottom: 1px solid var(--color-separator);
-    background: transparent;
-    padding-right: 12px;
+    background: var(--color-background); /* Needs background because it's sticky over the grid */
+    position: sticky;
+    top: 0;
+    z-index: 20;
   }
 
   .time-column-header {
