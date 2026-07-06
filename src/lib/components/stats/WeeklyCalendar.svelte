@@ -92,7 +92,7 @@
             const startMin = hour * 60 + offsetMinutes;
 
             const defaultDuration = 120;
-            const endMin = Math.min(24 * 60, startMin + defaultDuration);
+            const endMin = startMin + defaultDuration;
             onBlockAdd(day, startMin, endMin, payload.data);
           }
         }
@@ -108,7 +108,7 @@
           offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
           const startMin = hour * 60 + offsetMinutes;
           const defaultDuration = 120;
-          const endMin = Math.min(24 * 60, startMin + defaultDuration);
+          const endMin = startMin + defaultDuration;
           onBlockAdd(day, startMin, endMin, subject);
         }
       }
@@ -170,7 +170,7 @@
     const duration = activeDrag.endMin - activeDrag.startMin;
     
     if (newStart < 0) newStart = 0;
-    if (newStart + duration > 24 * 60) newStart = 24 * 60 - duration;
+    if (newStart + duration > 48 * 60) newStart = 48 * 60 - duration;
 
     activeDrag.currentDay = newDay;
     activeDrag.currentStartMin = newStart;
@@ -272,7 +272,7 @@
     if (activeResize.type === 'bottom') {
       let newEnd = activeResize.endMin + snappedDelta;
       if (newEnd <= activeResize.startMin + SNAP_MINUTES) newEnd = activeResize.startMin + SNAP_MINUTES;
-      if (newEnd > 24 * 60) newEnd = 24 * 60;
+      if (newEnd > 48 * 60) newEnd = 48 * 60;
       currentResizeState.endMin = newEnd;
     } else {
       let newStart = activeResize.startMin + snappedDelta;
@@ -297,9 +297,53 @@
   }
 
   function formatTime(minutes: number): string {
-    const h = Math.floor(minutes / 60);
+    const h = Math.floor(minutes / 60) % 24;
     const m = minutes % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+
+  function getSegmentsForDay(dayIdx: number) {
+    const segments = [];
+    for (const block of blocks) {
+      const isResizing = activeResize?.id === block.id;
+      const isDragging = activeDrag?.id === block.id;
+
+      const blockDay = isDragging && activeDrag ? activeDrag.currentDay : block.day_of_week;
+      const startMin = isDragging && activeDrag ? activeDrag.currentStartMin : (isResizing && currentResizeState ? currentResizeState.startMin : block.start_minute);
+      const endMin = isDragging && activeDrag ? activeDrag.currentEndMin : (isResizing && currentResizeState ? currentResizeState.endMin : block.end_minute);
+
+      if (blockDay === dayIdx) {
+        segments.push({
+          block,
+          idKey: block.id + '-p',
+          startMin: startMin,
+          endMin: Math.min(endMin, 24 * 60),
+          isPrimary: true,
+          originalStart: startMin,
+          originalEnd: endMin,
+          isResizing,
+          isDragging
+        });
+      }
+
+      if (endMin > 24 * 60) {
+        const nextDay = (blockDay + 1) % 7;
+        if (nextDay === dayIdx) {
+          segments.push({
+            block,
+            idKey: block.id + '-o',
+            startMin: 0,
+            endMin: endMin - 24 * 60,
+            isPrimary: false,
+            originalStart: startMin,
+            originalEnd: endMin,
+            isResizing,
+            isDragging
+          });
+        }
+      }
+    }
+    return segments;
   }
 </script>
 
@@ -349,45 +393,53 @@
             {/each}
 
             <!-- Blocks Overlay for this day -->
-            {#each blocks.filter(b => (activeDrag?.id === b.id ? activeDrag.currentDay : b.day_of_week) === dayIdx) as block (block.id)}
-              {@const isResizing = activeResize?.id === block.id}
-              {@const isDragging = activeDrag?.id === block.id}
-              {@const startMin = isDragging && activeDrag ? activeDrag.currentStartMin : (isResizing && currentResizeState ? currentResizeState.startMin : block.start_minute)}
-              {@const endMin = isDragging && activeDrag ? activeDrag.currentEndMin : (isResizing && currentResizeState ? currentResizeState.endMin : block.end_minute)}
-              {@const top = startMin * PIXELS_PER_MINUTE}
-              {@const height = (endMin - startMin) * PIXELS_PER_MINUTE}
+            {#each getSegmentsForDay(dayIdx) as seg (seg.idKey)}
+              {@const top = seg.startMin * PIXELS_PER_MINUTE}
+              {@const height = (seg.endMin - seg.startMin) * PIXELS_PER_MINUTE}
               
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div 
                 class="scheduled-block"
-                class:resizing={isResizing}
-                class:dragging={isDragging}
-                onmousedown={(e) => handleBlockMouseDown(e, block)}
-                onclick={(e) => handleBlockClick(e, block)}
+                class:resizing={seg.isResizing}
+                class:dragging={seg.isDragging}
+                class:is-overflow={!seg.isPrimary}
+                onmousedown={(e) => handleBlockMouseDown(e, seg.block)}
+                onclick={(e) => handleBlockClick(e, seg.block)}
                 style="top: {top}px; height: {height}px;"
-                title="{block.subject} ({formatTime(startMin)} - {formatTime(endMin)})"
+                title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)})"
               >
                 <!-- Resize top handle -->
-                <div class="resize-handle top" onmousedown={(e) => handleResizeStart2(e, block, 'top')}></div>
+                {#if seg.isPrimary}
+                  <div class="resize-handle top" onmousedown={(e) => handleResizeStart2(e, seg.block, 'top')}></div>
+                {/if}
                 
                 <div class="block-content">
-                  <span class="block-subject">{block.subject}</span>
-                  <span class="block-time">{formatTime(startMin)} - {formatTime(endMin)}</span>
+                  <span class="block-subject">{seg.block.subject}</span>
+                  <span class="block-time">
+                    {#if !seg.isPrimary}
+                      (Cont.) 
+                    {/if}
+                    {formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}
+                  </span>
                 </div>
                 
-                <button 
-                  class="btn-delete-block" 
-                  onclick={() => onBlockDelete(block.id)}
-                  title="Remove block"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
+                {#if seg.isPrimary}
+                  <button 
+                    class="btn-delete-block" 
+                    onclick={() => onBlockDelete(seg.block.id)}
+                    title="Remove block"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                {/if}
 
                 <!-- Resize bottom handle -->
-                <div class="resize-handle bottom" onmousedown={(e) => handleResizeStart2(e, block, 'bottom')}></div>
+                {#if (!seg.isPrimary) || (seg.isPrimary && seg.originalEnd <= 24 * 60)}
+                  <div class="resize-handle bottom" onmousedown={(e) => handleResizeStart2(e, seg.block, 'bottom')}></div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -536,6 +588,8 @@
     z-index: 10;
     transition: opacity 0.2s, box-shadow 0.2s;
     cursor: grab;
+    border: 1px solid var(--color-background);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
 
   .scheduled-block:active {
@@ -547,7 +601,7 @@
     transition: none;
     z-index: 12;
     opacity: 0.9;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 1px var(--color-background);
   }
 
   .scheduled-block.dragging {
