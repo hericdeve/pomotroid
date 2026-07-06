@@ -39,20 +39,24 @@
   }
 
   async function handleBlockDelete(id: number) {
+    const prevBlocks = blocks;
+    blocks = blocks.filter(b => b.id !== id);
     try {
       await scheduleDeleteBlock(id);
-      blocks = blocks.filter(b => b.id !== id);
     } catch (e) {
+      blocks = prevBlocks;
       logError(`Failed to delete block: ${e}`);
       alert(`Failed to delete block: ${e}`);
     }
   }
 
   async function handleBlockUpdate(id: number, day: number, startMin: number, endMin: number) {
+    const prevBlocks = blocks;
+    blocks = blocks.map(b => b.id === id ? { ...b, day_of_week: day, start_minute: startMin, end_minute: endMin } : b);
     try {
       await scheduleUpdateBlock(id, day, startMin, endMin);
-      blocks = blocks.map(b => b.id === id ? { ...b, day_of_week: day, start_minute: startMin, end_minute: endMin } : b);
     } catch (e) {
+      blocks = prevBlocks;
       logError(`Failed to update block: ${e}`);
       alert(`Failed to update block: ${e}`);
     }
