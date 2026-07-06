@@ -272,15 +272,22 @@
     let cyclePosition = 1;
     let roundNum = 1;
     
-    const workMins = $settings.time_work_secs / 60;
-    const shortBreakMins = $settings.short_breaks_enabled ? ($settings.time_short_break_secs / 60) : 0;
-    const longBreakMins = $settings.long_breaks_enabled ? ($settings.time_long_break_secs / 60) : 0;
+    const workMins = Math.round($settings.time_work_secs / 60);
+    const shortBreakMins = $settings.short_breaks_enabled ? Math.round($settings.time_short_break_secs / 60) : 0;
+    const longBreakMins = $settings.long_breaks_enabled ? Math.round($settings.time_long_break_secs / 60) : 0;
     const interval = $settings.long_break_interval;
 
     while (remainingMins > 0) {
       // Work round
       const actualWorkMins = Math.min(workMins, remainingMins);
-      tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualWorkMins)}: Work (Round ${roundNum})\n`;
+      const isPartialWork = actualWorkMins < workMins;
+      
+      if (isPartialWork) {
+        break; // Stop showing if it's not a complete round
+      }
+      
+      const workLabel = `Work (Round ${roundNum})`;
+      tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualWorkMins)}: ${workLabel}\n`;
       currentMin += actualWorkMins;
       remainingMins -= actualWorkMins;
       roundNum++;
@@ -293,7 +300,23 @@
       
       if (breakMins > 0) {
         const actualBreakMins = Math.min(breakMins, remainingMins);
-        tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualBreakMins)}: ${isLongBreak ? 'Long' : 'Short'} Break\n`;
+        const isPartialBreak = actualBreakMins < breakMins;
+        
+        if (isPartialBreak) {
+          break; // Stop showing if it's not a complete break
+        }
+        
+        // If there isn't enough time for a full work round after this break,
+        // then this break would be the last event. It makes no sense to show a break
+        // at the end of the session, so we consider the session finished.
+        if (remainingMins - actualBreakMins < workMins) {
+          break;
+        }
+        
+        const breakType = isLongBreak ? 'Long' : 'Short';
+        const breakLabel = `${breakType} Break`;
+        
+        tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualBreakMins)}: ${breakLabel}\n`;
         currentMin += actualBreakMins;
         remainingMins -= actualBreakMins;
       }
