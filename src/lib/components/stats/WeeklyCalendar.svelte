@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
+  import BlockTimelineModal from './BlockTimelineModal.svelte';
 
   interface Props {
     blocks: ScheduledBlock[];
@@ -95,6 +96,9 @@
 
   // --- Custom Block Drag Logic ---
 
+  let isDraggingOrResizing = false;
+  let selectedBlockForModal = $state<ScheduledBlock | null>(null);
+
   function handleBlockMouseDown(e: MouseEvent, block: ScheduledBlock) {
     if (e.button !== 0) return; // Only left click
 
@@ -105,6 +109,7 @@
 
     e.preventDefault();
     e.stopPropagation();
+    isDraggingOrResizing = false;
 
     const calendarContainer = document.querySelector('.days-columns') as HTMLElement;
     if (!calendarContainer) return;
@@ -127,6 +132,7 @@
 
   function handleBlockMouseMove(e: MouseEvent) {
     if (!activeDrag) return;
+    isDraggingOrResizing = true;
 
     // Calculate new day (X-axis)
     const columnWidth = activeDrag.calendarRect.width / 7;
@@ -167,6 +173,17 @@
     }
     
     activeDrag = null;
+  }
+
+  function handleBlockClick(e: MouseEvent, block: ScheduledBlock) {
+    if (isDraggingOrResizing) return;
+    
+    const target = e.target as HTMLElement;
+    if (target.closest('.resize-handle') || target.closest('.btn-delete-block')) {
+      return; 
+    }
+    
+    selectedBlockForModal = block;
   }
 
   // --- Resizing Logic ---
@@ -225,6 +242,7 @@
 
   function handleResizeMove2(e: MouseEvent) {
     if (!activeResize || !currentResizeState) return;
+    isDraggingOrResizing = true;
     
     const deltaY = e.clientY - activeResize.initialY;
     const deltaMinutes = Math.floor(deltaY / PIXELS_PER_MINUTE);
@@ -261,74 +279,6 @@
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  }
-
-  function generateTooltip(subject: string, startMin: number, endMin: number): string {
-    let tooltip = `${subject} (${formatTime(startMin)} - ${formatTime(endMin)})\n`;
-    tooltip += `------------------------\n`;
-    
-    let currentMin = startMin;
-    let remainingMins = endMin - startMin;
-    let cyclePosition = 1;
-    let roundNum = 1;
-    
-    const workMins = Math.round($settings.time_work_secs / 60);
-    const shortBreakMins = $settings.short_breaks_enabled ? Math.round($settings.time_short_break_secs / 60) : 0;
-    const longBreakMins = $settings.long_breaks_enabled ? Math.round($settings.time_long_break_secs / 60) : 0;
-    const interval = $settings.long_break_interval;
-
-    while (remainingMins > 0) {
-      // Work round
-      const actualWorkMins = Math.min(workMins, remainingMins);
-      const isPartialWork = actualWorkMins < workMins;
-      
-      if (isPartialWork) {
-        break; // Stop showing if it's not a complete round
-      }
-      
-      const workLabel = `Work (Round ${roundNum})`;
-      tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualWorkMins)}: ${workLabel}\n`;
-      currentMin += actualWorkMins;
-      remainingMins -= actualWorkMins;
-      roundNum++;
-      
-      if (remainingMins <= 0) break;
-      
-      // Break
-      let isLongBreak = (interval > 0 && cyclePosition % interval === 0);
-      let breakMins = isLongBreak ? longBreakMins : shortBreakMins;
-      
-      if (breakMins > 0) {
-        const actualBreakMins = Math.min(breakMins, remainingMins);
-        const isPartialBreak = actualBreakMins < breakMins;
-        
-        if (isPartialBreak) {
-          break; // Stop showing if it's not a complete break
-        }
-        
-        // If there isn't enough time for a full work round after this break,
-        // then this break would be the last event. It makes no sense to show a break
-        // at the end of the session, so we consider the session finished.
-        if (remainingMins - actualBreakMins < workMins) {
-          break;
-        }
-        
-        const breakType = isLongBreak ? 'Long' : 'Short';
-        const breakLabel = `${breakType} Break`;
-        
-        tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualBreakMins)}: ${breakLabel}\n`;
-        currentMin += actualBreakMins;
-        remainingMins -= actualBreakMins;
-      }
-      
-      if (isLongBreak) {
-        cyclePosition = 1;
-      } else {
-        cyclePosition++;
-      }
-    }
-    
-    return tooltip.trim();
   }
 </script>
 
@@ -377,14 +327,15 @@
               {@const top = startMin * PIXELS_PER_MINUTE}
               {@const height = (endMin - startMin) * PIXELS_PER_MINUTE}
               
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
               <div 
                 class="scheduled-block"
                 class:resizing={isResizing}
                 class:dragging={isDragging}
                 onmousedown={(e) => handleBlockMouseDown(e, block)}
+                onclick={(e) => handleBlockClick(e, block)}
                 style="top: {top}px; height: {height}px;"
-                title={generateTooltip(block.subject, startMin, endMin)}
+                title="{block.subject} ({formatTime(startMin)} - {formatTime(endMin)})"
               >
                 <!-- Resize top handle -->
                 <div class="resize-handle top" onmousedown={(e) => handleResizeStart2(e, block, 'top')}></div>
@@ -415,6 +366,15 @@
     </div>
   </div>
 </div>
+
+{#if selectedBlockForModal}
+  <BlockTimelineModal 
+    subject={selectedBlockForModal.subject}
+    startMin={selectedBlockForModal.start_minute}
+    endMin={selectedBlockForModal.end_minute}
+    onClose={() => selectedBlockForModal = null}
+  />
+{/if}
 
 <style>
   .calendar-container {
