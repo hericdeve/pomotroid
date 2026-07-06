@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import BlockTimelineModal from './BlockTimelineModal.svelte';
@@ -21,6 +21,27 @@
   // Visual height representing 1 hour (e.g. 60px)
   const PIXELS_PER_HOUR = 60;
   const PIXELS_PER_MINUTE = PIXELS_PER_HOUR / 60;
+
+  let now = $state(new Date());
+  let currentDay = $derived((now.getDay() + 6) % 7); // 0 = Mon, 6 = Sun
+  let currentMinute = $derived(now.getHours() * 60 + now.getMinutes());
+  let calendarBodyRef: HTMLElement | null = $state(null);
+
+  onMount(() => {
+    const interval = setInterval(() => {
+      now = new Date();
+    }, 60000);
+
+    // Give the DOM a tiny bit of time to render so clientHeight is accurate
+    setTimeout(() => {
+      if (calendarBodyRef) {
+        const y = currentMinute * PIXELS_PER_MINUTE;
+        calendarBodyRef.scrollTop = Math.max(0, y - calendarBodyRef.clientHeight / 3);
+      }
+    }, 0);
+
+    return () => clearInterval(interval);
+  });
 
   let dragOverCell: { day: number, hour: number } | null = $state(null);
   let activeResize = $state<{ id: number, type: 'top' | 'bottom', initialY: number, startMin: number, endMin: number, day: number } | null>(null);
@@ -283,11 +304,11 @@
 </script>
 
 <div class="calendar-container">
-  <div class="calendar-body">
+  <div class="calendar-body" bind:this={calendarBodyRef}>
     <div class="calendar-header">
       <div class="time-column-header"></div>
-      {#each DAYS as day}
-        <div class="day-header">{day}</div>
+      {#each DAYS as day, idx}
+        <div class="day-header" class:is-today={idx === currentDay}>{day}</div>
       {/each}
     </div>
     
@@ -305,7 +326,16 @@
       <!-- Days Columns -->
       <div class="days-columns">
         {#each DAYS as dayName, dayIdx}
-          <div class="day-column">
+          <div class="day-column" class:is-today={dayIdx === currentDay}>
+            
+            <!-- Current Time Marker -->
+            {#if dayIdx === currentDay}
+              <div 
+                class="time-marker" 
+                style="top: {currentMinute * PIXELS_PER_MINUTE}px;"
+              ></div>
+            {/if}
+
             {#each HOURS as hour}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div 
@@ -415,6 +445,10 @@
     border-right: none;
   }
 
+  .day-header.is-today {
+    color: var(--color-focus-round);
+  }
+
   .calendar-body {
     flex: 1;
     overflow-y: auto;
@@ -460,6 +494,27 @@
   .hour-cell {
     border-bottom: 1px solid var(--color-separator);
     transition: background-color 0.1s;
+  }
+
+  .time-marker {
+    position: absolute;
+    left: 0;
+    right: -1px;
+    height: 2px;
+    background: #ef4444;
+    z-index: 15;
+    pointer-events: none;
+  }
+  
+  .time-marker::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ef4444;
   }
 
   .hour-cell.drag-over {
