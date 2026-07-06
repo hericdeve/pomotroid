@@ -80,34 +80,11 @@
       e.dataTransfer.effectAllowed = 'copy';
     }
   }
-
-  function handleSidebarDragOver(e: DragEvent) {
-    e.preventDefault(); // Allow drop
-  }
-
-  function handleSidebarDrop(e: DragEvent) {
-    e.preventDefault();
-    if (e.dataTransfer) {
-      try {
-        const payload = JSON.parse(e.dataTransfer.getData('application/json'));
-        if (payload.type === 'block') {
-          handleBlockDelete(payload.id);
-        }
-      } catch (err) {
-        // Ignore if not our JSON payload
-      }
-    }
-  }
 </script>
 
 <div class="planning-view">
   <!-- Left Sidebar: Subjects -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <aside 
-    class="sidebar"
-    ondragover={handleSidebarDragOver}
-    ondrop={handleSidebarDrop}
-  >
+  <aside class="sidebar">
     <div class="sidebar-header">
       <h3>Subjects</h3>
     </div>

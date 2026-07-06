@@ -23,12 +23,18 @@
   let dragOverCell: { day: number, hour: number } | null = $state(null);
   let activeResize = $state<{ id: number, type: 'top' | 'bottom', initialY: number, startMin: number, endMin: number, day: number } | null>(null);
 
-  function handleBlockDragStart(e: DragEvent, block: ScheduledBlock) {
-    if (e.dataTransfer) {
-      e.dataTransfer.setData('application/json', JSON.stringify({ type: 'block', id: block.id, duration: block.end_minute - block.start_minute }));
-      e.dataTransfer.effectAllowed = 'move';
-    }
-  }
+  // New state for custom block dragging
+  let activeDrag = $state<{
+    id: number;
+    initialY: number;
+    startMin: number;
+    endMin: number;
+    startDay: number;
+    currentDay: number;
+    currentStartMin: number;
+    currentEndMin: number;
+    calendarRect: DOMRect;
+  } | null>(null);
 
   function handleDragOver(e: DragEvent, day: number, hour: number) {
     e.preventDefault();
@@ -52,22 +58,19 @@
         if (payloadStr) {
           const payload = JSON.parse(payloadStr);
           
-          let offsetMinutes = 0;
-          const target = e.currentTarget as HTMLElement;
-          const rect = target.getBoundingClientRect();
-          const y = e.clientY - rect.top;
-          
-          const minutes = Math.floor(y / PIXELS_PER_MINUTE);
-          offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
-          const startMin = hour * 60 + offsetMinutes;
-
           if (payload.type === 'subject') {
+            let offsetMinutes = 0;
+            const target = e.currentTarget as HTMLElement;
+            const rect = target.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            
+            const minutes = Math.floor(y / PIXELS_PER_MINUTE);
+            offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
+            const startMin = hour * 60 + offsetMinutes;
+
             const defaultDuration = 120;
             const endMin = Math.min(24 * 60, startMin + defaultDuration);
             onBlockAdd(day, startMin, endMin, payload.data);
-          } else if (payload.type === 'block') {
-            const endMin = Math.min(24 * 60, startMin + payload.duration);
-            onBlockUpdate(payload.id, day, startMin, endMin);
           }
         }
       } catch (err) {
@@ -87,6 +90,82 @@
         }
       }
     }
+  }
+
+  // --- Custom Block Drag Logic ---
+
+  function handleBlockMouseDown(e: MouseEvent, block: ScheduledBlock) {
+    if (e.button !== 0) return; // Only left click
+
+    const target = e.target as HTMLElement;
+    if (target.closest('.resize-handle') || target.closest('.btn-delete-block')) {
+      return; // Handled by other listeners
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const calendarContainer = document.querySelector('.days-columns') as HTMLElement;
+    if (!calendarContainer) return;
+
+    activeDrag = {
+      id: block.id,
+      initialY: e.clientY,
+      startMin: block.start_minute,
+      endMin: block.end_minute,
+      startDay: block.day_of_week,
+      currentDay: block.day_of_week,
+      currentStartMin: block.start_minute,
+      currentEndMin: block.end_minute,
+      calendarRect: calendarContainer.getBoundingClientRect()
+    };
+
+    window.addEventListener('mousemove', handleBlockMouseMove);
+    window.addEventListener('mouseup', handleBlockMouseUp);
+  }
+
+  function handleBlockMouseMove(e: MouseEvent) {
+    if (!activeDrag) return;
+
+    // Calculate new day (X-axis)
+    const columnWidth = activeDrag.calendarRect.width / 7;
+    const offsetX = e.clientX - activeDrag.calendarRect.left;
+    let newDay = Math.floor(offsetX / columnWidth);
+    newDay = Math.max(0, Math.min(6, newDay)); // Clamp to 0-6
+
+    // Calculate new time (Y-axis)
+    const deltaY = e.clientY - activeDrag.initialY;
+    const deltaMinutes = Math.floor(deltaY / PIXELS_PER_MINUTE);
+    const snappedDelta = Math.round(deltaMinutes / SNAP_MINUTES) * SNAP_MINUTES;
+    
+    let newStart = activeDrag.startMin + snappedDelta;
+    const duration = activeDrag.endMin - activeDrag.startMin;
+    
+    if (newStart < 0) newStart = 0;
+    if (newStart + duration > 24 * 60) newStart = 24 * 60 - duration;
+
+    activeDrag.currentDay = newDay;
+    activeDrag.currentStartMin = newStart;
+    activeDrag.currentEndMin = newStart + duration;
+  }
+
+  function handleBlockMouseUp(e: MouseEvent) {
+    window.removeEventListener('mousemove', handleBlockMouseMove);
+    window.removeEventListener('mouseup', handleBlockMouseUp);
+
+    if (activeDrag) {
+      // Check if dragged to sidebar to delete (left of the calendar grid)
+      if (e.clientX < activeDrag.calendarRect.left - 20) {
+        onBlockDelete(activeDrag.id);
+      } else {
+        // Did we actually change something?
+        if (activeDrag.currentDay !== activeDrag.startDay || activeDrag.currentStartMin !== activeDrag.startMin) {
+          onBlockUpdate(activeDrag.id, activeDrag.currentDay, activeDrag.currentStartMin, activeDrag.currentEndMin);
+        }
+      }
+    }
+    
+    activeDrag = null;
   }
 
   // --- Resizing Logic ---
@@ -221,10 +300,11 @@
             {/each}
 
             <!-- Blocks Overlay for this day -->
-            {#each blocks.filter(b => b.day_of_week === dayIdx) as block (block.id)}
+            {#each blocks.filter(b => (activeDrag?.id === b.id ? activeDrag.currentDay : b.day_of_week) === dayIdx) as block (block.id)}
               {@const isResizing = activeResize?.id === block.id}
-              {@const startMin = isResizing && currentResizeState ? currentResizeState.startMin : block.start_minute}
-              {@const endMin = isResizing && currentResizeState ? currentResizeState.endMin : block.end_minute}
+              {@const isDragging = activeDrag?.id === block.id}
+              {@const startMin = isDragging && activeDrag ? activeDrag.currentStartMin : (isResizing && currentResizeState ? currentResizeState.startMin : block.start_minute)}
+              {@const endMin = isDragging && activeDrag ? activeDrag.currentEndMin : (isResizing && currentResizeState ? currentResizeState.endMin : block.end_minute)}
               {@const top = startMin * PIXELS_PER_MINUTE}
               {@const height = (endMin - startMin) * PIXELS_PER_MINUTE}
               
@@ -232,8 +312,8 @@
               <div 
                 class="scheduled-block"
                 class:resizing={isResizing}
-                draggable="true"
-                ondragstart={(e) => handleBlockDragStart(e, block)}
+                class:dragging={isDragging}
+                onmousedown={(e) => handleBlockMouseDown(e, block)}
                 style="top: {top}px; height: {height}px;"
                 title="{block.subject} ({formatTime(startMin)} - {formatTime(endMin)})"
               >
@@ -375,11 +455,16 @@
     cursor: grabbing;
   }
 
-  .scheduled-block.resizing {
+  .scheduled-block.resizing,
+  .scheduled-block.dragging {
     transition: none;
     z-index: 12;
     opacity: 0.9;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+
+  .scheduled-block.dragging {
+    opacity: 0.7;
   }
 
   .scheduled-block:hover {
