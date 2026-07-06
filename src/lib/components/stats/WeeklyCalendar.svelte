@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ScheduledBlock } from '$lib/types';
+  import { settings } from '$lib/stores/settings';
 
   interface Props {
     blocks: ScheduledBlock[];
@@ -261,6 +262,51 @@
     const m = minutes % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
+
+  function generateTooltip(subject: string, startMin: number, endMin: number): string {
+    let tooltip = `${subject} (${formatTime(startMin)} - ${formatTime(endMin)})\n`;
+    tooltip += `------------------------\n`;
+    
+    let currentMin = startMin;
+    let remainingMins = endMin - startMin;
+    let cyclePosition = 1;
+    let roundNum = 1;
+    
+    const workMins = $settings.time_work_secs / 60;
+    const shortBreakMins = $settings.short_breaks_enabled ? ($settings.time_short_break_secs / 60) : 0;
+    const longBreakMins = $settings.long_breaks_enabled ? ($settings.time_long_break_secs / 60) : 0;
+    const interval = $settings.long_break_interval;
+
+    while (remainingMins > 0) {
+      // Work round
+      const actualWorkMins = Math.min(workMins, remainingMins);
+      tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualWorkMins)}: Work (Round ${roundNum})\n`;
+      currentMin += actualWorkMins;
+      remainingMins -= actualWorkMins;
+      roundNum++;
+      
+      if (remainingMins <= 0) break;
+      
+      // Break
+      let isLongBreak = (interval > 0 && cyclePosition % interval === 0);
+      let breakMins = isLongBreak ? longBreakMins : shortBreakMins;
+      
+      if (breakMins > 0) {
+        const actualBreakMins = Math.min(breakMins, remainingMins);
+        tooltip += `${formatTime(currentMin)} - ${formatTime(currentMin + actualBreakMins)}: ${isLongBreak ? 'Long' : 'Short'} Break\n`;
+        currentMin += actualBreakMins;
+        remainingMins -= actualBreakMins;
+      }
+      
+      if (isLongBreak) {
+        cyclePosition = 1;
+      } else {
+        cyclePosition++;
+      }
+    }
+    
+    return tooltip.trim();
+  }
 </script>
 
 <div class="calendar-container">
@@ -315,7 +361,7 @@
                 class:dragging={isDragging}
                 onmousedown={(e) => handleBlockMouseDown(e, block)}
                 style="top: {top}px; height: {height}px;"
-                title="{block.subject} ({formatTime(startMin)} - {formatTime(endMin)})"
+                title={generateTooltip(block.subject, startMin, endMin)}
               >
                 <!-- Resize top handle -->
                 <div class="resize-handle top" onmousedown={(e) => handleResizeStart2(e, block, 'top')}></div>
