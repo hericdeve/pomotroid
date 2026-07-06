@@ -175,7 +175,6 @@
     {/if}
   </nav>
 
-  <!-- Tab bar -->
   <div class="tabs-container">
     <div class="tabs">
       <button class="tab" class:active={activeTab === 'today'} onclick={() => switchTab('today')}
@@ -187,17 +186,17 @@
       <button class="tab" class:active={activeTab === 'alltime'} onclick={() => switchTab('alltime')}
         >{m.stats_tab_alltime()}</button
       >
+      <button class="tab" class:active={activeTab === 'planning'} onclick={() => switchTab('planning')}
+        >Planning</button
+      >
+      <button class="tab" class:active={activeTab === 'subjects'} onclick={() => switchTab('subjects')}
+        >Subjects</button
+      >
       <button class="tab" class:active={activeTab === 'history'} onclick={() => switchTab('history')}
         >History</button
       >
       <button class="tab" class:active={activeTab === 'insights'} onclick={() => switchTab('insights')}
         >Insights</button
-      >
-      <button class="tab" class:active={activeTab === 'subjects'} onclick={() => switchTab('subjects')}
-        >Subjects</button
-      >
-      <button class="tab" class:active={activeTab === 'planning'} onclick={() => switchTab('planning')}
-        >Planning</button
       >
     </div>
     <button class="btn-manual" onclick={() => showManualEntry = true} title="Manual Entry" aria-label="Manual Entry">
