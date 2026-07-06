@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { subjectsGetAll, scheduleGetAll, scheduleAddBlock, scheduleDeleteBlock } from '$lib/ipc';
+  import { subjectsGetAll, scheduleGetAll, scheduleAddBlock, scheduleDeleteBlock, scheduleUpdateBlock } from '$lib/ipc';
   import type { SubjectStats, ScheduledBlock } from '$lib/types';
   import { error as logError } from '@tauri-apps/plugin-log';
   import { settings } from '$lib/stores/settings';
@@ -41,6 +41,16 @@
     }
   }
 
+  async function handleBlockUpdate(id: number, day: number, startMin: number, endMin: number) {
+    try {
+      await scheduleUpdateBlock(id, day, startMin, endMin);
+      blocks = blocks.map(b => b.id === id ? { ...b, day_of_week: day, start_minute: startMin, end_minute: endMin } : b);
+    } catch (e) {
+      logError(`Failed to update block: ${e}`);
+      alert(`Failed to update block: ${e}`);
+    }
+  }
+
   function calculateAllocatedRounds(subjectName: string): number {
     const subjectBlocks = blocks.filter(b => b.subject === subjectName);
     const totalMinutes = subjectBlocks.reduce((sum, b) => sum + (b.end_minute - b.start_minute), 0);
@@ -66,19 +76,38 @@
 
   function handleDragStart(e: DragEvent, subject: SubjectStats) {
     if (e.dataTransfer) {
-      e.dataTransfer.setData('text/plain', subject.name);
+      e.dataTransfer.setData('application/json', JSON.stringify({ type: 'subject', data: subject.name }));
       e.dataTransfer.effectAllowed = 'copy';
-      
-      // Optional: set drag image here if we want a custom one
-      // const el = e.target as HTMLElement;
-      // e.dataTransfer.setDragImage(el, 20, 20);
+    }
+  }
+
+  function handleSidebarDragOver(e: DragEvent) {
+    e.preventDefault(); // Allow drop
+  }
+
+  function handleSidebarDrop(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      try {
+        const payload = JSON.parse(e.dataTransfer.getData('application/json'));
+        if (payload.type === 'block') {
+          handleBlockDelete(payload.id);
+        }
+      } catch (err) {
+        // Ignore if not our JSON payload
+      }
     }
   }
 </script>
 
 <div class="planning-view">
   <!-- Left Sidebar: Subjects -->
-  <aside class="sidebar">
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <aside 
+    class="sidebar"
+    ondragover={handleSidebarDragOver}
+    ondrop={handleSidebarDrop}
+  >
     <div class="sidebar-header">
       <h3>Subjects</h3>
     </div>
@@ -144,6 +173,7 @@
       {blocks}
       onBlockAdd={handleBlockAdd}
       onBlockDelete={handleBlockDelete}
+      onBlockUpdate={handleBlockUpdate}
     />
   </main>
 </div>

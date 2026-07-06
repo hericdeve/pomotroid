@@ -6,9 +6,10 @@
     blocks: ScheduledBlock[];
     onBlockAdd: (day: number, startMin: number, endMin: number, subject: string) => void;
     onBlockDelete: (id: number) => void;
+    onBlockUpdate: (id: number, day: number, startMin: number, endMin: number) => void;
   }
 
-  let { blocks, onBlockAdd, onBlockDelete }: Props = $props();
+  let { blocks, onBlockAdd, onBlockDelete, onBlockUpdate }: Props = $props();
 
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -20,11 +21,19 @@
   const PIXELS_PER_MINUTE = PIXELS_PER_HOUR / 60;
 
   let dragOverCell: { day: number, hour: number } | null = $state(null);
+  let activeResize = $state<{ id: number, type: 'top' | 'bottom', initialY: number, startMin: number, endMin: number, day: number } | null>(null);
+
+  function handleBlockDragStart(e: DragEvent, block: ScheduledBlock) {
+    if (e.dataTransfer) {
+      e.dataTransfer.setData('application/json', JSON.stringify({ type: 'block', id: block.id, duration: block.end_minute - block.start_minute }));
+      e.dataTransfer.effectAllowed = 'move';
+    }
+  }
 
   function handleDragOver(e: DragEvent, day: number, hour: number) {
     e.preventDefault();
     if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'copy';
+      e.dataTransfer.dropEffect = 'copy'; // or move, handled by browser defaults mostly
     }
     dragOverCell = { day, hour };
   }
@@ -38,26 +47,134 @@
     dragOverCell = null;
     
     if (e.dataTransfer) {
-      const subject = e.dataTransfer.getData('text/plain');
-      if (subject) {
-        // Find Y offset within the target hour cell to snap to resolution
-        let offsetMinutes = 0;
-        const target = e.currentTarget as HTMLElement;
-        const rect = target.getBoundingClientRect();
-        const y = e.clientY - rect.top;
-        
-        // Calculate minutes based on Y offset
-        const minutes = Math.floor(y / PIXELS_PER_MINUTE);
-        // Snap to grid
-        offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
+      try {
+        const payloadStr = e.dataTransfer.getData('application/json');
+        if (payloadStr) {
+          const payload = JSON.parse(payloadStr);
+          
+          let offsetMinutes = 0;
+          const target = e.currentTarget as HTMLElement;
+          const rect = target.getBoundingClientRect();
+          const y = e.clientY - rect.top;
+          
+          const minutes = Math.floor(y / PIXELS_PER_MINUTE);
+          offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
+          const startMin = hour * 60 + offsetMinutes;
 
-        const startMin = hour * 60 + offsetMinutes;
-        const defaultDuration = 120; // 2 hours by default
-        const endMin = Math.min(24 * 60, startMin + defaultDuration);
-        
-        onBlockAdd(day, startMin, endMin, subject);
+          if (payload.type === 'subject') {
+            const defaultDuration = 120;
+            const endMin = Math.min(24 * 60, startMin + defaultDuration);
+            onBlockAdd(day, startMin, endMin, payload.data);
+          } else if (payload.type === 'block') {
+            const endMin = Math.min(24 * 60, startMin + payload.duration);
+            onBlockUpdate(payload.id, day, startMin, endMin);
+          }
+        }
+      } catch (err) {
+        // Fallback for plain text just in case
+        const subject = e.dataTransfer.getData('text/plain');
+        if (subject) {
+          let offsetMinutes = 0;
+          const target = e.currentTarget as HTMLElement;
+          const rect = target.getBoundingClientRect();
+          const y = e.clientY - rect.top;
+          const minutes = Math.floor(y / PIXELS_PER_MINUTE);
+          offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
+          const startMin = hour * 60 + offsetMinutes;
+          const defaultDuration = 120;
+          const endMin = Math.min(24 * 60, startMin + defaultDuration);
+          onBlockAdd(day, startMin, endMin, subject);
+        }
       }
     }
+  }
+
+  // --- Resizing Logic ---
+
+  function handleResizeStart(e: MouseEvent, block: ScheduledBlock, type: 'top' | 'bottom') {
+    e.stopPropagation();
+    e.preventDefault();
+    activeResize = {
+      id: block.id,
+      type,
+      initialY: e.clientY,
+      startMin: block.start_minute,
+      endMin: block.end_minute,
+      day: block.day_of_week
+    };
+    window.addEventListener('mousemove', handleResizeMove);
+    window.addEventListener('mouseup', handleResizeEnd);
+  }
+
+  function handleResizeMove(e: MouseEvent) {
+    if (!activeResize) return;
+    
+    const deltaY = e.clientY - activeResize.initialY;
+    const deltaMinutes = Math.floor(deltaY / PIXELS_PER_MINUTE);
+    const snappedDelta = Math.round(deltaMinutes / SNAP_MINUTES) * SNAP_MINUTES;
+
+    if (activeResize.type === 'bottom') {
+      let newEnd = activeResize.endMin + snappedDelta;
+      if (newEnd <= activeResize.startMin + SNAP_MINUTES) newEnd = activeResize.startMin + SNAP_MINUTES;
+      if (newEnd > 24 * 60) newEnd = 24 * 60;
+      // We don't save to DB yet, we just update the local visual state via blocks array copy/mutation
+      // But wait, mutating props is bad. We will compute rendered block properties dynamically.
+      // So we just update `activeResize.currentEndMin = newEnd` etc.
+      // Actually, we can just mutate activeResize and use it during render
+    }
+  }
+
+  // Realized it's better to store current changes in activeResize
+  let currentResizeState = $state<{ startMin: number, endMin: number } | null>(null);
+
+  function handleResizeStart2(e: MouseEvent, block: ScheduledBlock, type: 'top' | 'bottom') {
+    e.stopPropagation();
+    e.preventDefault();
+    activeResize = {
+      id: block.id,
+      type,
+      initialY: e.clientY,
+      startMin: block.start_minute,
+      endMin: block.end_minute,
+      day: block.day_of_week
+    };
+    currentResizeState = { startMin: block.start_minute, endMin: block.end_minute };
+    window.addEventListener('mousemove', handleResizeMove2);
+    window.addEventListener('mouseup', handleResizeEnd2);
+  }
+
+  function handleResizeMove2(e: MouseEvent) {
+    if (!activeResize || !currentResizeState) return;
+    
+    const deltaY = e.clientY - activeResize.initialY;
+    const deltaMinutes = Math.floor(deltaY / PIXELS_PER_MINUTE);
+    const snappedDelta = Math.round(deltaMinutes / SNAP_MINUTES) * SNAP_MINUTES;
+
+    if (activeResize.type === 'bottom') {
+      let newEnd = activeResize.endMin + snappedDelta;
+      if (newEnd <= activeResize.startMin + SNAP_MINUTES) newEnd = activeResize.startMin + SNAP_MINUTES;
+      if (newEnd > 24 * 60) newEnd = 24 * 60;
+      currentResizeState.endMin = newEnd;
+    } else {
+      let newStart = activeResize.startMin + snappedDelta;
+      if (newStart >= activeResize.endMin - SNAP_MINUTES) newStart = activeResize.endMin - SNAP_MINUTES;
+      if (newStart < 0) newStart = 0;
+      currentResizeState.startMin = newStart;
+    }
+  }
+
+  function handleResizeEnd2(e: MouseEvent) {
+    window.removeEventListener('mousemove', handleResizeMove2);
+    window.removeEventListener('mouseup', handleResizeEnd2);
+    
+    if (activeResize && currentResizeState) {
+      if (currentResizeState.startMin !== activeResize.startMin || currentResizeState.endMin !== activeResize.endMin) {
+        onBlockUpdate(activeResize.id, activeResize.day, currentResizeState.startMin, currentResizeState.endMin);
+      }
+    }
+    
+    activeResize = null;
+    currentResizeState = null;
   }
 
   function formatTime(minutes: number): string {
@@ -105,19 +222,29 @@
 
             <!-- Blocks Overlay for this day -->
             {#each blocks.filter(b => b.day_of_week === dayIdx) as block (block.id)}
-              {@const top = block.start_minute * PIXELS_PER_MINUTE}
-              {@const height = (block.end_minute - block.start_minute) * PIXELS_PER_MINUTE}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              {@const isResizing = activeResize?.id === block.id}
+              {@const startMin = isResizing && currentResizeState ? currentResizeState.startMin : block.start_minute}
+              {@const endMin = isResizing && currentResizeState ? currentResizeState.endMin : block.end_minute}
+              {@const top = startMin * PIXELS_PER_MINUTE}
+              {@const height = (endMin - startMin) * PIXELS_PER_MINUTE}
+              
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div 
                 class="scheduled-block"
+                class:resizing={isResizing}
+                draggable="true"
+                ondragstart={(e) => handleBlockDragStart(e, block)}
                 style="top: {top}px; height: {height}px;"
-                title="{block.subject} ({formatTime(block.start_minute)} - {formatTime(block.end_minute)})"
+                title="{block.subject} ({formatTime(startMin)} - {formatTime(endMin)})"
               >
+                <!-- Resize top handle -->
+                <div class="resize-handle top" onmousedown={(e) => handleResizeStart2(e, block, 'top')}></div>
+                
                 <div class="block-content">
                   <span class="block-subject">{block.subject}</span>
-                  <span class="block-time">{formatTime(block.start_minute)}</span>
+                  <span class="block-time">{formatTime(startMin)} - {formatTime(endMin)}</span>
                 </div>
+                
                 <button 
                   class="btn-delete-block" 
                   onclick={() => onBlockDelete(block.id)}
@@ -128,6 +255,9 @@
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
                 </button>
+
+                <!-- Resize bottom handle -->
+                <div class="resize-handle bottom" onmousedown={(e) => handleResizeStart2(e, block, 'bottom')}></div>
               </div>
             {/each}
           </div>
@@ -231,17 +361,50 @@
     background: var(--color-focus-round);
     color: var(--color-background);
     border-radius: 4px;
-    padding: 4px 6px;
+    padding: 6px;
     overflow: hidden;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     display: flex;
     flex-direction: column;
     z-index: 10;
-    transition: opacity 0.2s;
+    transition: opacity 0.2s, box-shadow 0.2s;
+    cursor: grab;
+  }
+
+  .scheduled-block:active {
+    cursor: grabbing;
+  }
+
+  .scheduled-block.resizing {
+    transition: none;
+    z-index: 12;
+    opacity: 0.9;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   }
 
   .scheduled-block:hover {
     z-index: 11;
+  }
+
+  .resize-handle {
+    height: 8px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    cursor: ns-resize;
+    z-index: 15;
+  }
+
+  .resize-handle.top {
+    top: 0;
+  }
+
+  .resize-handle.bottom {
+    bottom: 0;
+  }
+
+  .resize-handle:hover {
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .block-content {
