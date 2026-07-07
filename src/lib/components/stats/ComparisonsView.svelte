@@ -599,11 +599,11 @@
   }
 
   .m-diff.pos {
-    color: var(--color-focus-round);
+    color: var(--color-short-round);
   }
 
   .m-diff.neg {
-    color: var(--color-focus-short);
+    color: var(--color-focus-round);
   }
 
   .chart-section {
