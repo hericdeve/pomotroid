@@ -245,7 +245,7 @@
           <h3>Time by Day of Week</h3>
         </div>
         <div class="vertical-chart-container">
-          <svg width="280" height="{CHART_H + 40}" viewBox="0 0 280 {CHART_H + 40}" class="vertical-svg">
+          <svg width="100%" height="{CHART_H + 40}" viewBox="0 0 280 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_day_of_week as secs, i}
               {@const h = secs > 0 ? Math.max(1, (secs / maxDayTime) * CHART_H) : 0}
               {@const x = i * 40 + 10}
@@ -276,7 +276,7 @@
           <h3>Time by Hour of Day</h3>
         </div>
         <div class="vertical-chart-container hour-chart-wrap">
-          <svg width="528" height="{CHART_H + 40}" viewBox="0 0 528 {CHART_H + 40}" class="vertical-svg">
+          <svg width="100%" height="{CHART_H + 40}" viewBox="0 0 528 {CHART_H + 40}" class="vertical-svg">
             {#each insights.by_hour_of_day as secs, i}
               {@const h = secs > 0 ? Math.max(1, (secs / maxHourTime) * CHART_H) : 0}
               {@const x = i * 22 + 4}
@@ -309,7 +309,7 @@
           <h3>Time by Month</h3>
         </div>
         <div class="vertical-chart-container month-chart-wrap">
-          <svg width="580" height="{CHART_H + 40}" viewBox="0 0 580 {CHART_H + 40}" class="vertical-svg">
+          <svg width="100%" height="{CHART_H + 40}" viewBox="0 0 580 {CHART_H + 40}" class="vertical-svg">
             {#each (insights.by_month || Array(12).fill(0)) as secs, i}
               {@const h = secs > 0 ? Math.max(1, (secs / maxMonthTime) * CHART_H) : 0}
               {@const x = i * 48 + 12}
