@@ -322,21 +322,21 @@
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curYearStats.totalSecs)}</span>
             <span class="m-diff" class:pos={isPos(curYearStats.totalSecs, prevYearStats.totalSecs)} class:neg={curYearStats.totalSecs < prevYearStats.totalSecs}>
-              {pctChange(curYearStats.totalSecs, prevYearStats.totalSecs)} {getTrend(curYearStats.totalSecs, prevYearStats.totalSecs)}
+              <span class="m-diff-abs">{formatDuration(prevYearStats.totalSecs)}</span> ({pctChange(curYearStats.totalSecs, prevYearStats.totalSecs)} {getTrend(curYearStats.totalSecs, prevYearStats.totalSecs)})
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{formatRounds(curYearStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, prevYearStats.totalRounds)} class:neg={curYearStats.totalRounds < prevYearStats.totalRounds}>
-              {pctChange(curYearStats.totalRounds, prevYearStats.totalRounds)} {getTrend(curYearStats.totalRounds, prevYearStats.totalRounds)}
+              <span class="m-diff-abs">{formatRounds(prevYearStats.totalRounds)}</span> ({pctChange(curYearStats.totalRounds, prevYearStats.totalRounds)} {getTrend(curYearStats.totalRounds, prevYearStats.totalRounds)})
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Consistency</span>
             <span class="m-val">{Math.round((curYearStats.activeDays / (currentDayOfYear + 1)) * 100)}%</span>
             <span class="m-diff" class:pos={isPos(curYearStats.activeDays, prevYearStats.activeDays)} class:neg={curYearStats.activeDays < prevYearStats.activeDays}>
-              {pctChange(curYearStats.activeDays, prevYearStats.activeDays)} {getTrend(curYearStats.activeDays, prevYearStats.activeDays)}
+              <span class="m-diff-abs">{Math.round((prevYearStats.activeDays / (currentDayOfYear + 1)) * 100)}%</span> ({pctChange(curYearStats.activeDays, prevYearStats.activeDays)} {getTrend(curYearStats.activeDays, prevYearStats.activeDays)})
             </span>
           </div>
         </div>
@@ -351,21 +351,21 @@
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curYearStats.totalSecs)}</span>
             <span class="m-diff" class:pos={isPos(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)} class:neg={curYearStats.totalSecs < bestYearInfo().stats.totalSecs}>
-              {pctChange(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)} {getTrend(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)}
+              <span class="m-diff-abs">{formatDuration(bestYearInfo().stats.totalSecs)}</span> ({pctChange(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)} {getTrend(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)})
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{formatRounds(curYearStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} class:neg={curYearStats.totalRounds < bestYearInfo().stats.totalRounds}>
-              {pctChange(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} {getTrend(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)}
+              <span class="m-diff-abs">{formatRounds(bestYearInfo().stats.totalRounds)}</span> ({pctChange(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} {getTrend(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)})
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Consistency</span>
             <span class="m-val">{Math.round((curYearStats.activeDays / (currentDayOfYear + 1)) * 100)}%</span>
             <span class="m-diff" class:pos={isPos(curYearStats.activeDays, bestYearInfo().stats.activeDays)} class:neg={curYearStats.activeDays < bestYearInfo().stats.activeDays}>
-              {pctChange(curYearStats.activeDays, bestYearInfo().stats.activeDays)} {getTrend(curYearStats.activeDays, bestYearInfo().stats.activeDays)}
+              <span class="m-diff-abs">{Math.round((bestYearInfo().stats.activeDays / Math.min(currentDayOfYear + 1, bestYearInfo().stats.daysInPeriod)) * 100)}%</span> ({pctChange(curYearStats.activeDays, bestYearInfo().stats.activeDays)} {getTrend(curYearStats.activeDays, bestYearInfo().stats.activeDays)})
             </span>
           </div>
         </div>
@@ -380,14 +380,14 @@
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curHalfStats.totalSecs)}</span>
             <span class="m-diff" class:pos={isPos(curHalfStats.totalSecs, prevHalfStats.totalSecs)} class:neg={curHalfStats.totalSecs < prevHalfStats.totalSecs}>
-              {pctChange(curHalfStats.totalSecs, prevHalfStats.totalSecs)} {getTrend(curHalfStats.totalSecs, prevHalfStats.totalSecs)}
+              <span class="m-diff-abs">{formatDuration(prevHalfStats.totalSecs)}</span> ({pctChange(curHalfStats.totalSecs, prevHalfStats.totalSecs)} {getTrend(curHalfStats.totalSecs, prevHalfStats.totalSecs)})
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{formatRounds(curHalfStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, prevHalfStats.totalRounds)} class:neg={curHalfStats.totalRounds < prevHalfStats.totalRounds}>
-              {pctChange(curHalfStats.totalRounds, prevHalfStats.totalRounds)} {getTrend(curHalfStats.totalRounds, prevHalfStats.totalRounds)}
+              <span class="m-diff-abs">{formatRounds(prevHalfStats.totalRounds)}</span> ({pctChange(curHalfStats.totalRounds, prevHalfStats.totalRounds)} {getTrend(curHalfStats.totalRounds, prevHalfStats.totalRounds)})
             </span>
           </div>
         </div>
@@ -402,14 +402,14 @@
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curHalfStats.totalSecs)}</span>
             <span class="m-diff" class:pos={isPos(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)} class:neg={curHalfStats.totalSecs < bestHalfInfo().stats.totalSecs}>
-              {pctChange(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)} {getTrend(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)}
+              <span class="m-diff-abs">{formatDuration(bestHalfInfo().stats.totalSecs)}</span> ({pctChange(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)} {getTrend(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)})
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{formatRounds(curHalfStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} class:neg={curHalfStats.totalRounds < bestHalfInfo().stats.totalRounds}>
-              {pctChange(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} {getTrend(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)}
+              <span class="m-diff-abs">{formatRounds(bestHalfInfo().stats.totalRounds)}</span> ({pctChange(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} {getTrend(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)})
             </span>
           </div>
         </div>
@@ -582,8 +582,20 @@
   .m-diff {
     font-size: 0.85rem;
     font-weight: 600;
-    width: 60px;
+    width: auto;
+    min-width: 80px;
     text-align: right;
+    white-space: nowrap;
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .m-diff-abs {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--color-foreground-darker);
   }
 
   .m-diff.pos {
