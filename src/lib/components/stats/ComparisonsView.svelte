@@ -245,6 +245,11 @@
     return cur > past;
   }
 
+  function formatRounds(r: number): string {
+    const rounded = Math.round(r * 10) / 10;
+    return rounded.toString();
+  }
+
   // Chart rendering constants
   const CHART_W = 800;
   const CHART_H = 150;
@@ -282,7 +287,7 @@
         <div class="summary-stats">
           <span><strong>{formatDuration(curYearStats.totalSecs)}</strong> focused</span>
           <span class="sep">•</span>
-          <span><strong>{curYearStats.totalRounds}</strong> rounds</span>
+          <span><strong>{formatRounds(curYearStats.totalRounds)}</strong> rounds</span>
           <span class="sep">•</span>
           <span><strong>{Math.round((curYearStats.activeDays / Math.max(1, currentDayOfYear + 1)) * 100)}%</strong> consistency</span>
         </div>
@@ -311,7 +316,7 @@
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
-            <span class="m-val">{curYearStats.totalRounds}</span>
+            <span class="m-val">{formatRounds(curYearStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, prevYearStats.totalRounds)} class:neg={curYearStats.totalRounds < prevYearStats.totalRounds}>
               {pctChange(curYearStats.totalRounds, prevYearStats.totalRounds)} {getTrend(curYearStats.totalRounds, prevYearStats.totalRounds)}
             </span>
@@ -340,7 +345,7 @@
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
-            <span class="m-val">{curYearStats.totalRounds}</span>
+            <span class="m-val">{formatRounds(curYearStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} class:neg={curYearStats.totalRounds < bestYearInfo().stats.totalRounds}>
               {pctChange(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} {getTrend(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)}
             </span>
@@ -358,7 +363,7 @@
       <!-- Card 3: Prev Half -->
       <div class="card">
         <div class="card-title">vs. Previous Half ({prevHalfStr})</div>
-        <div class="card-subtitle">At this pacing ({Math.round(curHalfPct * 100)}% of period)</div>
+        <div class="card-subtitle">At Day {currentDayOfHalf + 1} ({Math.round(curHalfPct * 100)}% of Half)</div>
         <div class="card-metrics">
           <div class="metric-row">
             <span class="m-label">Hours</span>
@@ -369,7 +374,7 @@
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
-            <span class="m-val">{curHalfStats.totalRounds}</span>
+            <span class="m-val">{formatRounds(curHalfStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, prevHalfStats.totalRounds)} class:neg={curHalfStats.totalRounds < prevHalfStats.totalRounds}>
               {pctChange(curHalfStats.totalRounds, prevHalfStats.totalRounds)} {getTrend(curHalfStats.totalRounds, prevHalfStats.totalRounds)}
             </span>
@@ -380,7 +385,7 @@
       <!-- Card 4: Best Half -->
       <div class="card">
         <div class="card-title">vs. Best Half ({bestHalfInfo().half})</div>
-        <div class="card-subtitle">At this pacing ({Math.round(curHalfPct * 100)}% of period)</div>
+        <div class="card-subtitle">At Day {currentDayOfHalf + 1} ({Math.round(curHalfPct * 100)}% of Half)</div>
         <div class="card-metrics">
           <div class="metric-row">
             <span class="m-label">Hours</span>
@@ -391,7 +396,7 @@
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
-            <span class="m-val">{curHalfStats.totalRounds}</span>
+            <span class="m-val">{formatRounds(curHalfStats.totalRounds)}</span>
             <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} class:neg={curHalfStats.totalRounds < bestHalfInfo().stats.totalRounds}>
               {pctChange(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} {getTrend(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)}
             </span>
