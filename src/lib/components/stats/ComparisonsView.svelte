@@ -8,23 +8,35 @@
 
   let { heatmap }: Props = $props();
 
-  // ── Date Helpers ───────────────────────────────────────────────────────────
+  // ── Date Helpers (Strict UTC to avoid DST bugs) ────────────────────────────
+
+  function getDaysInYear(year: number): number {
+    return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0) ? 366 : 365;
+  }
+
+  function getDaysInHalf(year: number, isH2: boolean): number {
+    if (isH2) return 184;
+    return getDaysInYear(year) === 366 ? 182 : 181;
+  }
 
   function getDayOfYear(dateString: string): number {
-    const d = new Date(dateString + 'T00:00:00');
-    const start = new Date(d.getFullYear(), 0, 0);
-    const diff = (d.getTime() - start.getTime()) + ((start.getTimezoneOffset() - d.getTimezoneOffset()) * 60 * 1000);
-    const oneDay = 1000 * 60 * 60 * 24;
-    return Math.floor(diff / oneDay);
+    const d = new Date(`${dateString}T00:00:00Z`);
+    const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const diff = d.getTime() - start.getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24)); // 0-indexed day
   }
 
   function getDayOfHalf(dateString: string): number {
-    const d = new Date(dateString + 'T00:00:00');
-    const isH2 = d.getMonth() >= 6;
-    const start = isH2 ? new Date(d.getFullYear(), 6, 0) : new Date(d.getFullYear(), 0, 0);
-    const diff = (d.getTime() - start.getTime()) + ((start.getTimezoneOffset() - d.getTimezoneOffset()) * 60 * 1000);
-    const oneDay = 1000 * 60 * 60 * 24;
-    return Math.floor(diff / oneDay);
+    const d = new Date(`${dateString}T00:00:00Z`);
+    const isH2 = d.getUTCMonth() >= 6;
+    const start = isH2 ? new Date(Date.UTC(d.getUTCFullYear(), 6, 1)) : new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const diff = d.getTime() - start.getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24)); // 0-indexed day
+  }
+
+  function getHalfStr(dateString: string): string {
+    const d = new Date(`${dateString}T00:00:00Z`);
+    return `${d.getUTCFullYear()}-H${d.getUTCMonth() >= 6 ? '2' : '1'}`;
   }
 
   function formatDuration(secs: number): string {
@@ -33,21 +45,15 @@
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
 
-  function getHalfStr(dateString: string): string {
-    const d = new Date(dateString + 'T00:00:00');
-    return `${d.getFullYear()}-H${d.getMonth() >= 6 ? '2' : '1'}`;
-  }
-
   // ── Data Processing ────────────────────────────────────────────────────────
 
   interface PeriodStats {
     totalSecs: number;
     totalRounds: number;
     activeDays: number;
-    daysInPeriod: number; // For consistency
+    daysInPeriod: number;
   }
 
-  // Raw maps
   const yearlyData = $derived(() => {
     if (!heatmap?.entries) return new Map<number, HeatmapEntry[]>();
     const map = new Map<number, HeatmapEntry[]>();
@@ -71,74 +77,97 @@
   });
 
   // Current states
-  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const todayStr = new Date().toLocaleDateString('en-CA'); // Local time bounds our current context!
   const currentYear = parseInt(todayStr.split('-')[0], 10);
   const currentHalf = getHalfStr(todayStr);
   const currentDayOfYear = getDayOfYear(todayStr);
   const currentDayOfHalf = getDayOfHalf(todayStr);
+  
+  const curDaysInYear = getDaysInYear(currentYear);
+  const curDaysInHalf = getDaysInHalf(currentYear, currentHalf.endsWith('H2'));
+  const curYearPct = currentDayOfYear / curDaysInYear;
+  const curHalfPct = currentDayOfHalf / curDaysInHalf;
 
-  function calculateStats(entries: HeatmapEntry[] | undefined, cutoffDayFn: (d: string) => number, maxDay: number): PeriodStats {
-    if (!entries) return { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: maxDay };
+  function calculateStats(entries: HeatmapEntry[] | undefined, cutoffPct: number, getDaysInPeriod: number, getDayOfPeriod: (d: string) => number): PeriodStats {
+    if (!entries) return { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: getDaysInPeriod };
     let secs = 0, rounds = 0, days = 0;
     for (const e of entries) {
-      if (cutoffDayFn(e.date) <= maxDay) {
+      const dayIdx = getDayOfPeriod(e.date);
+      const pct = dayIdx / getDaysInPeriod;
+      if (pct <= cutoffPct) {
         secs += e.focus_secs;
         rounds += e.count;
         if (e.focus_secs > 0) days++;
       }
     }
-    return { totalSecs: secs, totalRounds: rounds, activeDays: days, daysInPeriod: maxDay };
+    return { totalSecs: secs, totalRounds: rounds, activeDays: days, daysInPeriod: getDaysInPeriod };
   }
 
-  // Calculate year stats up to today's day-of-year
-  const yearStats = $derived(() => {
+  // Calculate year stats up to today's YEAR PERCENTAGE
+  const yearStatsPaced = $derived(() => {
     const stats = new Map<number, PeriodStats>();
     for (const [y, entries] of yearlyData().entries()) {
-      stats.set(y, calculateStats(entries, getDayOfYear, currentDayOfYear));
+      stats.set(y, calculateStats(entries, curYearPct, getDaysInYear(y), getDayOfYear));
     }
     return stats;
   });
 
-  // Calculate half stats up to today's day-of-half
-  const halfStats = $derived(() => {
+  // Calculate half stats up to today's HALF PERCENTAGE
+  const halfStatsPaced = $derived(() => {
     const stats = new Map<string, PeriodStats>();
     for (const [h, entries] of halfData().entries()) {
-      stats.set(h, calculateStats(entries, getDayOfHalf, currentDayOfHalf));
+      const y = parseInt(h.split('-')[0], 10);
+      const isH2 = h.endsWith('H2');
+      stats.set(h, calculateStats(entries, curHalfPct, getDaysInHalf(y, isH2), getDayOfHalf));
     }
     return stats;
   });
 
-  // ── Comparisons ────────────────────────────────────────────────────────────
+  // Calculate TOTAL historical stats to find the true "Best" overall.
+  function sumAllStats(entries: HeatmapEntry[] | undefined): number {
+    if (!entries) return 0;
+    return entries.reduce((sum, e) => sum + e.focus_secs, 0);
+  }
 
-  const curYearStats = $derived(yearStats().get(currentYear) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: currentDayOfYear });
-  const prevYearStats = $derived(yearStats().get(currentYear - 1) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: currentDayOfYear });
-  
-  // Find best year (excluding current)
   const bestYearInfo = $derived(() => {
     let bestY = currentYear - 1;
     let maxSecs = -1;
-    for (const [y, s] of yearStats().entries()) {
+    for (const [y, entries] of yearlyData().entries()) {
       if (y === currentYear) continue;
-      if (s.totalSecs > maxSecs) { maxSecs = s.totalSecs; bestY = y; }
+      const total = sumAllStats(entries);
+      if (total > maxSecs) { maxSecs = total; bestY = y; }
     }
-    return { year: bestY, stats: yearStats().get(bestY) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: currentDayOfYear } };
+    return { 
+      year: bestY, 
+      stats: yearStatsPaced().get(bestY) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: getDaysInYear(bestY) }
+    };
   });
 
-  // Same for halves
   const [curHYear, curHNum] = currentHalf.split('-H');
   const prevHalfStr = curHNum === '2' ? `${curHYear}-H1` : `${parseInt(curHYear)-1}-H2`;
-  const curHalfStats = $derived(halfStats().get(currentHalf) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: currentDayOfHalf });
-  const prevHalfStats = $derived(halfStats().get(prevHalfStr) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: currentDayOfHalf });
-
+  
   const bestHalfInfo = $derived(() => {
     let bestH = prevHalfStr;
     let maxSecs = -1;
-    for (const [h, s] of halfStats().entries()) {
+    for (const [h, entries] of halfData().entries()) {
       if (h === currentHalf) continue;
-      if (s.totalSecs > maxSecs) { maxSecs = s.totalSecs; bestH = h; }
+      const total = sumAllStats(entries);
+      if (total > maxSecs) { maxSecs = total; bestH = h; }
     }
-    return { half: bestH, stats: halfStats().get(bestH) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: currentDayOfHalf } };
+    const [by, bh] = bestH.split('-H');
+    return { 
+      half: bestH, 
+      stats: halfStatsPaced().get(bestH) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: getDaysInHalf(parseInt(by, 10), bh === '2') }
+    };
   });
+
+  // ── Current Pacing Stats ───────────────────────────────────────────────────
+
+  const curYearStats = $derived(yearStatsPaced().get(currentYear) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: curDaysInYear });
+  const prevYearStats = $derived(yearStatsPaced().get(currentYear - 1) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: getDaysInYear(currentYear - 1) });
+  
+  const curHalfStats = $derived(halfStatsPaced().get(currentHalf) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: curDaysInHalf });
+  const prevHalfStats = $derived(halfStatsPaced().get(prevHalfStr) || { totalSecs: 0, totalRounds: 0, activeDays: 0, daysInPeriod: getDaysInHalf(parseInt(prevHalfStr.split('-')[0], 10), prevHalfStr.endsWith('H2')) });
 
   // ── Best Day / Month ───────────────────────────────────────────────────────
   
@@ -161,28 +190,28 @@
     return { month: maxMonth, secs: maxSecs };
   });
 
-  // Forecast
+  // Forecast using actual days in year
   const projectedYearSecs = $derived(() => {
-    if (currentDayOfYear === 0) return 0;
-    const avgDaily = curYearStats.totalSecs / currentDayOfYear;
-    return avgDaily * 365;
+    const elapsedDays = currentDayOfYear + 1; // 0-indexed to count
+    if (elapsedDays <= 0) return 0;
+    const avgDaily = curYearStats.totalSecs / elapsedDays;
+    return avgDaily * curDaysInYear;
   });
 
   // Chart data
-  // We want to generate cumulative points for each day of the year (0 to 365).
   function getCumulativeYear(year: number): number[] {
-    const arr = new Array(366).fill(0);
+    const totalDays = getDaysInYear(year);
+    const arr = new Array(totalDays).fill(0);
     const entries = yearlyData().get(year);
     if (entries) {
       for (const e of entries) {
         const d = getDayOfYear(e.date);
-        if (d >= 0 && d <= 365) {
+        if (d >= 0 && d < totalDays) {
           arr[d] += e.focus_secs;
         }
       }
     }
-    // accumulate
-    for (let i = 1; i <= 365; i++) {
+    for (let i = 1; i < totalDays; i++) {
       arr[i] += arr[i-1];
     }
     return arr;
@@ -199,13 +228,21 @@
   // ── Render Helpers ─────────────────────────────────────────────────────────
 
   function pctChange(cur: number, past: number): string {
-    if (past === 0) return cur > 0 ? '+100%' : '0%';
+    if (past === 0) return cur > 0 ? '—' : '—'; // Prevent infinite +100% inflation
+    if (cur === 0 && past === 0) return '—';
     const diff = ((cur - past) / past) * 100;
-    return (diff >= 0 ? '+' : '') + Math.abs(diff).toFixed(1) + '%';
+    if (diff === 0) return '0%';
+    return (diff > 0 ? '+' : '') + diff.toFixed(1) + '%';
+  }
+
+  function getTrend(cur: number, past: number): string {
+    if (past === 0 || cur === past) return '';
+    return cur > past ? '▲' : '▼';
   }
 
   function isPos(cur: number, past: number): boolean {
-    return cur >= past;
+    if (past === 0 || cur === past) return false;
+    return cur > past;
   }
 
   // Chart rendering constants
@@ -216,17 +253,18 @@
     const data = chartData();
     let m = 1;
     if (data.current.length > 0) m = Math.max(m, data.current[data.current.length - 1]);
-    m = Math.max(m, data.previous[365] || 0);
-    m = Math.max(m, data.best[365] || 0);
+    if (data.previous.length > 0) m = Math.max(m, data.previous[data.previous.length - 1]);
+    if (data.best.length > 0) m = Math.max(m, data.best[data.best.length - 1]);
     return m;
   });
 
   function makePath(points: number[]): string {
     if (points.length === 0) return '';
     const maxMins = Math.max(1, chartMaxVal() / 60);
+    const totalDays = points.length < 366 ? 365 : 366;
     let d = '';
     for (let i = 0; i < points.length; i++) {
-      const x = (i / 365) * CHART_W;
+      const x = (i / (totalDays - 1)) * CHART_W;
       const h = ((points[i]/60) / maxMins) * CHART_H;
       const y = CHART_H - h;
       d += i === 0 ? `M ${x} ${y} ` : `L ${x} ${y} `;
@@ -240,13 +278,13 @@
     <!-- Top Summary -->
     <div class="top-summary">
       <div class="summary-details">
-        <h3>So far in {currentYear} <span style="font-weight: 400; font-size: 0.9em; opacity: 0.7">(Day {currentDayOfYear})</span></h3>
+        <h3>So far in {currentYear} <span style="font-weight: 400; font-size: 0.9em; opacity: 0.7">(Day {currentDayOfYear + 1})</span></h3>
         <div class="summary-stats">
           <span><strong>{formatDuration(curYearStats.totalSecs)}</strong> focused</span>
           <span class="sep">•</span>
           <span><strong>{curYearStats.totalRounds}</strong> rounds</span>
           <span class="sep">•</span>
-          <span><strong>{Math.round((curYearStats.activeDays / Math.max(1, currentDayOfYear)) * 100)}%</strong> consistency</span>
+          <span><strong>{Math.round((curYearStats.activeDays / Math.max(1, currentDayOfYear + 1)) * 100)}%</strong> consistency</span>
         </div>
       </div>
       <div class="forecast-box">
@@ -262,27 +300,27 @@
       <!-- Card 1: Prev Year -->
       <div class="card">
         <div class="card-title">vs. Previous Year ({currentYear - 1})</div>
-        <div class="card-subtitle">At this day ({currentDayOfYear} / 365)</div>
+        <div class="card-subtitle">At this day ({currentDayOfYear + 1} / {curDaysInYear})</div>
         <div class="card-metrics">
           <div class="metric-row">
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curYearStats.totalSecs)}</span>
-            <span class="m-diff" class:pos={isPos(curYearStats.totalSecs, prevYearStats.totalSecs)} class:neg={!isPos(curYearStats.totalSecs, prevYearStats.totalSecs)}>
-              {pctChange(curYearStats.totalSecs, prevYearStats.totalSecs)} {isPos(curYearStats.totalSecs, prevYearStats.totalSecs) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curYearStats.totalSecs, prevYearStats.totalSecs)} class:neg={curYearStats.totalSecs < prevYearStats.totalSecs}>
+              {pctChange(curYearStats.totalSecs, prevYearStats.totalSecs)} {getTrend(curYearStats.totalSecs, prevYearStats.totalSecs)}
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{curYearStats.totalRounds}</span>
-            <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, prevYearStats.totalRounds)} class:neg={!isPos(curYearStats.totalRounds, prevYearStats.totalRounds)}>
-              {pctChange(curYearStats.totalRounds, prevYearStats.totalRounds)} {isPos(curYearStats.totalRounds, prevYearStats.totalRounds) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, prevYearStats.totalRounds)} class:neg={curYearStats.totalRounds < prevYearStats.totalRounds}>
+              {pctChange(curYearStats.totalRounds, prevYearStats.totalRounds)} {getTrend(curYearStats.totalRounds, prevYearStats.totalRounds)}
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Consistency</span>
-            <span class="m-val">{Math.round((curYearStats.activeDays / currentDayOfYear) * 100)}%</span>
-            <span class="m-diff" class:pos={isPos(curYearStats.activeDays, prevYearStats.activeDays)} class:neg={!isPos(curYearStats.activeDays, prevYearStats.activeDays)}>
-              {pctChange(curYearStats.activeDays, prevYearStats.activeDays)} {isPos(curYearStats.activeDays, prevYearStats.activeDays) ? '▲' : '▼'}
+            <span class="m-val">{Math.round((curYearStats.activeDays / (currentDayOfYear + 1)) * 100)}%</span>
+            <span class="m-diff" class:pos={isPos(curYearStats.activeDays, prevYearStats.activeDays)} class:neg={curYearStats.activeDays < prevYearStats.activeDays}>
+              {pctChange(curYearStats.activeDays, prevYearStats.activeDays)} {getTrend(curYearStats.activeDays, prevYearStats.activeDays)}
             </span>
           </div>
         </div>
@@ -291,27 +329,27 @@
       <!-- Card 2: Best Year -->
       <div class="card">
         <div class="card-title">vs. Best Year ({bestYearInfo().year})</div>
-        <div class="card-subtitle">At this day ({currentDayOfYear} / 365)</div>
+        <div class="card-subtitle">At this day ({Math.min(currentDayOfYear + 1, bestYearInfo().stats.daysInPeriod)} / {bestYearInfo().stats.daysInPeriod})</div>
         <div class="card-metrics">
           <div class="metric-row">
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curYearStats.totalSecs)}</span>
-            <span class="m-diff" class:pos={isPos(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)} class:neg={!isPos(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)}>
-              {pctChange(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)} {isPos(curYearStats.totalSecs, bestYearInfo().stats.totalSecs) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)} class:neg={curYearStats.totalSecs < bestYearInfo().stats.totalSecs}>
+              {pctChange(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)} {getTrend(curYearStats.totalSecs, bestYearInfo().stats.totalSecs)}
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{curYearStats.totalRounds}</span>
-            <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} class:neg={!isPos(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)}>
-              {pctChange(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} {isPos(curYearStats.totalRounds, bestYearInfo().stats.totalRounds) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} class:neg={curYearStats.totalRounds < bestYearInfo().stats.totalRounds}>
+              {pctChange(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)} {getTrend(curYearStats.totalRounds, bestYearInfo().stats.totalRounds)}
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Consistency</span>
-            <span class="m-val">{Math.round((curYearStats.activeDays / currentDayOfYear) * 100)}%</span>
-            <span class="m-diff" class:pos={isPos(curYearStats.activeDays, bestYearInfo().stats.activeDays)} class:neg={!isPos(curYearStats.activeDays, bestYearInfo().stats.activeDays)}>
-              {pctChange(curYearStats.activeDays, bestYearInfo().stats.activeDays)} {isPos(curYearStats.activeDays, bestYearInfo().stats.activeDays) ? '▲' : '▼'}
+            <span class="m-val">{Math.round((curYearStats.activeDays / (currentDayOfYear + 1)) * 100)}%</span>
+            <span class="m-diff" class:pos={isPos(curYearStats.activeDays, bestYearInfo().stats.activeDays)} class:neg={curYearStats.activeDays < bestYearInfo().stats.activeDays}>
+              {pctChange(curYearStats.activeDays, bestYearInfo().stats.activeDays)} {getTrend(curYearStats.activeDays, bestYearInfo().stats.activeDays)}
             </span>
           </div>
         </div>
@@ -320,20 +358,20 @@
       <!-- Card 3: Prev Half -->
       <div class="card">
         <div class="card-title">vs. Previous Half ({prevHalfStr})</div>
-        <div class="card-subtitle">At this day ({currentDayOfHalf} / 182)</div>
+        <div class="card-subtitle">At this pacing ({Math.round(curHalfPct * 100)}% of period)</div>
         <div class="card-metrics">
           <div class="metric-row">
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curHalfStats.totalSecs)}</span>
-            <span class="m-diff" class:pos={isPos(curHalfStats.totalSecs, prevHalfStats.totalSecs)} class:neg={!isPos(curHalfStats.totalSecs, prevHalfStats.totalSecs)}>
-              {pctChange(curHalfStats.totalSecs, prevHalfStats.totalSecs)} {isPos(curHalfStats.totalSecs, prevHalfStats.totalSecs) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curHalfStats.totalSecs, prevHalfStats.totalSecs)} class:neg={curHalfStats.totalSecs < prevHalfStats.totalSecs}>
+              {pctChange(curHalfStats.totalSecs, prevHalfStats.totalSecs)} {getTrend(curHalfStats.totalSecs, prevHalfStats.totalSecs)}
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{curHalfStats.totalRounds}</span>
-            <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, prevHalfStats.totalRounds)} class:neg={!isPos(curHalfStats.totalRounds, prevHalfStats.totalRounds)}>
-              {pctChange(curHalfStats.totalRounds, prevHalfStats.totalRounds)} {isPos(curHalfStats.totalRounds, prevHalfStats.totalRounds) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, prevHalfStats.totalRounds)} class:neg={curHalfStats.totalRounds < prevHalfStats.totalRounds}>
+              {pctChange(curHalfStats.totalRounds, prevHalfStats.totalRounds)} {getTrend(curHalfStats.totalRounds, prevHalfStats.totalRounds)}
             </span>
           </div>
         </div>
@@ -342,20 +380,20 @@
       <!-- Card 4: Best Half -->
       <div class="card">
         <div class="card-title">vs. Best Half ({bestHalfInfo().half})</div>
-        <div class="card-subtitle">At this day ({currentDayOfHalf} / 182)</div>
+        <div class="card-subtitle">At this pacing ({Math.round(curHalfPct * 100)}% of period)</div>
         <div class="card-metrics">
           <div class="metric-row">
             <span class="m-label">Hours</span>
             <span class="m-val">{formatDuration(curHalfStats.totalSecs)}</span>
-            <span class="m-diff" class:pos={isPos(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)} class:neg={!isPos(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)}>
-              {pctChange(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)} {isPos(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)} class:neg={curHalfStats.totalSecs < bestHalfInfo().stats.totalSecs}>
+              {pctChange(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)} {getTrend(curHalfStats.totalSecs, bestHalfInfo().stats.totalSecs)}
             </span>
           </div>
           <div class="metric-row">
             <span class="m-label">Rounds</span>
             <span class="m-val">{curHalfStats.totalRounds}</span>
-            <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} class:neg={!isPos(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)}>
-              {pctChange(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} {isPos(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds) ? '▲' : '▼'}
+            <span class="m-diff" class:pos={isPos(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} class:neg={curHalfStats.totalRounds < bestHalfInfo().stats.totalRounds}>
+              {pctChange(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)} {getTrend(curHalfStats.totalRounds, bestHalfInfo().stats.totalRounds)}
             </span>
           </div>
         </div>
@@ -395,7 +433,7 @@
     <div class="shoutouts">
       {#if bestDay() && bestMonth()}
         <div class="shoutout-item">
-          <strong>All-time Best Day:</strong> <span class="highlight">{new Date(bestDay()!.date + 'T00:00:00').toLocaleDateString()}</span>
+          <strong>All-time Best Day:</strong> <span class="highlight">{new Date(`${bestDay()!.date}T12:00:00Z`).toLocaleDateString()}</span>
           <span class="metric">({formatDuration(bestDay()!.focus_secs)})</span>
         </div>
         <div class="shoutout-item">
