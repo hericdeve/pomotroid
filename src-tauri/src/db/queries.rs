@@ -456,7 +456,7 @@ pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<V
     let mut topics = Vec::new();
     if let Some(s) = subject {
         let mut stmt = conn.prepare(
-            "SELECT DISTINCT subject_topic FROM sessions WHERE subject = ?1 AND subject_topic IS NOT NULL AND subject_topic != '' ORDER BY subject_topic COLLATE NOCASE ASC"
+            "SELECT DISTINCT subject_topic FROM sessions WHERE subject = ?1 AND subject_topic IS NOT NULL AND subject_topic != '' AND deleted_at IS NULL ORDER BY subject_topic COLLATE NOCASE ASC"
         )?;
         let rows = stmt.query_map([s], |r| r.get(0))?;
         for row in rows {
@@ -464,7 +464,7 @@ pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<V
         }
     } else {
         let mut stmt = conn.prepare(
-            "SELECT DISTINCT subject_topic FROM sessions WHERE subject_topic IS NOT NULL AND subject_topic != '' ORDER BY subject_topic COLLATE NOCASE ASC"
+            "SELECT DISTINCT subject_topic FROM sessions WHERE subject_topic IS NOT NULL AND subject_topic != '' AND deleted_at IS NULL ORDER BY subject_topic COLLATE NOCASE ASC"
         )?;
         let rows = stmt.query_map([], |r| r.get(0))?;
         for row in rows {
@@ -476,7 +476,7 @@ pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<V
 
 pub fn get_distinct_study_types(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT study_type FROM sessions WHERE study_type IS NOT NULL AND study_type != '' ORDER BY study_type COLLATE NOCASE ASC"
+        "SELECT DISTINCT study_type FROM sessions WHERE study_type IS NOT NULL AND study_type != '' AND deleted_at IS NULL ORDER BY study_type COLLATE NOCASE ASC"
     )?;
     let rows = stmt.query_map([], |r| r.get(0))?;
     let mut types = Vec::new();
@@ -500,20 +500,20 @@ pub struct SessionStats {
 
 pub fn get_all_time_stats(conn: &Connection) -> Result<SessionStats> {
     let total_work_sessions: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions WHERE round_type = 'work'",
+        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions WHERE round_type = 'work' AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
 
     let completed_work_sessions: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions WHERE round_type = 'work' AND completed = 1",
+        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
 
     let total_work_secs: i64 = conn.query_row(
         "SELECT COALESCE(SUM(duration_secs), 0)
-         FROM sessions WHERE round_type = 'work' AND completed = 1",
+         FROM sessions WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
@@ -569,7 +569,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
 
     let total: f64 = conn.query_row(
         "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions
-         WHERE round_type = 'work'
+         WHERE round_type = 'work' AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
         |r| r.get(0),
@@ -577,7 +577,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
 
     let completed: f64 = conn.query_row(
         "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions
-         WHERE round_type = 'work' AND completed = 1
+         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
         |r| r.get(0),
@@ -585,7 +585,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
 
     let focus_secs: i64 = conn.query_row(
         "SELECT COALESCE(SUM(duration_secs), 0) FROM sessions
-         WHERE round_type = 'work' AND completed = 1
+         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
         |r| r.get(0),
@@ -622,7 +622,7 @@ pub fn get_weekly_stats(conn: &Connection) -> Result<Vec<DayStat>> {
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as rounds
          FROM sessions
-         WHERE round_type = 'work' AND completed = 1
+         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') >= date('now', 'localtime', '-6 days')
          GROUP BY day
          ORDER BY day",
@@ -639,7 +639,7 @@ pub fn get_heatmap_data(conn: &Connection) -> Result<Vec<HeatmapEntry>> {
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as cnt
          FROM sessions
-         WHERE round_type = 'work' AND completed = 1
+         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          GROUP BY day
          ORDER BY day",
     )?;
@@ -661,7 +661,7 @@ pub fn get_streak(conn: &Connection) -> Result<StreakInfo> {
     let mut stmt = conn.prepare(
         "SELECT date(started_at, 'unixepoch', 'localtime') as day
          FROM sessions
-         WHERE round_type = 'work' AND completed = 1
+         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          GROUP BY day
          ORDER BY day",
     )?;
