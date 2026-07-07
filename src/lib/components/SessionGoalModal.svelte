@@ -60,7 +60,7 @@
       return { longBreaks: 0, shortBreaks: Math.max(0, goal - 1) };
     }
     const longBreaks = Math.floor((goal - 1) / interval);
-    const shortBreaks = Math.max(0, goal - 1 - longBreaks);
+    const shortBreaks = $settings.short_breaks_enabled ? Math.max(0, goal - 1 - longBreaks) : 0;
     return { longBreaks, shortBreaks };
   }
 
@@ -90,7 +90,7 @@
     const shortDone = breaksToSkip - longDone;
     const shortTotal = totalBreaks - longTotal;
     const longLeft = Math.max(0, longTotal - longDone);
-    const shortLeft = Math.max(0, shortTotal - shortDone);
+    const shortLeft = $settings.short_breaks_enabled ? Math.max(0, shortTotal - shortDone) : 0;
     return (
       longLeft * $settings.time_long_break_secs +
       shortLeft * $settings.time_short_break_secs
@@ -110,34 +110,18 @@
   // ── Finish-time clock ──────────────────────────────────────────────────────
   //
   // `nowMs` is the epoch ms anchor for finish-time calculation.
-  //
-  // • RUNNING: no interval runs. `snap.elapsed_secs` increases 1/s via
-  //   timer:tick, which decreases `computeRemainingMs()` by exactly 1 s,
-  //   making `nowMs + computeRemainingMs()` perfectly stable.
-  //
-  // • PAUSED / IDLE (elapsed=0, not running): the backend emits no ticks, so
-  //   `snap` is frozen. A 1-s interval advances `nowMs` so the finish time
-  //   drifts forward by 1 s per real second — reflecting the actual delay.
-  //
-  // • On every state transition `nowMs` is re-anchored to Date.now() so
-  //   there is no discontinuous jump when switching between states.
+  // We unconditionally keep it synced to Date.now() every second.
+  // Because `computeRemainingMs()` shrinks in real-time as the timer runs,
+  // continuously advancing `nowMs` perfectly balances the equation and produces
+  // a perfectly stable finish time during both running and paused states.
 
   let nowMs = $state(Date.now());
 
   $effect(() => {
-    const isIdle = !snap.is_running && snap.elapsed_secs === 0;
-    const isDelaying = snap.is_paused || isIdle;
-
-    // Re-anchor on every state transition (no jump between modes).
-    nowMs = Date.now();
-
-    if (isDelaying) {
-      const id = setInterval(() => {
-        nowMs = Date.now();
-      }, 1000);
-      return () => clearInterval(id);
-    }
-    // Running: elapsed_secs cancels out the passage of nowMs — no interval needed.
+    const id = setInterval(() => {
+      nowMs = Date.now();
+    }, 1000);
+    return () => clearInterval(id);
   });
 
   // Remaining milliseconds from nowMs, correctly accounting for the
