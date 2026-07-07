@@ -13,6 +13,7 @@
   let subjectGraphType = $state<'donut' | 'bar'>('donut');
 
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const colors = [
     '#f43f5e', '#ec4899', '#d946ef', '#a855f7', '#8b5cf6', '#6366f1', 
     '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6', '#10b981', '#22c55e', 
@@ -130,6 +131,7 @@
   
   const maxDayTime = $derived(insights ? Math.max(1, ...insights.by_day_of_week) : 1);
   const maxHourTime = $derived(insights ? Math.max(1, ...insights.by_hour_of_day) : 1);
+  const maxMonthTime = $derived(insights && insights.by_month ? Math.max(1, ...insights.by_month) : 1);
 
   // SVG parameters
   const CHART_H = 160;
@@ -301,6 +303,35 @@
         </div>
       </div>
 
+      <!-- Month Card -->
+      <div class="card card-wide">
+        <div class="card-header">
+          <h3>Time by Month</h3>
+        </div>
+        <div class="vertical-chart-container month-chart-wrap">
+          <svg width="580" height="{CHART_H + 40}" viewBox="0 0 580 {CHART_H + 40}" class="vertical-svg">
+            {#each (insights.by_month || Array(12).fill(0)) as secs, i}
+              {@const h = secs > 0 ? Math.max(1, (secs / maxMonthTime) * CHART_H) : 0}
+              {@const x = i * 48 + 12}
+              {@const y = CHART_H - h}
+              {@const cx = x + 16}
+              {@const tooltipX = Math.max(0, Math.min(cx - 30, 580 - 60))}
+              
+              <g class="chart-group">
+                <rect {x} {y} width="32" height={h} fill={colors[(i + 7) % colors.length]} rx="3" class="v-bar" />
+                <text x={cx} y={CHART_H + 18} text-anchor="middle" class="axis-label">{months[i]}</text>
+                
+                <rect x={i * 48} y="0" width="48" height={CHART_H + 40} fill="transparent" class="hover-area" />
+                <g class="tooltip">
+                  <rect x={tooltipX} y={y - 30} width="60" height="24" rx="4" fill="var(--color-background)" />
+                  <text x={tooltipX + 30} y={y - 14} text-anchor="middle" class="tooltip-text">{fmtTime(secs)}</text>
+                </g>
+              </g>
+            {/each}
+          </svg>
+        </div>
+      </div>
+
     </div>
   {/if}
 </div>
@@ -310,7 +341,8 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
-    padding-bottom: 40px;
+    padding: 24px;
+    overflow-y: auto;
   }
   
   .filter-bar {

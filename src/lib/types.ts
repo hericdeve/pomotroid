@@ -144,6 +144,7 @@ export interface InsightsStats {
   top_subjects: SubjectInsight[];
   by_day_of_week: number[];
   by_hour_of_day: number[];
+  by_month: number[];
 }
 
 export interface SubjectStats {

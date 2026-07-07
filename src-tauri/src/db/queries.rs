@@ -991,6 +991,7 @@ pub struct InsightsStats {
     pub top_subjects: Vec<SubjectInsight>,
     pub by_day_of_week: Vec<i64>, // 0 = Sunday, 6 = Saturday
     pub by_hour_of_day: Vec<i64>, // 0 = 12am, 23 = 11pm
+    pub by_month: Vec<i64>,       // 0 = Jan, 11 = Dec
 }
 
 pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<InsightsStats> {
@@ -1061,10 +1062,25 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
         }
     }
 
+    // By Month
+    let month_query = format!("SELECT CAST(strftime('%m', started_at, 'unixepoch', 'localtime') AS INTEGER), SUM(duration_secs) {} GROUP BY strftime('%m', started_at, 'unixepoch', 'localtime')", base_query);
+    let mut stmt = conn.prepare(&month_query)?;
+    let mut by_month = vec![0; 12];
+    let mut rows = stmt.query(rusqlite::params_from_iter(params.iter()))?;
+    while let Some(row) = rows.next()? {
+        let month_i: i64 = row.get(0)?;
+        let secs: i64 = row.get(1)?;
+        let month = (month_i - 1) as usize;
+        if month < 12 {
+            by_month[month] = secs;
+        }
+    }
+
     Ok(InsightsStats {
         top_subjects,
         by_day_of_week,
         by_hour_of_day,
+        by_month,
     })
 }
 
