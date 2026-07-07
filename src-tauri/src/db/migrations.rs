@@ -87,6 +87,8 @@ const MIGRATION_6: &str = "
     INSERT OR IGNORE INTO settings (key, value) VALUES ('local_shortcut_volume_up', 'ArrowUp');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('local_shortcut_mute', 'm');
     INSERT OR IGNORE INTO settings (key, value) VALUES ('local_shortcut_fullscreen', 'F11');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('local_shortcut_palette', 'p');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('local_shortcut_stats', 's');
     INSERT INTO schema_version VALUES (6);
 ";
 

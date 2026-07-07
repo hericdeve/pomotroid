@@ -4,6 +4,7 @@
 
 import { timerToggle, timerRestartRound, timerSkip, setSetting } from '$lib/ipc';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { openStatsWindow } from '$lib/utils/windows';
 import { invoke } from '@tauri-apps/api/core';
 import type { Settings } from '$lib/types';
 
@@ -99,6 +100,9 @@ export function createLocalShortcutHandler(state: LocalShortcutState): (e: Keybo
     } else if (key === s.local_shortcut_palette) {
       e.preventDefault();
       invoke('palette_open').catch(console.error);
+    } else if (key === s.local_shortcut_stats) {
+      e.preventDefault();
+      openStatsWindow().catch(console.error);
     }
   };
 }

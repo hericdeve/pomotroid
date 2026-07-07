@@ -117,6 +117,13 @@
         onchange={(v) => setLocalShortcut('local_shortcut_palette', v)}
       />
     </div>
+    <div class="row">
+      <span class="label">Open statistics window</span>
+      <LocalShortcutInput
+        value={$settings.local_shortcut_stats}
+        onchange={(v) => setLocalShortcut('local_shortcut_stats', v)}
+      />
+    </div>
   </div>
 
   <!-- Global shortcuts second -->

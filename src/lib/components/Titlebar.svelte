@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
+  import { openSettingsWindow, openStatsWindow } from '$lib/utils/windows';
   import { setWindowVisibility } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
   import { isMac } from '$lib/utils/platform';
@@ -72,49 +73,11 @@
   });
 
   async function openSettings() {
-    const existing = await WebviewWindow.getByLabel('settings');
-    if (existing) {
-      await existing.show();
-      await existing.setFocus();
-      return;
-    }
-    new WebviewWindow('settings', {
-      url: '/settings',
-      title: 'Pomotroid — Settings',
-      width: 720,
-      height: 520,
-      // On macOS: native decorations + overlay titlebar for rounded corners and
-      // traffic light buttons. On other platforms: custom decorations-free window.
-      decorations: isMac,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      titleBarStyle: isMac ? ('Overlay' as any) : undefined,
-      hiddenTitle: isMac ? true : undefined,
-      resizable: false,
-      visible: false,
-    });
+    await openSettingsWindow();
   }
 
   async function openStats() {
-    const existing = await WebviewWindow.getByLabel('stats');
-    if (existing) {
-      await existing.show();
-      await existing.setFocus();
-      return;
-    }
-    new WebviewWindow('stats', {
-      url: '/stats',
-      title: 'Pomotroid — Statistics',
-      width: 840,
-      height: 520,
-      minWidth: 600,
-      minHeight: 400,
-      decorations: isMac,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      titleBarStyle: isMac ? ('Overlay' as any) : undefined,
-      hiddenTitle: isMac ? true : undefined,
-      resizable: true,
-      visible: false,
-    });
+    await openStatsWindow();
   }
 
   async function minimize() {

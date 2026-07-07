@@ -60,6 +60,7 @@ pub struct Settings {
     pub local_shortcut_mute: String,
     pub local_shortcut_fullscreen: String,
     pub local_shortcut_palette: String,
+    pub local_shortcut_stats: String,
     /// Last known window X coordinate (physical pixels). `None` = use OS default.
     pub window_x: Option<i32>,
     /// Last known window Y coordinate (physical pixels). `None` = use OS default.
@@ -129,6 +130,7 @@ impl Default for Settings {
             local_shortcut_mute: "m".to_string(),
             local_shortcut_fullscreen: "F11".to_string(),
             local_shortcut_palette: "p".to_string(),
+            local_shortcut_stats: "s".to_string(),
             window_x: None,
             window_y: None,
             window_width: None,
@@ -259,6 +261,7 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         local_shortcut_mute: map.get("local_shortcut_mute").cloned().unwrap_or(d.local_shortcut_mute),
         local_shortcut_fullscreen: map.get("local_shortcut_fullscreen").cloned().unwrap_or(d.local_shortcut_fullscreen),
         local_shortcut_palette: map.get("local_shortcut_palette").cloned().unwrap_or(d.local_shortcut_palette),
+        local_shortcut_stats: map.get("local_shortcut_stats").cloned().unwrap_or(d.local_shortcut_stats),
         window_x: parse_opt_i32(&map, "window_x"),
         window_y: parse_opt_i32(&map, "window_y"),
         window_width: parse_opt_u32(&map, "window_width"),

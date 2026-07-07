@@ -66,6 +66,7 @@ export interface Settings {
   local_shortcut_mute: string;
   local_shortcut_fullscreen: string;
   local_shortcut_palette: string;
+  local_shortcut_stats: string;
   history_show_breaks: boolean;
   session_goal_rounds: number;
 }

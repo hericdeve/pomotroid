@@ -42,6 +42,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("local_shortcut_mute", "m"),
     ("local_shortcut_fullscreen", "F11"),
     ("local_shortcut_palette", "p"),
+    ("local_shortcut_stats", "s"),
     ("history_show_breaks", "true"),
     ("session_goal_rounds", "8"),
 ];

@@ -76,20 +76,19 @@
     return goal * $settings.time_work_secs;
   }
 
-  // How many break-seconds remain AFTER a given number of completed rounds.
-  function remainingBreakSecs(goal: number, completed: number): number {
+  // How many break-seconds remain AFTER `breaksToSkip` breaks have already happened.
+  function futureBreakSecs(goal: number, breaksToSkip: number): number {
     const interval = $settings.long_break_interval;
-    const total = Math.max(0, goal - 1);
-    const done = Math.max(0, completed - 1);
-    if (done >= total) return 0;
+    const totalBreaks = Math.max(0, goal - 1);
+    if (breaksToSkip >= totalBreaks) return 0;
     if (!$settings.long_breaks_enabled && !$settings.short_breaks_enabled) return 0;
     if (!$settings.long_breaks_enabled) {
-      return (total - done) * $settings.time_short_break_secs;
+      return (totalBreaks - breaksToSkip) * $settings.time_short_break_secs;
     }
-    const longDone = Math.floor(done / interval);
-    const longTotal = Math.floor(total / interval);
-    const shortDone = done - longDone;
-    const shortTotal = total - longTotal;
+    const longDone = Math.floor(breaksToSkip / interval);
+    const longTotal = Math.floor(totalBreaks / interval);
+    const shortDone = breaksToSkip - longDone;
+    const shortTotal = totalBreaks - longTotal;
     const longLeft = Math.max(0, longTotal - longDone);
     const shortLeft = Math.max(0, shortTotal - shortDone);
     return (
@@ -151,14 +150,14 @@
       // future full work rounds, then the break right after this round, then
       // all further future breaks.
       const futureWorkSecs = Math.max(0, remainingRounds - 1) * $settings.time_work_secs;
-      const immediateBreakSecs = remainingRounds > 0 ? nextBreakDuration(completedRounds) : 0;
-      const futureBreakSecs = remainingBreakSecs(activeGoal, completedRounds + 1);
-      return (currentRoundRemSecs + futureWorkSecs + immediateBreakSecs + futureBreakSecs) * 1000;
+      const immediateBreakSecs = remainingRounds > 1 ? nextBreakDuration(completedRounds) : 0;
+      const futBreakSecs = futureBreakSecs(activeGoal, completedRounds + 1);
+      return (currentRoundRemSecs + futureWorkSecs + immediateBreakSecs + futBreakSecs) * 1000;
     } else {
       // On a break → wait for it to end, then all remaining work+breaks.
       const futureWorkSecs = remainingRounds * $settings.time_work_secs;
-      const futureBreakSecs = remainingBreakSecs(activeGoal, completedRounds);
-      return (currentRoundRemSecs + futureWorkSecs + futureBreakSecs) * 1000;
+      const futBreakSecs = futureBreakSecs(activeGoal, completedRounds);
+      return (currentRoundRemSecs + futureWorkSecs + futBreakSecs) * 1000;
     }
   }
 
