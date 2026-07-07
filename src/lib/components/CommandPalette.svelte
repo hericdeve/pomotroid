@@ -62,7 +62,7 @@
         study_type: null,
         date_from: null,
         date_to: null,
-        show_breaks: null
+        show_breaks: undefined
       });
       const entries = new Set<string>();
       for (const session of history.sessions) {
@@ -117,14 +117,16 @@
       if (e.key === 'Escape') {
         close();
       } else if (e.key === 'Enter') {
-        if (parsed.suggestions.length > 0) {
-          executeCommand(parsed.suggestions[selectedIndex]);
+        if (filteredSuggestions.length > 0) {
+          selectSuggestion(filteredSuggestions[activeIndex >= 0 ? activeIndex : 0]);
+        } else {
+          submit();
         }
       } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         const step = e.key === 'ArrowDown' ? 1 : -1;
-        const newIndex = selectedIndex + step;
-        if (newIndex >= 0 && newIndex < parsed.suggestions.length) {
-          selectedIndex = newIndex;
+        const newIndex = activeIndex + step;
+        if (newIndex >= 0 && newIndex < filteredSuggestions.length) {
+          activeIndex = newIndex;
         }
       } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (input.length === 0 && inputEl?.value === '') {

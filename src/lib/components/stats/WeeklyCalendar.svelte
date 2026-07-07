@@ -221,39 +221,6 @@
 
   // --- Resizing Logic ---
 
-  function handleResizeStart(e: MouseEvent, block: ScheduledBlock, type: 'top' | 'bottom') {
-    e.stopPropagation();
-    e.preventDefault();
-    activeResize = {
-      id: block.id,
-      type,
-      initialY: e.clientY,
-      startMin: block.start_minute,
-      endMin: block.end_minute,
-      day: block.day_of_week
-    };
-    window.addEventListener('mousemove', handleResizeMove);
-    window.addEventListener('mouseup', handleResizeEnd);
-  }
-
-  function handleResizeMove(e: MouseEvent) {
-    if (!activeResize) return;
-    
-    const deltaY = e.clientY - activeResize.initialY;
-    const deltaMinutes = Math.floor(deltaY / PIXELS_PER_MINUTE);
-    const snappedDelta = Math.round(deltaMinutes / SNAP_MINUTES) * SNAP_MINUTES;
-
-    if (activeResize.type === 'bottom') {
-      let newEnd = activeResize.endMin + snappedDelta;
-      if (newEnd <= activeResize.startMin + SNAP_MINUTES) newEnd = activeResize.startMin + SNAP_MINUTES;
-      if (newEnd > 24 * 60) newEnd = 24 * 60;
-      // We don't save to DB yet, we just update the local visual state via blocks array copy/mutation
-      // But wait, mutating props is bad. We will compute rendered block properties dynamically.
-      // So we just update `activeResize.currentEndMin = newEnd` etc.
-      // Actually, we can just mutate activeResize and use it during render
-    }
-  }
-
   // Realized it's better to store current changes in activeResize
   let currentResizeState = $state<{ startMin: number, endMin: number } | null>(null);
 

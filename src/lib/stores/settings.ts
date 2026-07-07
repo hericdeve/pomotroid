@@ -45,9 +45,11 @@ const defaults: Settings = {
   local_shortcut_mute: 'm',
   local_shortcut_fullscreen: 'F11',
   local_shortcut_palette: 'p',
+  local_shortcut_stats: 's',
   enable_window_controls: true,
   history_show_breaks: true,
   session_goal_rounds: 8,
+  half_year_start_month: 7,
 };
 
 export const settings = writable<Settings>(defaults);

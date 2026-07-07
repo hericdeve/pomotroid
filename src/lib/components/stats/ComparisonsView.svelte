@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { HeatmapStats, HeatmapEntry } from '$lib/types';
+  import { settings } from '$lib/stores/settings';
   import * as m from '$paraglide/messages.js';
 
   interface Props {
@@ -15,8 +16,16 @@
   }
 
   function getDaysInHalf(year: number, isH2: boolean): number {
-    if (isH2) return 184;
-    return getDaysInYear(year) === 366 ? 182 : 181;
+    const h2StartMonth = ($settings.half_year_start_month || 7) - 1; // 0-indexed, default July
+    const startOfH2 = new Date(Date.UTC(year, h2StartMonth, 1));
+    const startOfNextYear = new Date(Date.UTC(year + 1, 0, 1));
+    const startOfYear = new Date(Date.UTC(year, 0, 1));
+
+    if (isH2) {
+      return Math.round((startOfNextYear.getTime() - startOfH2.getTime()) / (1000 * 60 * 60 * 24));
+    } else {
+      return Math.round((startOfH2.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    }
   }
 
   function getDayOfYear(dateString: string): number {
@@ -28,15 +37,17 @@
 
   function getDayOfHalf(dateString: string): number {
     const d = new Date(`${dateString}T00:00:00Z`);
-    const isH2 = d.getUTCMonth() >= 6;
-    const start = isH2 ? new Date(Date.UTC(d.getUTCFullYear(), 6, 1)) : new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const h2StartMonth = ($settings.half_year_start_month || 7) - 1; // 0-indexed, default July
+    const isH2 = d.getUTCMonth() >= h2StartMonth;
+    const start = isH2 ? new Date(Date.UTC(d.getUTCFullYear(), h2StartMonth, 1)) : new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const diff = d.getTime() - start.getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24)); // 0-indexed day
   }
 
   function getHalfStr(dateString: string): string {
     const d = new Date(`${dateString}T00:00:00Z`);
-    return `${d.getUTCFullYear()}-H${d.getUTCMonth() >= 6 ? '2' : '1'}`;
+    const h2StartMonth = ($settings.half_year_start_month || 7) - 1; // 0-indexed, default July
+    return `${d.getUTCFullYear()}-H${d.getUTCMonth() >= h2StartMonth ? '2' : '1'}`;
   }
 
   function formatDuration(secs: number): string {

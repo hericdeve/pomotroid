@@ -72,6 +72,8 @@ pub struct Settings {
     pub history_show_breaks: bool,
     /// Default number of work rounds for a full study session goal.
     pub session_goal_rounds: u32,
+    /// The month (1-12) that starts the second half of the year (H2).
+    pub half_year_start_month: u32,
 }
 
 impl Default for Settings {
@@ -137,6 +139,7 @@ impl Default for Settings {
             window_height: None,
             history_show_breaks: true,
             session_goal_rounds: 8,
+            half_year_start_month: 7,
         }
     }
 }
@@ -268,6 +271,7 @@ pub fn load(conn: &Connection) -> Result<Settings> {
         window_height: parse_opt_u32(&map, "window_height"),
         history_show_breaks: parse_bool(&map, "history_show_breaks", d.history_show_breaks),
         session_goal_rounds: parse_u32(&map, "session_goal_rounds", d.session_goal_rounds),
+        half_year_start_month: parse_u32(&map, "half_year_start_month", d.half_year_start_month),
     })
 }
 

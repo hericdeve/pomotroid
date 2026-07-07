@@ -273,7 +273,7 @@
 {/if}
 
 <div class="app">
-  <Titlebar {isFullscreen} {isCompact} />
+  <Titlebar />
   <!-- Smart Suggestion -->
   {#if activeScheduledSubject && !$timerState.is_running && !$timerState.active_session_id && !isCompact}
     <div class="smart-suggestion">

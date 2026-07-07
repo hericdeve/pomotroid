@@ -21,6 +21,21 @@
     { value: 'tr', label: 'Türkçe' },
   ];
 
+  const MONTHS = [
+    { value: 1, label: 'January' },
+    { value: 2, label: 'February' },
+    { value: 3, label: 'March' },
+    { value: 4, label: 'April' },
+    { value: 5, label: 'May' },
+    { value: 6, label: 'June' },
+    { value: 7, label: 'July' },
+    { value: 8, label: 'August' },
+    { value: 9, label: 'September' },
+    { value: 10, label: 'October' },
+    { value: 11, label: 'November' },
+    { value: 12, label: 'December' },
+  ];
+
   // On Linux, probe for libayatana-appindicator3 at runtime.  The tray section
   // is hidden entirely when the library is absent so users can't enable a
   // feature that would crash the app.  Non-Linux platforms always support tray.
@@ -48,10 +63,24 @@
     setLocale(value);
   }
 
+  let monthOpen = $state(false);
+  let monthEl: HTMLElement | undefined;
+
+  const selectedMonthLabel = $derived(
+    MONTHS.find((m) => m.value === $settings.half_year_start_month)?.label ?? 'July'
+  );
+
+  async function selectMonth(value: number) {
+    monthOpen = false;
+    const updated = await setSetting('half_year_start_month', String(value));
+    settings.set(updated);
+  }
+
   $effect(() => {
-    if (!langOpen) return;
+    if (!langOpen && !monthOpen) return;
     function onOutside(e: MouseEvent) {
-      if (langEl && !langEl.contains(e.target as Node)) langOpen = false;
+      if (langOpen && langEl && !langEl.contains(e.target as Node)) langOpen = false;
+      if (monthOpen && monthEl && !monthEl.contains(e.target as Node)) monthOpen = false;
     }
     window.addEventListener('mousedown', onOutside);
     return () => window.removeEventListener('mousedown', onOutside);
@@ -230,6 +259,61 @@
       {/if}
     </div>
   </div>
+
+  <div class="group-heading">Statistics</div>
+
+  <div class="row">
+    <span class="label">Half-Year Start Month</span>
+    <div class="lang-dropdown" bind:this={monthEl}>
+      <button
+        class="lang-trigger"
+        class:open={monthOpen}
+        onclick={() => (monthOpen = !monthOpen)}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') monthOpen = false;
+        }}
+      >
+        <span>{selectedMonthLabel}</span>
+        <svg
+          class="chevron"
+          class:open={monthOpen}
+          width="10"
+          height="6"
+          viewBox="0 0 10 6"
+          aria-hidden="true"
+        >
+          <polyline
+            points="0,0.5 5,5.5 10,0.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+
+      {#if monthOpen}
+        <ul class="lang-menu" role="listbox">
+          {#each MONTHS as mth (mth.value)}
+            <!-- svelte-ignore a11y_interactive_supports_focus -->
+            <li
+              class="lang-option"
+              class:selected={$settings.half_year_start_month === mth.value}
+              role="option"
+              aria-selected={$settings.half_year_start_month === mth.value}
+              onmousedown={() => selectMonth(mth.value)}
+            >
+              {mth.label}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  </div>
+  <p class="note">
+    Defines when the second half (H2) of your year begins. H1 will end the day before.
+  </p>
 
   <div class="group-heading">{m.system_group_updates()}</div>
 
