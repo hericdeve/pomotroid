@@ -551,6 +551,7 @@ pub struct HeatmapEntry {
     /// Local calendar date in "YYYY-MM-DD" format.
     pub date: String,
     pub count: f64,
+    pub focus_secs: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -637,13 +638,14 @@ pub fn get_weekly_stats(conn: &Connection) -> Result<Vec<DayStat>> {
 pub fn get_heatmap_data(conn: &Connection) -> Result<Vec<HeatmapEntry>> {
     let mut stmt = conn.prepare(
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
-                COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as cnt
+                COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as cnt,
+                COALESCE(SUM(duration_secs), 0) as focus_secs
          FROM sessions
          WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          GROUP BY day
          ORDER BY day",
     )?;
-    let rows = stmt.query_map([], |r| Ok(HeatmapEntry { date: r.get(0)?, count: r.get(1)? }))?
+    let rows = stmt.query_map([], |r| Ok(HeatmapEntry { date: r.get(0)?, count: r.get(1)?, focus_secs: r.get(2)? }))?
         .collect();
     rows
 }

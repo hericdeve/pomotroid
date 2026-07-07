@@ -111,6 +111,7 @@ export interface DayStat {
 export interface HeatmapEntry {
   date: string; // "YYYY-MM-DD"
   count: number;
+  focus_secs: number;
 }
 
 export interface StreakInfo {

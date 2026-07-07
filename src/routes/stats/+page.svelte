@@ -32,8 +32,9 @@
   import SessionsListModal from '$lib/components/stats/SessionsListModal.svelte';
   import SubjectsView from '$lib/components/stats/SubjectsView.svelte';
   import PlanningView from '$lib/components/stats/PlanningView.svelte';
+  import ComparisonsView from '$lib/components/stats/ComparisonsView.svelte';
 
-  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights' | 'subjects' | 'planning';
+  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights' | 'subjects' | 'planning' | 'comparisons';
 
   let activeTab = $state<Tab>('today');
   let detailed = $state<DetailedStats | null>(null);
@@ -52,7 +53,7 @@
 
   async function switchTab(tab: Tab) {
     activeTab = tab;
-    if (tab === 'alltime' && !heatmapLoaded) {
+    if ((tab === 'alltime' || tab === 'comparisons') && !heatmapLoaded) {
       try {
         heatmap = await statsGetHeatmap();
         heatmapLoaded = true;
@@ -186,6 +187,9 @@
       <button class="tab" class:active={activeTab === 'alltime'} onclick={() => switchTab('alltime')}
         >{m.stats_tab_alltime()}</button
       >
+      <button class="tab" class:active={activeTab === 'comparisons'} onclick={() => switchTab('comparisons')}
+        >Comparisons</button
+      >
       <button class="tab" class:active={activeTab === 'planning'} onclick={() => switchTab('planning')}
         >Planning</button
       >
@@ -216,6 +220,8 @@
         <WeeklyView week={detailed?.week ?? null} streak={detailed?.streak ?? null} onBarClick={(r) => listModalTimeRange = r} />
       {:else if activeTab === 'alltime'}
         <YearlyView {heatmap} onBarClick={(r) => listModalTimeRange = r} />
+      {:else if activeTab === 'comparisons'}
+        <ComparisonsView {heatmap} />
       {:else if activeTab === 'history'}
         <HistoryView onEditSession={(id) => editingSessionId = id} />
       {:else if activeTab === 'insights'}
