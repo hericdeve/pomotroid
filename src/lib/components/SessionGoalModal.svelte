@@ -76,45 +76,34 @@
     return goal * $settings.time_work_secs;
   }
 
-  // How many break-seconds remain AFTER `breaksToSkip` breaks have already happened.
-  function futureBreakSecs(goal: number, breaksToSkip: number): number {
-    const interval = $settings.long_break_interval;
-    const totalBreaks = Math.max(0, goal - 1);
-    if (breaksToSkip >= totalBreaks) return 0;
-    if (!$settings.long_breaks_enabled && !$settings.short_breaks_enabled) return 0;
-    if (!$settings.long_breaks_enabled) {
-      return (totalBreaks - breaksToSkip) * $settings.time_short_break_secs;
-    }
-    const longDone = Math.floor(breaksToSkip / interval);
-    const longTotal = Math.floor(totalBreaks / interval);
-    const shortDone = breaksToSkip - longDone;
-    const shortTotal = totalBreaks - longTotal;
-    const longLeft = Math.max(0, longTotal - longDone);
-    const shortLeft = $settings.short_breaks_enabled ? Math.max(0, shortTotal - shortDone) : 0;
-    return (
-      longLeft * $settings.time_long_break_secs +
-      shortLeft * $settings.time_short_break_secs
-    );
-  }
+  // ── Future Future Simulation ───────────────────────────────────────────────
 
-  // Duration of the break that immediately follows completing the Nth round.
-  function nextBreakDuration(completedSoFar: number): number {
-    if (!$settings.short_breaks_enabled && !$settings.long_breaks_enabled) return 0;
-    const nextCount = completedSoFar + 1;
-    if ($settings.long_breaks_enabled && nextCount % $settings.long_break_interval === 0) {
-      return $settings.time_long_break_secs;
+  // Simulates the exact duration of future breaks by walking through the backend's
+  // cycle state (`work_round_number`) instead of using stateless modulo math.
+  function simulateFutureBreaks(startCycle: number, breaksToTake: number): number {
+    let totalSecs = 0;
+    let cycle = startCycle;
+    
+    for (let i = 0; i < breaksToTake; i++) {
+      if (cycle >= snap.work_rounds_total) {
+        if ($settings.long_breaks_enabled) {
+          totalSecs += $settings.time_long_break_secs;
+        } else if ($settings.short_breaks_enabled) {
+          totalSecs += $settings.time_short_break_secs;
+        }
+        cycle = 1; // Backend resets cycle to 1 after a long break
+      } else {
+        if ($settings.short_breaks_enabled) {
+          totalSecs += $settings.time_short_break_secs;
+        }
+        cycle++;
+      }
     }
-    return $settings.short_breaks_enabled ? $settings.time_short_break_secs : 0;
+    return totalSecs;
   }
 
   // ── Finish-time clock ──────────────────────────────────────────────────────
-  //
-  // `nowMs` is the epoch ms anchor for finish-time calculation.
-  // We unconditionally keep it synced to Date.now() every second.
-  // Because `computeRemainingMs()` shrinks in real-time as the timer runs,
-  // continuously advancing `nowMs` perfectly balances the equation and produces
-  // a perfectly stable finish time during both running and paused states.
-
+  
   let nowMs = $state(Date.now());
 
   $effect(() => {
@@ -126,21 +115,26 @@
 
   // Remaining milliseconds from nowMs, correctly accounting for the
   // already-elapsed portion of the current active round or break.
+  let isGoalReached = $derived(completedRounds >= activeGoal);
+
   function computeRemainingMs(): number {
+    if (isGoalReached) return 0;
+
     const currentRoundRemSecs = Math.max(0, snap.total_secs - snap.elapsed_secs);
+    const breaksToTake = Math.max(0, remainingRounds - 1);
 
     if (snap.round_type === 'work') {
-      // Current work round in progress → remaining of this round, then all
-      // future full work rounds, then the break right after this round, then
-      // all further future breaks.
+      // Current round remainder + future work rounds + future simulated breaks
       const futureWorkSecs = Math.max(0, remainingRounds - 1) * $settings.time_work_secs;
-      const immediateBreakSecs = remainingRounds > 1 ? nextBreakDuration(completedRounds) : 0;
-      const futBreakSecs = futureBreakSecs(activeGoal, completedRounds + 1);
-      return (currentRoundRemSecs + futureWorkSecs + immediateBreakSecs + futBreakSecs) * 1000;
+      const futBreakSecs = simulateFutureBreaks(snap.work_round_number, breaksToTake);
+      return (currentRoundRemSecs + futureWorkSecs + futBreakSecs) * 1000;
     } else {
-      // On a break → wait for it to end, then all remaining work+breaks.
+      // On a break
       const futureWorkSecs = remainingRounds * $settings.time_work_secs;
-      const futBreakSecs = futureBreakSecs(activeGoal, completedRounds);
+      // The break we are currently on was triggered by the round that just finished.
+      // The next cycle starts at the *next* work round index.
+      const nextCycle = snap.work_round_number >= snap.work_rounds_total ? 1 : snap.work_round_number + 1;
+      const futBreakSecs = simulateFutureBreaks(nextCycle, breaksToTake);
       return (currentRoundRemSecs + futureWorkSecs + futBreakSecs) * 1000;
     }
   }
