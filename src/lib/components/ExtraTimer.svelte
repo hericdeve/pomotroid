@@ -12,7 +12,9 @@
   let canRunExtra = $derived(isIdle && $settings.enable_extra_timer && $timerState.last_completed_session_id !== null);
   
   let isExtendingWork = $derived($timerState.previous_round_type === 'work');
-  let addTooltip = $derived(isExtendingWork ? 'Add to focus session' : 'Add to break session');
+  let extraType = $derived(isExtendingWork ? 'overtime' : 'lazytime');
+  let discardTooltip = $derived(`Discard ${extraType}`);
+  let addTooltip = $derived(isExtendingWork ? 'Add to focus session (overtime)' : 'Add to break session (lazytime)');
 
   $effect(() => {
     if (canRunExtra && !manuallyDismissed) {
@@ -49,7 +51,7 @@
       try {
         await sessionAddExtraTime($timerState.last_completed_session_id, secs);
       } catch (e) {
-        console.error("Failed to add extra time:", e);
+        console.error(`Failed to add ${extraType}:`, e);
       }
     }
   }
@@ -65,8 +67,8 @@
   <div class="extra-timer-container">
     <div class="time">{formatTime(extraSeconds)}</div>
     <div class="actions">
-      <Tooltip text="Discard extra time">
-        <button class="btn-discard" onclick={stopAndDiscard} aria-label="Discard">
+      <Tooltip text={discardTooltip}>
+        <button class="btn-discard" onclick={stopAndDiscard} aria-label={`Discard ${extraType}`}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -74,7 +76,7 @@
         </button>
       </Tooltip>
       <Tooltip text={addTooltip}>
-        <button class="btn-add" onclick={stopAndAdd} aria-label="Add extra time">
+        <button class="btn-add" onclick={stopAndAdd} aria-label={`Add ${extraType}`}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>

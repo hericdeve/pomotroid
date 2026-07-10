@@ -332,8 +332,8 @@
     onclick={() => toggle('dial_countdown', $settings.dial_countdown)}
   />
   <SettingsToggle
-    label="Enable Extra Timer"
-    description="Track overtime when a session ends without auto-starting the next round."
+    label="Enable Overtime / Lazytime"
+    description="Track overtime (work) or lazytime (break) when a session ends without auto-starting the next round."
     checked={$settings.enable_extra_timer}
     onclick={() => toggle('enable_extra_timer', $settings.enable_extra_timer)}
   />

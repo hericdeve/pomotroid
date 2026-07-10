@@ -16,6 +16,7 @@ export interface TimerState {
   session_work_count: number; // monotonic focus round count since last reset
   active_session_id: number | null;
   last_completed_session_id: number | null;
+  active_study_session_id: number | null;
 }
 
 export interface ImportSummary {

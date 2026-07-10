@@ -157,6 +157,61 @@ const MIGRATION_10: &str = "
     INSERT INTO schema_version VALUES (10);
 ";
 
+/// Sessions refactor: Introduce study_sessions and rename sessions to rounds
+const MIGRATION_11: &str = "
+    CREATE TABLE study_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT NOT NULL UNIQUE,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        goal_rounds INTEGER NOT NULL DEFAULT 0,
+        total_pause_secs INTEGER NOT NULL DEFAULT 0,
+        subject TEXT,
+        subject_topic TEXT,
+        study_type TEXT,
+        notes TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER,
+        deleted_at INTEGER
+    );
+
+    ALTER TABLE sessions RENAME TO rounds;
+    ALTER TABLE rounds ADD COLUMN study_session_id INTEGER REFERENCES study_sessions(id);
+    ALTER TABLE rounds ADD COLUMN pause_secs INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE rounds ADD COLUMN overtime_secs INTEGER NOT NULL DEFAULT 0;
+    DROP INDEX IF EXISTS idx_sessions_started_at;
+    DROP INDEX IF EXISTS idx_sessions_round_type;
+    CREATE INDEX idx_rounds_started_at ON rounds(started_at);
+    CREATE INDEX idx_rounds_round_type ON rounds(round_type);
+
+    INSERT INTO study_sessions (uuid, started_at, ended_at, goal_rounds, total_pause_secs, subject, subject_topic, study_type, created_at)
+    SELECT 
+      lower(hex(randomblob(16))) as uuid,
+      MIN(started_at) as started_at,
+      MAX(ended_at) as ended_at,
+      0 as goal_rounds,
+      0 as total_pause_secs,
+      subject,
+      subject_topic,
+      study_type,
+      MIN(started_at) as created_at
+    FROM rounds
+    WHERE deleted_at IS NULL
+    GROUP BY date(started_at, 'unixepoch', 'localtime'), subject, subject_topic, study_type;
+
+    UPDATE rounds
+    SET study_session_id = (
+      SELECT id FROM study_sessions s 
+      WHERE date(rounds.started_at, 'unixepoch', 'localtime') = date(s.started_at, 'unixepoch', 'localtime')
+        AND IFNULL(rounds.subject, '') = IFNULL(s.subject, '')
+        AND IFNULL(rounds.subject_topic, '') = IFNULL(s.subject_topic, '')
+        AND IFNULL(rounds.study_type, '') = IFNULL(s.study_type, '')
+    )
+    WHERE deleted_at IS NULL;
+
+    INSERT INTO schema_version VALUES (11);
+";
+
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
 pub fn run(conn: &Connection) -> Result<()> {
@@ -223,6 +278,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_10 complete");
     }
 
+    if version < 11 {
+        log::info!("[db/migrations] applying MIGRATION_11: group rounds into study_sessions");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_11} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_11 complete");
+    }
+
     Ok(())
 }
 
@@ -258,14 +319,14 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 9);
+        assert_eq!(v, 11);
     }
 
     #[test]
     fn all_tables_created() {
         let conn = Connection::open_in_memory().unwrap();
         run(&conn).unwrap();
-        for table in &["settings", "sessions", "custom_themes", "schema_version", "subjects"] {
+        for table in &["settings", "rounds", "custom_themes", "schema_version", "subjects", "study_sessions"] {
             let count: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",

@@ -271,6 +271,8 @@ mod tests {
             work_rounds_total: 4,
             session_work_count: 1,
             active_session_id: None,
+            last_completed_session_id: None,
+            active_study_session_id: None,
         }
     }
 

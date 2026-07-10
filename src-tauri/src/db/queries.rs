@@ -1,23 +1,76 @@
 use rusqlite::{params, Connection, Result, OptionalExtension};
 use serde::{Serialize, Deserialize};
 
+
+pub fn insert_study_session(
+    conn: &Connection,
+    goal_rounds: u32,
+    subject: Option<String>,
+    subject_topic: Option<String>,
+    study_type: Option<String>,
+) -> Result<i64> {
+    let started_at = unix_now();
+    let uuid = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO study_sessions (uuid, started_at, created_at, goal_rounds, subject, subject_topic, study_type)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![uuid, started_at, started_at, goal_rounds, subject, subject_topic, study_type],
+    )?;
+    let id = conn.last_insert_rowid();
+    log::debug!("[db] study_session started: id={id} goal={goal_rounds}");
+    Ok(id)
+}
+
+pub fn complete_study_session(
+    conn: &Connection,
+    session_id: i64,
+) -> Result<()> {
+    let now = unix_now();
+    conn.execute(
+        "UPDATE study_sessions SET ended_at = ?1, updated_at = ?2 WHERE id = ?3",
+        params![now, now, session_id],
+    )?;
+    log::debug!("[db] study_session ended: id={session_id}");
+    Ok(())
+}
+
+pub fn add_pause_time(
+    conn: &Connection,
+    round_id: i64,
+    session_id: Option<i64>,
+    pause_duration: u32,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE rounds SET pause_secs = pause_secs + ?1 WHERE id = ?2",
+        params![pause_duration, round_id],
+    )?;
+    if let Some(sid) = session_id {
+        conn.execute(
+            "UPDATE study_sessions SET total_pause_secs = total_pause_secs + ?1 WHERE id = ?2",
+            params![pause_duration, sid],
+        )?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Session CRUD (DATA-03)
 // ---------------------------------------------------------------------------
 
 /// Inserts a new session row when a round begins.
 /// Returns the row ID so it can be passed to `complete_session` later.
-pub fn insert_session(
+pub fn insert_round(
     conn: &Connection,
+    study_session_id: Option<i64>,
     round_type: &str,
     duration_secs: u32,
 ) -> Result<i64> {
     let started_at = unix_now();
     let uuid = uuid::Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO sessions (uuid, started_at, updated_at, round_type, duration_secs, completed)
-         VALUES (?1, ?2, ?3, ?4, ?5, 0)",
-        params![uuid, started_at, started_at, round_type, duration_secs],
+        "INSERT INTO rounds (uuid, started_at, updated_at, round_type, duration_secs, completed, study_session_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)",
+        params![uuid, started_at, started_at, round_type, duration_secs, study_session_id],
     )?;
     let id = conn.last_insert_rowid();
     log::debug!("[db] session started: id={id} type={round_type} duration={duration_secs}s");
@@ -25,14 +78,14 @@ pub fn insert_session(
 }
 
 /// Updates a session when the round ends (by completion or skip).
-pub fn complete_session(
+pub fn complete_round(
     conn: &Connection,
     session_id: i64,
     completed: bool,
 ) -> Result<()> {
     let now = unix_now();
     conn.execute(
-        "UPDATE sessions SET ended_at = ?1, completed = ?2, updated_at = ?3 WHERE id = ?4",
+        "UPDATE rounds SET ended_at = ?1, completed = ?2, updated_at = ?3 WHERE id = ?4",
         params![now, completed as i64, now, session_id],
     )?;
     log::debug!("[db] session ended: id={session_id} completed={completed}");
@@ -94,8 +147,8 @@ pub fn get_history(
     offset: u32,
     filter: &SessionFilter,
 ) -> Result<SessionHistoryPage> {
-    let mut query = String::from("SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed, subject, subject_topic, study_type, notes, updated_at, deleted_at FROM sessions WHERE deleted_at IS NULL");
-    let mut count_query = String::from("SELECT COUNT(*) FROM sessions WHERE deleted_at IS NULL");
+    let mut query = String::from("SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed, subject, subject_topic, study_type, notes, updated_at, deleted_at FROM rounds WHERE deleted_at IS NULL");
+    let mut count_query = String::from("SELECT COUNT(*) FROM rounds WHERE deleted_at IS NULL");
     
     let mut params = Vec::<rusqlite::types::Value>::new();
 
@@ -167,7 +220,7 @@ pub fn get_history(
     }
 
     // Compute stats for all filtered WORK sessions
-    let mut stats_query = String::from("SELECT started_at, duration_secs FROM sessions WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
+    let mut stats_query = String::from("SELECT started_at, duration_secs FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
     let mut stats_params = Vec::<rusqlite::types::Value>::new();
 
     if let Some(subject) = &filter.subject {
@@ -310,9 +363,9 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
     Ok(())
 }
 
-pub fn add_extra_time_to_session(conn: &Connection, id: i64, extra_secs: i64) -> Result<()> {
+pub fn add_extra_time_to_round(conn: &Connection, id: i64, extra_secs: i64) -> Result<()> {
     conn.execute(
-        "UPDATE sessions SET duration_secs = duration_secs + ?1, updated_at = ?2 WHERE id = ?3",
+        "UPDATE rounds SET duration_secs = duration_secs + ?1, overtime_secs = overtime_secs + ?1, updated_at = ?2 WHERE id = ?3",
         params![extra_secs, unix_now(), id],
     )?;
     Ok(())
@@ -740,7 +793,7 @@ pub fn compute_streak(days: &[String], today: &str) -> StreakInfo {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn unix_now() -> i64 {
+pub fn unix_now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -995,7 +1048,7 @@ pub struct InsightsStats {
 }
 
 pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<InsightsStats> {
-    let mut base_query = String::from("FROM sessions WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
+    let mut base_query = String::from("FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
     let mut params = Vec::<rusqlite::types::Value>::new();
 
     if let Some(subject) = &filter.subject {

@@ -40,6 +40,7 @@ pub struct TimerSnapshot {
     pub session_work_count: u32,
     pub active_session_id: Option<i64>,
     pub last_completed_session_id: Option<i64>,
+    pub active_study_session_id: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,7 @@ struct TimerShared {
     is_running: bool,
     active_session_id: Option<i64>,
     last_completed_session_id: Option<i64>,
+    pub active_study_session_id: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +90,7 @@ impl TimerController {
             is_running: false,
             active_session_id: None,
             last_completed_session_id: None,
+            active_study_session_id: None,
         }));
 
         // Clone handles for the event-listener thread.
@@ -201,6 +204,7 @@ impl TimerController {
             session_work_count: seq.session_work_count,
             active_session_id: shared.active_session_id,
             last_completed_session_id: shared.last_completed_session_id,
+            active_study_session_id: shared.active_study_session_id,
         }
     }
 
@@ -249,6 +253,8 @@ fn listen_events(
     let mut last_tray_progress: f32 = -1.0;
     // Active session row ID for recording (None = not started yet).
     let mut current_session_id: Option<i64> = None;
+    let mut current_study_session_id: Option<i64> = None;
+    let mut paused_at: Option<i64> = None;
 
     while let Ok(event) = event_rx.recv() {
         match event {
@@ -279,7 +285,17 @@ fn listen_events(
                         seq.current_duration_secs(&s)
                     };
                     if let Ok(conn) = db.lock() {
-                        match queries::insert_session(&conn, &rt, total) {
+                        if current_study_session_id.is_none() {
+                            match queries::insert_study_session(&conn, 0, None, None, None) {
+                                Ok(sid) => {
+                                    current_study_session_id = Some(sid);
+                                    shared.lock().unwrap().active_study_session_id = Some(sid);
+                                }
+                                Err(e) => log::error!("[timer] failed to record study session: {e}"),
+                            }
+                        }
+
+                        match queries::insert_round(&conn, current_study_session_id, &rt, total) {
                             Ok(id) => {
                                 current_session_id = Some(id);
                                 if rt == "work" {
@@ -326,7 +342,7 @@ fn listen_events(
                 // --- Session recording: mark the completed round ---
                 if let Some(session_id) = current_session_id.take() {
                     if let Ok(conn) = db.lock() {
-                        let _ = queries::complete_session(&conn, session_id, !was_skipped);
+                        let _ = queries::complete_round(&conn, session_id, !was_skipped);
                     }
                     if !was_skipped {
                         shared.lock().unwrap().last_completed_session_id = Some(session_id);
@@ -421,6 +437,7 @@ fn listen_events(
             }
 
             TimerEvent::Paused { elapsed_secs } => {
+                paused_at = Some(queries::unix_now());
                 log::info!("[timer] paused elapsed={elapsed_secs}s");
                 shared.lock().unwrap().is_running = false;
                 let _ = app.emit("timer:paused", serde_json::json!({ "elapsed_secs": elapsed_secs }));
@@ -441,6 +458,14 @@ fn listen_events(
             }
 
             TimerEvent::Resumed { elapsed_secs } => {
+                if let Some(p_time) = paused_at.take() {
+                    let pause_duration = (queries::unix_now() - p_time) as u32;
+                    if let Some(rid) = current_session_id {
+                        if let Ok(conn) = db.lock() {
+                            let _ = queries::add_pause_time(&conn, rid, current_study_session_id, pause_duration);
+                        }
+                    }
+                }
                 log::info!("[timer] resumed elapsed={elapsed_secs}s");
                 shared.lock().unwrap().is_running = true;
                 let _ = app.emit("timer:resumed", serde_json::json!({ "elapsed_secs": elapsed_secs }));
@@ -462,15 +487,24 @@ fn listen_events(
             }
 
             TimerEvent::Reset => {
+                if let Some(sid) = current_study_session_id.take() {
+                    if let Ok(conn) = db.lock() {
+                        let _ = queries::complete_study_session(&conn, sid);
+                    }
+                }
+                if let Some(rid) = current_session_id.take() {
+                    if let Ok(conn) = db.lock() {
+                        let _ = queries::complete_round(&conn, rid, false);
+                    }
+                }
                 log::debug!("[timer] idle");
-                // Abandon the active session (leave DB row as-is).
-                current_session_id = None;
 
                 {
                     let mut s = shared.lock().unwrap();
                     s.elapsed_secs = 0;
                     s.is_running = false;
                     s.last_completed_session_id = None;
+                    s.active_study_session_id = None;
                 }
                 let snapshot = build_snapshot(&sequence, &settings, &shared);
                 let _ = app.emit("timer:reset", snapshot);
@@ -540,5 +574,6 @@ fn build_snapshot(
         session_work_count: seq.session_work_count,
         active_session_id: sh.active_session_id,
         last_completed_session_id: sh.last_completed_session_id,
+        active_study_session_id: sh.active_study_session_id,
     }
 }
