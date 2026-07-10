@@ -1186,25 +1186,24 @@ mod tests {
     }
 
     fn seed_sessions(conn: &Connection) {
-        conn.execute_batch("
-            INSERT INTO sessions (uuid, started_at, ended_at, round_type, duration_secs, completed)
-            VALUES ('test-uuid-1', 1000, 1060, 'work', 60, 1),
-                   ('test-uuid-2', 2000, 2300, 'short-break', 300, 1);
-        ").unwrap();
+        conn.execute(
+            "INSERT INTO rounds (started_at, round_type, duration_secs) VALUES (1, 'work', 10), (2, 'short-break', 300)",
+            [],
+        ).unwrap();
     }
 
     #[test]
     fn sessions_clear_removes_all_rows() {
         let conn = setup();
         seed_sessions(&conn);
-        let before: i64 = conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0)).unwrap();
+        let before: i64 = conn.query_row("SELECT COUNT(*) FROM rounds", [], |r| r.get(0)).unwrap();
         assert_eq!(before, 2);
 
-        let n = conn.execute("DELETE FROM sessions", []).unwrap();
+        let n = conn.execute("DELETE FROM rounds", []).unwrap();
         assert_eq!(n, 2);
 
-        let after: i64 = conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0)).unwrap();
-        assert_eq!(after, 0);
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM rounds", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]

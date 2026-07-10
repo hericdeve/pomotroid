@@ -239,6 +239,12 @@ const MIGRATION_13: &str = "
     DELETE FROM study_sessions
     WHERE id NOT IN (SELECT DISTINCT study_session_id FROM rounds WHERE study_session_id IS NOT NULL);
 
+    UPDATE study_sessions
+    SET 
+      started_at = (SELECT MIN(started_at) FROM rounds WHERE study_session_id = study_sessions.id AND deleted_at IS NULL),
+      ended_at = (SELECT MAX(ended_at) FROM rounds WHERE study_session_id = study_sessions.id AND deleted_at IS NULL)
+    WHERE id IN (SELECT DISTINCT study_session_id FROM rounds WHERE study_session_id IS NOT NULL);
+
     INSERT INTO schema_version VALUES (13);
 ";
 
@@ -326,6 +332,94 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_13 complete");
     }
 
+    if version < 14 {
+        log::info!("[db/migrations] applying MIGRATION_14: rebuild study sessions");
+        conn.execute_batch("BEGIN;")?;
+
+        conn.execute("DELETE FROM study_sessions", [])?;
+        conn.execute("UPDATE rounds SET study_session_id = NULL", [])?;
+
+        struct RoundRow {
+            id: i64,
+            started_at: i64,
+            ended_at: Option<i64>,
+            round_type: String,
+            subject: Option<String>,
+            subject_topic: Option<String>,
+            study_type: Option<String>,
+        }
+
+        let mut rounds = Vec::new();
+        {
+            let mut stmt = conn.prepare("SELECT id, started_at, ended_at, round_type, subject, subject_topic, study_type FROM rounds WHERE deleted_at IS NULL ORDER BY started_at ASC")?;
+            let r_iter = stmt.query_map([], |row| {
+                Ok(RoundRow {
+                    id: row.get(0)?,
+                    started_at: row.get(1)?,
+                    ended_at: row.get(2)?,
+                    round_type: row.get(3)?,
+                    subject: row.get(4)?,
+                    subject_topic: row.get(5)?,
+                    study_type: row.get(6)?,
+                })
+            })?;
+            for r in r_iter {
+                rounds.push(r?);
+            }
+        }
+
+        let mut current_session_id: Option<i64> = None;
+        let mut last_ended_at: i64 = 0;
+        let mut current_subject: Option<String> = None;
+        let mut current_topic: Option<String> = None;
+        let mut current_type: Option<String> = None;
+
+        for r in rounds {
+            let mut is_new_session = false;
+
+            if current_session_id.is_none() {
+                is_new_session = true;
+            } else if (r.started_at - last_ended_at) > 7200 {
+                is_new_session = true;
+            } else if r.round_type == "work" {
+                if r.subject != current_subject || r.subject_topic != current_topic || r.study_type != current_type {
+                    is_new_session = true;
+                }
+            }
+
+            if is_new_session {
+                let subject_val = if r.round_type == "work" { r.subject.clone() } else { None };
+                let topic_val = if r.round_type == "work" { r.subject_topic.clone() } else { None };
+                let type_val = if r.round_type == "work" { r.study_type.clone() } else { None };
+
+                conn.execute(
+                    "INSERT INTO study_sessions (uuid, started_at, ended_at, goal_rounds, total_pause_secs, subject, subject_topic, study_type, created_at)
+                     VALUES (lower(hex(randomblob(16))), ?1, ?2, 0, 0, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![r.started_at, r.ended_at.unwrap_or(r.started_at), subject_val, topic_val, type_val, r.started_at],
+                )?;
+                current_session_id = Some(conn.last_insert_rowid());
+                current_subject = subject_val;
+                current_topic = topic_val;
+                current_type = type_val;
+            } else {
+                if let Some(sid) = current_session_id {
+                    let end_time = r.ended_at.unwrap_or(r.started_at);
+                    conn.execute("UPDATE study_sessions SET ended_at = MAX(IFNULL(ended_at, 0), ?1) WHERE id = ?2", rusqlite::params![end_time, sid])?;
+                }
+            }
+
+            if let Some(sid) = current_session_id {
+                conn.execute("UPDATE rounds SET study_session_id = ?1 WHERE id = ?2", rusqlite::params![sid, r.id])?;
+            }
+
+            last_ended_at = r.ended_at.unwrap_or(r.started_at);
+        }
+
+        conn.execute("INSERT INTO schema_version VALUES (14)", [])?;
+        conn.execute_batch("COMMIT;")?;
+        log::info!("[db/migrations] MIGRATION_14 complete");
+    }
+
     Ok(())
 }
 
@@ -361,7 +455,7 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 12);
+        assert_eq!(v, 14);
     }
 
     #[test]
