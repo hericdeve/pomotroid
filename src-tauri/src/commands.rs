@@ -44,6 +44,11 @@ pub fn timer_skip(timer: State<'_, TimerController>) {
     timer.skip();
 }
 
+#[tauri::command]
+pub fn timer_add_completed_rounds(count: u32, app: AppHandle, timer: State<'_, TimerController>) {
+    timer.add_completed_rounds(&app, count);
+}
+
 /// Restart the current round from zero without advancing the sequence.
 /// Round type and round number are preserved; only elapsed time is reset.
 #[tauri::command]
@@ -986,6 +991,12 @@ pub fn session_get(id: i64, db: State<'_, DbState>) -> Result<Option<queries::Se
 pub fn session_update(id: i64, payload: queries::UpdateSessionPayload, db: State<'_, DbState>) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     queries::update_session(&conn, id, payload).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn study_session_update(id: i64, payload: queries::UpdateStudySessionPayload, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::update_study_session(&conn, id, payload).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -153,6 +153,19 @@ impl TimerController {
         self.engine.send(TimerCommand::Reset);
     }
 
+    pub fn add_completed_rounds(&self, app: &AppHandle, count: u32) {
+        if count == 0 { return; }
+        {
+            let mut seq = self.sequence.lock().unwrap();
+            seq.session_work_count += count;
+            seq.work_rounds_total += count;
+        }
+        log::info!("[timer] added {} completed rounds from extra time", count);
+        
+        let snapshot = self.get_snapshot();
+        let _ = app.emit("timer:state_update", snapshot);
+    }
+
     /// Restart only the current round's timer without touching the sequence.
     /// Round type, round number, and position in the work/break cycle are all
     /// preserved — only the elapsed time is zeroed.

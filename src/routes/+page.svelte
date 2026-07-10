@@ -6,9 +6,9 @@
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
   import SessionGoalModal from '$lib/components/SessionGoalModal.svelte';
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
-  import { showGoalModal } from '$lib/stores/sessionGoal';
+  import { showGoalModal, sessionGoalRounds } from '$lib/stores/sessionGoal';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerSkip, timerRestartRound, scheduleGetAll } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerSkip, timerRestartRound, scheduleGetAll, studySessionUpdate } from '$lib/ipc';
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
@@ -97,6 +97,25 @@
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
+  });
+
+  let prevActiveStudySessionId = $state<number | null>(null);
+
+  $effect(() => {
+    const currentId = $timerState.active_study_session_id;
+    if (currentId !== prevActiveStudySessionId) {
+      if (currentId !== null && prevActiveStudySessionId === null) {
+        // Session just started, push pending tags and goal to backend
+        studySessionUpdate(currentId, {
+          subject: $pendingTags.subject || undefined,
+          subject_topic: $pendingTags.subject_topic || undefined,
+          study_type: $pendingTags.study_type || undefined,
+          notes: $pendingTags.notes || undefined,
+          goal_rounds: $sessionGoalRounds,
+        }).catch(console.error);
+      }
+      prevActiveStudySessionId = currentId;
+    }
   });
 
   async function startResize(direction: string) {
@@ -289,6 +308,7 @@
     <SessionTagModal 
       onClose={() => ($showTagModal = false)} 
       sessionId={$timerState.active_session_id} 
+      studySessionId={$timerState.active_study_session_id}
     />
   {/if}
   {#if $showGoalModal}

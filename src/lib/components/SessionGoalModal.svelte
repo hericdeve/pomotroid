@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { setSetting, subjectGetWeeklyProgress } from '$lib/ipc';
+  import { setSetting, subjectGetWeeklyProgress, studySessionUpdate } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
   import { sessionGoalRounds, getMaxSessionRounds } from '$lib/stores/sessionGoal';
   import { pendingTags } from '$lib/stores/pendingTags';
@@ -23,6 +23,9 @@
     if (goalInput !== null) {
       const clamped = Math.max(1, Math.min(maxRounds, Math.round(goalInput)));
       sessionGoalRounds.set(clamped);
+      if (snap.active_study_session_id) {
+        studySessionUpdate(snap.active_study_session_id, { goal_rounds: clamped }).catch(console.error);
+      }
     }
   }
 
@@ -32,6 +35,9 @@
     } else {
       goalInput = Math.max(1, Math.min(maxRounds, Math.round(goalInput)));
       sessionGoalRounds.set(goalInput);
+      if (snap.active_study_session_id) {
+        studySessionUpdate(snap.active_study_session_id, { goal_rounds: goalInput }).catch(console.error);
+      }
     }
   }
 

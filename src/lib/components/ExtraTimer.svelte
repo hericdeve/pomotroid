@@ -1,7 +1,7 @@
 <script lang="ts">
   import { timerState } from '$lib/stores/timer';
   import { settings } from '$lib/stores/settings';
-  import { sessionAddExtraTime } from '$lib/ipc';
+  import { sessionAddExtraTime, timerAddCompletedRounds } from '$lib/ipc';
   import Tooltip from '$lib/components/Tooltip.svelte';
 
   let extraSeconds = $state(0);
@@ -50,6 +50,12 @@
     if ($timerState.last_completed_session_id !== null && secs > 0) {
       try {
         await sessionAddExtraTime($timerState.last_completed_session_id, secs);
+        if (isExtendingWork) {
+          const completedRounds = Math.floor(secs / $settings.time_work_secs);
+          if (completedRounds > 0) {
+            await timerAddCompletedRounds(completedRounds);
+          }
+        }
       } catch (e) {
         console.error(`Failed to add ${extraType}:`, e);
       }

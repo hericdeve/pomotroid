@@ -14,6 +14,7 @@ import type {
   UpdateInfo,
   SessionRow,
   UpdateSessionPayload,
+  UpdateStudySessionPayload,
   CreateManualSessionPayload,
   SessionFilter,
   SessionHistoryPage,
@@ -30,6 +31,7 @@ export const timerToggle = () => invoke<void>('timer_toggle');
 export const timerReset = () => invoke<void>('timer_reset');
 export const timerRestartRound = () => invoke<void>('timer_restart_round');
 export const timerSkip = () => invoke<void>('timer_skip');
+export const timerAddCompletedRounds = (count: number) => invoke<void>('timer_add_completed_rounds', { count });
 export const getTimerState = () => invoke<TimerState>('timer_get_state');
 
 // --- Settings commands ---
@@ -98,6 +100,7 @@ export const sessionsImport = (path: string) => invoke<ImportSummary>('sessions_
 export const getSession = (id: number) => invoke<SessionRow | null>('session_get', { id });
 export const updateSession = (id: number, payload: UpdateSessionPayload) => invoke<void>('session_update', { id, payload });
 export const sessionAddExtraTime = (id: number, extraSecs: number) => invoke<void>('session_add_extra_time', { id, extraSecs });
+export const studySessionUpdate = (id: number, payload: UpdateStudySessionPayload) => invoke<void>('study_session_update', { id, payload });
 export const sessionDelete = (id: number) => invoke<void>('session_delete', { id });
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
 export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');

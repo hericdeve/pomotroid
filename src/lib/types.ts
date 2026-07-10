@@ -196,6 +196,14 @@ export interface UpdateSessionPayload {
   notes: string | null;
 }
 
+export interface UpdateStudySessionPayload {
+  subject?: string;
+  subject_topic?: string;
+  study_type?: string;
+  notes?: string;
+  goal_rounds?: number;
+}
+
 export interface SessionFilter {
   subject?: string | null;
   subject_topic?: string | null;

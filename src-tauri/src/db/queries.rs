@@ -121,6 +121,15 @@ pub struct UpdateSessionPayload {
     pub notes: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateStudySessionPayload {
+    pub subject: Option<String>,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub notes: Option<String>,
+    pub goal_rounds: Option<u32>,
+}
+
 
 #[derive(Debug, Deserialize)]
 pub struct SessionFilter {
@@ -356,6 +365,52 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
             payload.subject_topic,
             payload.study_type,
             payload.notes,
+            unix_now(),
+            id
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn update_study_session(conn: &Connection, id: i64, payload: UpdateStudySessionPayload) -> Result<()> {
+    if let Some(subject_name) = &payload.subject {
+        if !subject_name.trim().is_empty() {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO subjects (name, created_at) VALUES (?1, ?2)",
+                params![subject_name.trim(), unix_now()],
+            );
+        }
+    }
+    
+    // Update the study_sessions row
+    conn.execute(
+        "UPDATE study_sessions SET
+            subject = ?1,
+            subject_topic = ?2,
+            study_type = ?3,
+            notes = ?4,
+            goal_rounds = ?5,
+            updated_at = ?6
+         WHERE id = ?7",
+        params![
+            payload.subject,
+            payload.subject_topic,
+            payload.study_type,
+            payload.notes,
+            payload.goal_rounds,
+            unix_now(),
+            id
+        ],
+    )?;
+
+    // Cascade ONLY subject to rounds that belong to this study session (as per user request)
+    conn.execute(
+        "UPDATE rounds SET
+            subject = ?1,
+            updated_at = ?2
+         WHERE study_session_id = ?3",
+        params![
+            payload.subject,
             unix_now(),
             id
         ],

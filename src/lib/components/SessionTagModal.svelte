@@ -1,17 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSession, updateSession } from '$lib/ipc';
+  import { getSession, updateSession, studySessionUpdate } from '$lib/ipc';
   import EntryDetail from './EntryDetail.svelte';
   import { pendingTags } from '$lib/stores/pendingTags';
   import { get } from 'svelte/store';
 
   interface Props {
     sessionId: number | null;
+    studySessionId?: number | null;
     allowDelete?: boolean;
     onClose: () => void;
     onDeleted?: () => void;
   }
-  let { sessionId, allowDelete = false, onClose, onDeleted }: Props = $props();
+  let { sessionId, studySessionId = null, allowDelete = false, onClose, onDeleted }: Props = $props();
 
   let payload = $state<{
     subject: string;
@@ -63,6 +64,14 @@
             subject_topic: p.subject_topic || null,
             study_type: p.study_type || null,
             notes: p.notes || null,
+          });
+        }
+        if (studySessionId !== null) {
+          await studySessionUpdate(studySessionId, {
+            subject: p.subject || undefined,
+            subject_topic: p.subject_topic || undefined,
+            study_type: p.study_type || undefined,
+            notes: p.notes || undefined,
           });
         }
         pendingTags.set({ ...p });
