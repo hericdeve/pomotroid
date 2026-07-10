@@ -42,6 +42,7 @@
   let heatmapLoaded = $state(false);
   let showManualEntry = $state(false);
   let editingSessionId = $state<number | null>(null);
+  let editingStudySessionId = $state<number | null>(null);
   let refreshTrigger = $state(0);
   
   let listModalTimeRange = $state<{ start: number, end: number, label: string } | null>(null);
@@ -223,7 +224,10 @@
       {:else if activeTab === 'comparisons'}
         <ComparisonsView {heatmap} />
       {:else if activeTab === 'history'}
-        <HistoryView onEditSession={(id) => editingSessionId = id} />
+        <HistoryView 
+          onEditSession={(id) => editingSessionId = id} 
+          onEditStudySession={(id) => editingStudySessionId = id} 
+        />
       {:else if activeTab === 'insights'}
         <InsightsView />
       {:else if activeTab === 'subjects'}
@@ -265,6 +269,20 @@
     onClose={() => editingSessionId = null} 
     onDeleted={() => {
       editingSessionId = null;
+      refreshTrigger++;
+      loadData();
+    }}
+  />
+{/if}
+
+{#if editingStudySessionId !== null}
+  <SessionTagModal 
+    sessionId={null}
+    studySessionId={editingStudySessionId} 
+    allowDelete={false}
+    onClose={() => editingStudySessionId = null} 
+    onDeleted={() => {
+      editingStudySessionId = null;
       refreshTrigger++;
       loadData();
     }}

@@ -142,8 +142,26 @@ pub struct SessionFilter {
 }
 
 #[derive(Debug, Serialize)]
+pub struct StudySessionRow {
+    pub id: i64,
+    pub uuid: String,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+    pub goal_rounds: u32,
+    pub total_pause_secs: u32,
+    pub subject: Option<String>,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: i64,
+    pub updated_at: Option<i64>,
+    pub deleted_at: Option<i64>,
+    pub rounds: Vec<SessionRow>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct SessionHistoryPage {
-    pub sessions: Vec<SessionRow>,
+    pub sessions: Vec<StudySessionRow>,
     pub total: u32,
     pub total_work_rounds: f64,
     pub total_focus_secs: u64,
@@ -156,8 +174,8 @@ pub fn get_history(
     offset: u32,
     filter: &SessionFilter,
 ) -> Result<SessionHistoryPage> {
-    let mut query = String::from("SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed, subject, subject_topic, study_type, notes, updated_at, deleted_at FROM rounds WHERE deleted_at IS NULL");
-    let mut count_query = String::from("SELECT COUNT(*) FROM rounds WHERE deleted_at IS NULL");
+    let mut query = String::from("SELECT id, uuid, started_at, ended_at, goal_rounds, total_pause_secs, subject, subject_topic, study_type, notes, created_at, updated_at, deleted_at FROM study_sessions WHERE deleted_at IS NULL");
+    let mut count_query = String::from("SELECT COUNT(*) FROM study_sessions WHERE deleted_at IS NULL");
     
     let mut params = Vec::<rusqlite::types::Value>::new();
 
@@ -191,11 +209,7 @@ pub fn get_history(
         count_query.push_str(&sql);
         params.push(d_to.into());
     }
-    if let Some(false) = filter.show_breaks {
-        let sql = " AND round_type = 'work'";
-        query.push_str(sql);
-        count_query.push_str(sql);
-    }
+    // Note: We ignore filter.show_breaks for the study_sessions query, since a study session usually has both work and breaks.
     
     let total: u32 = conn.query_row(&count_query, rusqlite::params_from_iter(params.iter()), |row| row.get(0))?;
 
@@ -206,26 +220,57 @@ pub fn get_history(
 
     let mut stmt = conn.prepare(&query)?;
     let iter = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
-        Ok(SessionRow {
+        Ok(StudySessionRow {
             id: row.get(0)?,
             uuid: row.get(1)?,
             started_at: row.get(2)?,
             ended_at: row.get(3)?,
-            round_type: row.get(4)?,
-            duration_secs: row.get(5)?,
-            completed: row.get::<_, i64>(6)? != 0,
-            subject: row.get(7)?,
-            subject_topic: row.get(8)?,
-            study_type: row.get(9)?,
-            notes: row.get(10)?,
+            goal_rounds: row.get(4)?,
+            total_pause_secs: row.get(5)?,
+            subject: row.get(6)?,
+            subject_topic: row.get(7)?,
+            study_type: row.get(8)?,
+            notes: row.get(9)?,
+            created_at: row.get(10)?,
             updated_at: row.get(11)?,
             deleted_at: row.get(12)?,
+            rounds: Vec::new(),
         })
     })?;
 
     let mut sessions = Vec::new();
     for row in iter {
-        sessions.push(row?);
+        let mut session = row?;
+        
+        let mut rounds_query = String::from("SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed, subject, subject_topic, study_type, notes, updated_at, deleted_at FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL");
+        if let Some(false) = filter.show_breaks {
+             rounds_query.push_str(" AND round_type = 'work'");
+        }
+        rounds_query.push_str(" ORDER BY started_at ASC");
+        
+        let mut r_stmt = conn.prepare(&rounds_query)?;
+        let r_iter = r_stmt.query_map([session.id], |row| {
+             Ok(SessionRow {
+                 id: row.get(0)?,
+                 uuid: row.get(1)?,
+                 started_at: row.get(2)?,
+                 ended_at: row.get(3)?,
+                 round_type: row.get(4)?,
+                 duration_secs: row.get(5)?,
+                 completed: row.get::<_, i64>(6)? != 0,
+                 subject: row.get(7)?,
+                 subject_topic: row.get(8)?,
+                 study_type: row.get(9)?,
+                 notes: row.get(10)?,
+                 updated_at: row.get(11)?,
+                 deleted_at: row.get(12)?,
+             })
+        })?;
+        
+        for r in r_iter {
+            session.rounds.push(r?);
+        }
+        sessions.push(session);
     }
 
     // Compute stats for all filtered WORK sessions
@@ -312,7 +357,7 @@ pub fn get_session(conn: &Connection, id: i64) -> Result<Option<SessionRow>> {
     conn.query_row(
         "SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed,
                 subject, subject_topic, study_type, notes, updated_at, deleted_at
-         FROM sessions WHERE id = ?1",
+         FROM rounds WHERE id = ?1",
         [id],
         |r| {
             Ok(SessionRow {
@@ -334,10 +379,63 @@ pub fn get_session(conn: &Connection, id: i64) -> Result<Option<SessionRow>> {
     ).optional()
 }
 
+pub fn get_study_session(conn: &Connection, id: i64) -> Result<Option<StudySessionRow>> {
+    let row = conn.query_row(
+        "SELECT id, uuid, started_at, ended_at, goal_rounds, total_pause_secs, subject, subject_topic, study_type, notes, created_at, updated_at, deleted_at FROM study_sessions WHERE id = ?1",
+        [id],
+        |r| {
+            Ok(StudySessionRow {
+                id: r.get(0)?,
+                uuid: r.get(1)?,
+                started_at: r.get(2)?,
+                ended_at: r.get(3)?,
+                goal_rounds: r.get(4)?,
+                total_pause_secs: r.get(5)?,
+                subject: r.get(6)?,
+                subject_topic: r.get(7)?,
+                study_type: r.get(8)?,
+                notes: r.get(9)?,
+                created_at: r.get(10)?,
+                updated_at: r.get(11)?,
+                deleted_at: r.get(12)?,
+                rounds: Vec::new(),
+            })
+        },
+    ).optional()?;
+
+    let mut session = match row {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+
+    let mut r_stmt = conn.prepare("SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed, subject, subject_topic, study_type, notes, updated_at, deleted_at FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL ORDER BY started_at ASC")?;
+    let r_iter = r_stmt.query_map([session.id], |r| {
+        Ok(SessionRow {
+            id: r.get(0)?,
+            uuid: r.get(1)?,
+            started_at: r.get(2)?,
+            ended_at: r.get(3)?,
+            round_type: r.get(4)?,
+            duration_secs: r.get(5)?,
+            completed: r.get::<_, i64>(6)? != 0,
+            subject: r.get(7)?,
+            subject_topic: r.get(8)?,
+            study_type: r.get(9)?,
+            notes: r.get(10)?,
+            updated_at: r.get(11)?,
+            deleted_at: r.get(12)?,
+        })
+    })?;
+    for r in r_iter {
+        session.rounds.push(r?);
+    }
+    Ok(Some(session))
+}
+
 pub fn delete_session(conn: &Connection, id: i64) -> Result<()> {
     let now = unix_now();
     conn.execute(
-        "UPDATE sessions SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
+        "UPDATE rounds SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
         params![now, now, id],
     )?;
     Ok(())
@@ -353,7 +451,7 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
         }
     }
     conn.execute(
-        "UPDATE sessions SET
+        "UPDATE rounds SET
             subject = ?1,
             subject_topic = ?2,
             study_type = ?3,
@@ -440,7 +538,7 @@ pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayl
     let ended_at = payload.started_at + (payload.duration_secs as i64);
     
     conn.execute(
-        "INSERT INTO sessions (
+        "INSERT INTO rounds (
             uuid, started_at, ended_at, round_type, duration_secs, completed,
             subject, subject_topic, study_type, notes, updated_at
         ) VALUES (
@@ -547,7 +645,7 @@ pub fn subject_get_weekly_progress(conn: &Connection, name: &str) -> Result<Subj
     ).optional()?.flatten();
 
     let completed: u32 = conn.query_row(
-        "SELECT COUNT(id) FROM sessions 
+        "SELECT COUNT(id) FROM rounds 
          WHERE subject = ?1 
          AND round_type = 'work' 
          AND completed = 1 
@@ -564,7 +662,7 @@ pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<V
     let mut topics = Vec::new();
     if let Some(s) = subject {
         let mut stmt = conn.prepare(
-            "SELECT DISTINCT subject_topic FROM sessions WHERE subject = ?1 AND subject_topic IS NOT NULL AND subject_topic != '' AND deleted_at IS NULL ORDER BY subject_topic COLLATE NOCASE ASC"
+            "SELECT DISTINCT subject_topic FROM rounds WHERE subject = ?1 AND subject_topic IS NOT NULL AND subject_topic != '' AND deleted_at IS NULL ORDER BY subject_topic COLLATE NOCASE ASC"
         )?;
         let rows = stmt.query_map([s], |r| r.get(0))?;
         for row in rows {
@@ -572,7 +670,7 @@ pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<V
         }
     } else {
         let mut stmt = conn.prepare(
-            "SELECT DISTINCT subject_topic FROM sessions WHERE subject_topic IS NOT NULL AND subject_topic != '' AND deleted_at IS NULL ORDER BY subject_topic COLLATE NOCASE ASC"
+            "SELECT DISTINCT subject_topic FROM rounds WHERE subject_topic IS NOT NULL AND subject_topic != '' AND deleted_at IS NULL ORDER BY subject_topic COLLATE NOCASE ASC"
         )?;
         let rows = stmt.query_map([], |r| r.get(0))?;
         for row in rows {
@@ -584,7 +682,7 @@ pub fn get_distinct_topics(conn: &Connection, subject: Option<&str>) -> Result<V
 
 pub fn get_distinct_study_types(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT study_type FROM sessions WHERE study_type IS NOT NULL AND study_type != '' AND deleted_at IS NULL ORDER BY study_type COLLATE NOCASE ASC"
+        "SELECT DISTINCT study_type FROM rounds WHERE study_type IS NOT NULL AND study_type != '' AND deleted_at IS NULL ORDER BY study_type COLLATE NOCASE ASC"
     )?;
     let rows = stmt.query_map([], |r| r.get(0))?;
     let mut types = Vec::new();
@@ -608,20 +706,20 @@ pub struct SessionStats {
 
 pub fn get_all_time_stats(conn: &Connection) -> Result<SessionStats> {
     let total_work_sessions: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions WHERE round_type = 'work' AND deleted_at IS NULL",
+        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM rounds WHERE round_type = 'work' AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
 
     let completed_work_sessions: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
+        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM rounds WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
 
     let total_work_secs: i64 = conn.query_row(
         "SELECT COALESCE(SUM(duration_secs), 0)
-         FROM sessions WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
+         FROM rounds WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
@@ -677,7 +775,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
     )?;
 
     let total: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions
+        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM rounds
          WHERE round_type = 'work' AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
@@ -685,7 +783,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
     )?;
 
     let completed: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM sessions
+        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM rounds
          WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
@@ -693,7 +791,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
     )?;
 
     let focus_secs: i64 = conn.query_row(
-        "SELECT COALESCE(SUM(duration_secs), 0) FROM sessions
+        "SELECT COALESCE(SUM(duration_secs), 0) FROM rounds
          WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
@@ -704,7 +802,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
     let mut stmt = conn.prepare(
         "SELECT CAST(strftime('%H', datetime(started_at, 'unixepoch', 'localtime')) AS INTEGER) as h,
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as cnt
-         FROM sessions
+         FROM rounds
          WHERE round_type = 'work' AND completed = 1
          AND date(started_at, 'unixepoch', 'localtime') = ?1
          GROUP BY h",
@@ -730,7 +828,7 @@ pub fn get_weekly_stats(conn: &Connection) -> Result<Vec<DayStat>> {
     let mut stmt = conn.prepare(
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as rounds
-         FROM sessions
+         FROM rounds
          WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') >= date('now', 'localtime', '-6 days')
          GROUP BY day
@@ -748,7 +846,7 @@ pub fn get_heatmap_data(conn: &Connection) -> Result<Vec<HeatmapEntry>> {
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as cnt,
                 COALESCE(SUM(duration_secs), 0) as focus_secs
-         FROM sessions
+         FROM rounds
          WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          GROUP BY day
          ORDER BY day",
@@ -770,7 +868,7 @@ pub fn get_streak(conn: &Connection) -> Result<StreakInfo> {
 
     let mut stmt = conn.prepare(
         "SELECT date(started_at, 'unixepoch', 'localtime') as day
-         FROM sessions
+         FROM rounds
          WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
          GROUP BY day
          ORDER BY day",
@@ -876,7 +974,7 @@ mod tests {
 
         let completed: i64 = conn
             .query_row(
-                "SELECT completed FROM sessions WHERE id = ?1",
+                "SELECT completed FROM rounds WHERE id = ?1",
                 [id],
                 |r| r.get(0),
             )
@@ -1019,7 +1117,7 @@ pub fn export_sessions(conn: &Connection) -> Result<Vec<SessionRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed,
                 subject, subject_topic, study_type, notes, updated_at, deleted_at
-         FROM sessions
+         FROM rounds
          WHERE deleted_at IS NULL
          ORDER BY started_at ASC",
     )?;
@@ -1056,7 +1154,7 @@ pub fn import_sessions(conn: &Connection, sessions: &[SessionRow]) -> Result<Imp
     for s in sessions {
         // INSERT OR IGNORE skips the row if the UUID unique constraint fires.
         let affected = conn.execute(
-            "INSERT OR IGNORE INTO sessions (
+            "INSERT OR IGNORE INTO rounds (
                 uuid, started_at, ended_at, round_type, duration_secs, completed,
                 subject, subject_topic, study_type, notes, updated_at, deleted_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",

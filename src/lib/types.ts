@@ -213,8 +213,25 @@ export interface SessionFilter {
   show_breaks?: boolean;
 }
 
+export interface StudySessionRow {
+  id: number;
+  uuid: string;
+  started_at: number;
+  ended_at: number | null;
+  goal_rounds: number;
+  total_pause_secs: number;
+  subject: string | null;
+  subject_topic: string | null;
+  study_type: string | null;
+  notes: string | null;
+  created_at: number;
+  updated_at: number | null;
+  deleted_at: number | null;
+  rounds: SessionRow[];
+}
+
 export interface SessionHistoryPage {
-  sessions: SessionRow[];
+  sessions: StudySessionRow[];
   total: number;
   total_work_rounds: number;
   total_focus_secs: number;

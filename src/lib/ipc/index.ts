@@ -18,6 +18,7 @@ import type {
   CreateManualSessionPayload,
   SessionFilter,
   SessionHistoryPage,
+  StudySessionRow,
   ImportSummary,
   InsightsStats,
   SubjectStats,
@@ -98,6 +99,7 @@ export const sessionsExport = (path: string) => invoke<number>('sessions_export'
 /** Import sessions from a `.pomotroid.json` file. Skips duplicate UUIDs. */
 export const sessionsImport = (path: string) => invoke<ImportSummary>('sessions_import', { path });
 export const getSession = (id: number) => invoke<SessionRow | null>('session_get', { id });
+export const getStudySession = (id: number) => invoke<StudySessionRow | null>('study_session_get', { id });
 export const updateSession = (id: number, payload: UpdateSessionPayload) => invoke<void>('session_update', { id, payload });
 export const sessionAddExtraTime = (id: number, extraSecs: number) => invoke<void>('session_add_extra_time', { id, extraSecs });
 export const studySessionUpdate = (id: number, payload: UpdateStudySessionPayload) => invoke<void>('study_session_update', { id, payload });

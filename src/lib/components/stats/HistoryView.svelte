@@ -6,7 +6,7 @@
   import * as m from '$paraglide/messages.js';
   import { settings } from '$lib/stores/settings';
 
-  let { onEditSession }: { onEditSession: (id: number) => void } = $props();
+  let { onEditSession, onEditStudySession }: { onEditSession: (id: number) => void, onEditStudySession: (id: number) => void } = $props();
 
   let limit = 50;
   let offset = $state(0);
@@ -255,24 +255,40 @@
           </tr>
         </thead>
         <tbody>
-          {#each history.sessions as row}
-            <tr onclick={() => onEditSession(row.id)}>
-              <td>{formatUnix(row.started_at)}</td>
-              <td>{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</td>
-              <td>
-                {#if row.round_type === 'work'}
-                  {#if row.completed}
-                    <span class="status-badge complete" title="Completed">✓</span>
-                  {:else}
-                    <span class="status-badge incomplete" title="Incomplete">✕</span>
-                  {/if}
-                {/if}
+          {#each history.sessions as session}
+            <!-- Session Row -->
+            <tr class="session-row" onclick={() => onEditStudySession(session.id)}>
+              <td class="font-bold">{formatUnix(session.started_at)}</td>
+              <td class="font-bold">Session</td>
+              <td class="font-bold text-center">Goal: {session.goal_rounds}</td>
+              <td class="font-bold">
+                {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}
               </td>
-              <td>{formatDuration(row.duration_secs)}</td>
-              <td>{row.subject || '-'}</td>
-              <td>{row.subject_topic || '-'}</td>
-              <td>{row.study_type || '-'}</td>
+              <td class="font-bold">{session.subject || '-'}</td>
+              <td class="font-bold">{session.subject_topic || '-'}</td>
+              <td class="font-bold">{session.study_type || '-'}</td>
             </tr>
+            
+            <!-- Child Rounds -->
+            {#each session.rounds as row}
+              <tr class="round-row" onclick={() => onEditSession(row.id)}>
+                <td class="indent pl-6 text-sm opacity-70">↳ {formatUnix(row.started_at)}</td>
+                <td class="text-sm opacity-70">{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</td>
+                <td class="text-sm opacity-70">
+                  {#if row.round_type === 'work'}
+                    {#if row.completed}
+                      <span class="status-badge complete" title="Completed">✓</span>
+                    {:else}
+                      <span class="status-badge incomplete" title="Incomplete">✕</span>
+                    {/if}
+                  {/if}
+                </td>
+                <td class="text-sm opacity-70">{formatDuration(row.duration_secs)}</td>
+                <td class="text-sm opacity-70">{row.subject || '-'}</td>
+                <td class="text-sm opacity-70">{row.subject_topic || '-'}</td>
+                <td class="text-sm opacity-70">{row.study_type || '-'}</td>
+              </tr>
+            {/each}
           {/each}
         </tbody>
       </table>
@@ -541,5 +557,16 @@
 
   .table tbody tr:hover {
     background: var(--color-hover);
+  }
+  .session-row {
+    background: var(--bg-hover);
+  }
+  .session-row td {
+    border-top: 2px solid var(--border);
+  }
+  .session-row:hover, .round-row:hover {
+    background: var(--primary);
+    color: var(--primary-content);
+    cursor: pointer;
   }
 </style>

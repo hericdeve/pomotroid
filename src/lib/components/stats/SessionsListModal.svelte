@@ -87,44 +87,50 @@
         <div class="msg">No sessions found.</div>
       {:else}
         <div class="list">
-          {#each history.sessions as row}
-            <!-- svelte-ignore a11y_interactive_supports_focus -->
-            <div 
-              class="session-row" 
-              role="button"
-              onclick={() => onEditSession(row.id)}
-            >
-              <div class="time">{formatUnix(row.started_at)}</div>
-              <div class="details">
-                <div class="primary">
-                  <span class="type">{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</span>
-                  {#if row.round_type === 'work'}
-                    {#if row.completed}
-                      <span class="status-badge complete" title="Completed">✓</span>
-                    {:else}
-                      <span class="status-badge incomplete" title="Incomplete">✕</span>
-                    {/if}
-                  {/if}
-                  <span class="duration">&bull; {formatDuration(row.duration_secs)}</span>
-                </div>
-                <div class="secondary">
-                  {#if row.subject}
-                    <span class="subject">{row.subject}</span>
-                    {#if row.subject_topic}
-                      <span class="topic"> / {row.subject_topic}</span>
-                    {/if}
-                  {:else}
-                    <span class="no-tags">No tags</span>
-                  {/if}
-                </div>
-              </div>
-              <div class="action-icon">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-              </div>
+          {#each history.sessions as session}
+            <div class="session-header">
+              <span class="time">{formatUnix(session.started_at)}</span>
+              <span class="subject">{session.subject || 'No Subject'}</span>
             </div>
+            {#each session.rounds as row}
+              <!-- svelte-ignore a11y_interactive_supports_focus -->
+              <div 
+                class="session-row round-row" 
+                role="button"
+                onclick={() => onEditSession(row.id)}
+              >
+                <div class="time pl-4 opacity-70">↳ {formatUnix(row.started_at)}</div>
+                <div class="details">
+                  <div class="primary">
+                    <span class="type">{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</span>
+                    {#if row.round_type === 'work'}
+                      {#if row.completed}
+                        <span class="status-badge complete" title="Completed">✓</span>
+                      {:else}
+                        <span class="status-badge incomplete" title="Incomplete">✕</span>
+                      {/if}
+                    {/if}
+                    <span class="duration">&bull; {formatDuration(row.duration_secs)}</span>
+                  </div>
+                  <div class="secondary">
+                    {#if row.subject}
+                      <span class="subject">{row.subject}</span>
+                      {#if row.subject_topic}
+                        <span class="topic"> / {row.subject_topic}</span>
+                      {/if}
+                    {:else}
+                      <span class="no-tags">No tags</span>
+                    {/if}
+                  </div>
+                </div>
+                <div class="action-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                </div>
+              </div>
+            {/each}
           {/each}
         </div>
       {/if}
@@ -341,5 +347,17 @@
 
   .page-info {
     color: var(--color-foreground-darker);
+  }
+  .session-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-hover);
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .session-header .subject {
+    color: var(--primary);
   }
 </style>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSession, updateSession, studySessionUpdate } from '$lib/ipc';
+  import { getSession, getStudySession, updateSession, studySessionUpdate } from '$lib/ipc';
   import EntryDetail from './EntryDetail.svelte';
   import { pendingTags } from '$lib/stores/pendingTags';
   import { get } from 'svelte/store';
@@ -26,6 +26,19 @@
     try {
       if (sessionId !== null) {
         const row = await getSession(sessionId);
+        if (row) {
+          payload = {
+            subject: row.subject || '',
+            subject_topic: row.subject_topic || '',
+            study_type: row.study_type || '',
+            notes: row.notes || '',
+          };
+          initialLoaded = true;
+        } else {
+          onClose();
+        }
+      } else if (studySessionId !== null) {
+        const row = await getStudySession(studySessionId);
         if (row) {
           payload = {
             subject: row.subject || '',
