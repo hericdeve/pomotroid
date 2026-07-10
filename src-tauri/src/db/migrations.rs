@@ -336,8 +336,8 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] applying MIGRATION_14: rebuild study sessions");
         conn.execute_batch("BEGIN;")?;
 
-        conn.execute("DELETE FROM study_sessions", [])?;
         conn.execute("UPDATE rounds SET study_session_id = NULL", [])?;
+        conn.execute("DELETE FROM study_sessions", [])?;
 
         struct RoundRow {
             id: i64,
