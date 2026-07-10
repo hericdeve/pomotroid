@@ -1198,6 +1198,8 @@ pub struct InsightsStats {
     pub by_day_of_week: Vec<i64>, // 0 = Sunday, 6 = Saturday
     pub by_hour_of_day: Vec<i64>, // 0 = 12am, 23 = 11pm
     pub by_month: Vec<i64>,       // 0 = Jan, 11 = Dec
+    pub break_efficiency_percentage: Option<f64>,
+    pub schedule_adherence_percentage: Option<f64>,
 }
 
 pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<InsightsStats> {
@@ -1228,6 +1230,62 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
         let sql = format!(" AND started_at <= ?{}", params.len() + 1);
         base_query.push_str(&sql);
         params.push(d_to.into());
+    }
+
+    // Efficiency & Adherence
+    let metrics_query = format!("
+        WITH session_metrics AS (
+            SELECT 
+                ss.id,
+                ss.total_pause_secs,
+                ss.goal_rounds,
+                (IFNULL(ss.ended_at, strftime('%s', 'now')) - ss.started_at) as session_time,
+                SUM(CASE WHEN r.round_type != 'work' THEN r.overtime_secs ELSE 0 END) as lazytime,
+                SUM(CASE WHEN r.round_type = 'work' THEN r.duration_secs + r.overtime_secs ELSE 0 END) as studying_time,
+                SUM(CASE WHEN r.round_type = 'work' AND r.completed = 1 THEN 1 ELSE 0 END) as completed_work_rounds
+            FROM study_sessions ss
+            JOIN rounds r ON r.study_session_id = ss.id
+            WHERE ss.deleted_at IS NULL
+            {} -- base_query filters (need to adapt since base_query uses rounds table and completed=1)
+            GROUP BY ss.id
+        )
+        SELECT
+            SUM(total_pause_secs) as total_pauses,
+            SUM(lazytime) as total_lazytime,
+            SUM(session_time) as total_session_time,
+            SUM(studying_time) as total_studying_time,
+            SUM(CASE WHEN goal_rounds > 0 THEN 1 ELSE 0 END) as total_goal_sessions,
+            SUM(CASE WHEN goal_rounds > 0 AND completed_work_rounds >= goal_rounds THEN 1 ELSE 0 END) as adhered_sessions
+        FROM session_metrics
+    ", base_query.replace("FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1", "").replace(" started_at", " ss.started_at").replace(" subject", " ss.subject").replace(" study_type", " ss.study_type"));
+
+    let mut break_efficiency_percentage: Option<f64> = None;
+    let mut schedule_adherence_percentage: Option<f64> = None;
+
+    if let Ok(mut stmt) = conn.prepare(&metrics_query) {
+        if let Ok(mut rows) = stmt.query(rusqlite::params_from_iter(params.iter())) {
+            if let Some(row) = rows.next()? {
+                let total_pauses: i64 = row.get(0).unwrap_or(0);
+                let total_lazytime: i64 = row.get(1).unwrap_or(0);
+                let total_session_time: i64 = row.get(2).unwrap_or(0);
+                let total_studying_time: i64 = row.get(3).unwrap_or(0);
+                let total_goal_sessions: i64 = row.get(4).unwrap_or(0);
+                let adhered_sessions: i64 = row.get(5).unwrap_or(0);
+
+                let non_study_time = (total_session_time - total_studying_time).max(0);
+                if non_study_time > 0 {
+                    let wasted_time = total_pauses + total_lazytime;
+                    let efficiency = 1.0 - (wasted_time as f64 / non_study_time as f64);
+                    break_efficiency_percentage = Some((efficiency.max(0.0) * 100.0).round());
+                } else if total_session_time > 0 {
+                    break_efficiency_percentage = Some(100.0);
+                }
+
+                if total_goal_sessions > 0 {
+                    schedule_adherence_percentage = Some((adhered_sessions as f64 / total_goal_sessions as f64) * 100.0);
+                }
+            }
+        }
     }
 
     // Top Subjects
@@ -1287,6 +1345,8 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
         by_day_of_week,
         by_hour_of_day,
         by_month,
+        break_efficiency_percentage,
+        schedule_adherence_percentage,
     })
 }
 

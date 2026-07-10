@@ -172,6 +172,47 @@
   {:else if insights}
     <div class="insights-dashboard">
       
+      <!-- Efficiency KPIs -->
+      <div class="kpi-grid">
+        <div class="card kpi-card" class:perfect={insights.break_efficiency_percentage === 100}>
+          <div class="kpi-label">Break Efficiency</div>
+          <div class="kpi-val" style:color={insights.break_efficiency_percentage !== null ? `hsl(${Math.max(0, insights.break_efficiency_percentage)} 80% 60%)` : ''}>
+            {#if insights.break_efficiency_percentage !== null}
+              {insights.break_efficiency_percentage}%
+            {:else}
+              -
+            {/if}
+          </div>
+          <div class="kpi-sub">
+            {#if insights.break_efficiency_percentage === 100}
+              Perfect Efficiency!
+            {:else if insights.break_efficiency_percentage !== null}
+              {100 - insights.break_efficiency_percentage}% Wasted Time
+            {:else}
+              No non-study time recorded
+            {/if}
+          </div>
+        </div>
+
+        <div class="card kpi-card" class:perfect={insights.schedule_adherence_percentage === 100}>
+          <div class="kpi-label">Schedule Adherence</div>
+          <div class="kpi-val" style:color={insights.schedule_adherence_percentage !== null ? `hsl(${Math.max(0, insights.schedule_adherence_percentage)} 80% 60%)` : ''}>
+            {#if insights.schedule_adherence_percentage !== null}
+              {Math.round(insights.schedule_adherence_percentage)}%
+            {:else}
+              -
+            {/if}
+          </div>
+          <div class="kpi-sub">
+            {#if insights.schedule_adherence_percentage !== null}
+              Sessions meeting their goal
+            {:else}
+              No sessions with goals set
+            {/if}
+          </div>
+        </div>
+      </div>
+
       <!-- Subjects Card -->
       <div class="card card-wide">
         <div class="card-header">
@@ -643,5 +684,47 @@
       width: 160px;
       height: 160px;
     }
+  }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .kpi-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 24px 16px;
+    text-align: center;
+  }
+
+  .kpi-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-foreground-darker);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  .kpi-val {
+    font-size: 2.5rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .kpi-sub {
+    font-size: 0.85rem;
+    color: var(--color-foreground-dark);
+    opacity: 0.8;
+  }
+
+  .kpi-card.perfect .kpi-sub {
+    color: var(--primary);
+    font-weight: 600;
   }
 </style>

@@ -146,6 +146,8 @@ export interface InsightsStats {
   by_day_of_week: number[];
   by_hour_of_day: number[];
   by_month: number[];
+  break_efficiency_percentage: number | null;
+  schedule_adherence_percentage: number | null;
 }
 
 export interface SubjectStats {
