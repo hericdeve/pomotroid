@@ -117,11 +117,43 @@ export const sessionsGetHistory = (limit: number, offset: number, filter: Sessio
 
 // --- Schedule commands ---
 export const scheduleGetAll = () => invoke<ScheduledBlock[]>('schedule_get_all');
-export const scheduleAddBlock = (subject: string, dayOfWeek: number, startMinute: number, endMinute: number) => 
-  invoke<number>('schedule_add_block', { subject, dayOfWeek, startMinute, endMinute });
+export const scheduleAddBlock = (
+  subject: string,
+  dayOfWeek: number,
+  startMinute: number,
+  endMinute: number,
+  subjectTopic: string | null = null,
+  studyType: string | null = null,
+  roundTags: string | null = null
+) => invoke<number>('schedule_add_block', {
+  subject, 
+  dayOfWeek, 
+  startMinute, 
+  endMinute,
+  subjectTopic,
+  studyType,
+  roundTags
+});
+
 export const scheduleDeleteBlock = (id: number) => invoke<void>('schedule_delete_block', { id });
-export const scheduleUpdateBlock = (id: number, dayOfWeek: number, startMinute: number, endMinute: number) => 
-  invoke<void>('schedule_update_block', { id, dayOfWeek, startMinute, endMinute });
+
+export const scheduleUpdateBlock = (
+  id: number,
+  dayOfWeek: number,
+  startMinute: number,
+  endMinute: number,
+  subjectTopic: string | null = null,
+  studyType: string | null = null,
+  roundTags: string | null = null
+) => invoke<void>('schedule_update_block', {
+  id, 
+  dayOfWeek, 
+  startMinute, 
+  endMinute,
+  subjectTopic,
+  studyType,
+  roundTags
+});
 
 // --- Stats commands ---
 

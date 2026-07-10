@@ -1139,14 +1139,17 @@ pub fn schedule_get_all(db: State<'_, DbState>) -> Result<Vec<queries::Scheduled
 
 #[tauri::command]
 pub fn schedule_add_block(
-    subject: String, 
-    day_of_week: i32, 
-    start_minute: i32, 
-    end_minute: i32, 
-    db: State<'_, DbState>
+    subject: String,
+    day_of_week: i32,
+    start_minute: i32,
+    end_minute: i32,
+    subject_topic: Option<String>,
+    study_type: Option<String>,
+    round_tags: Option<String>,
+    db: State<DbState>,
 ) -> Result<i64, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::schedule_add_block(&conn, &subject, day_of_week, start_minute, end_minute)
+    queries::schedule_add_block(&conn, &subject, day_of_week, start_minute, end_minute, subject_topic.as_deref(), study_type.as_deref(), round_tags.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -1158,14 +1161,17 @@ pub fn schedule_delete_block(id: i64, db: State<'_, DbState>) -> Result<(), Stri
 
 #[tauri::command]
 pub fn schedule_update_block(
-    id: i64, 
-    day_of_week: i32, 
-    start_minute: i32, 
-    end_minute: i32, 
-    db: State<'_, DbState>
+    id: i64,
+    day_of_week: i32,
+    start_minute: i32,
+    end_minute: i32,
+    subject_topic: Option<String>,
+    study_type: Option<String>,
+    round_tags: Option<String>,
+    db: State<DbState>,
 ) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::schedule_update_block(&conn, id, day_of_week, start_minute, end_minute)
+    queries::schedule_update_block(&conn, id, day_of_week, start_minute, end_minute, subject_topic.as_deref(), study_type.as_deref(), round_tags.as_deref())
         .map_err(|e| e.to_string())
 }
 #[cfg(test)]

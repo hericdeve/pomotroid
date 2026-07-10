@@ -164,11 +164,14 @@ export interface SubjectWeeklyProgress {
 }
 
 export interface ScheduledBlock {
-  id: number;
+  id?: number;
   subject: string;
   day_of_week: number;
   start_minute: number;
   end_minute: number;
+  subject_topic: string | null;
+  study_type: string | null;
+  round_tags: string | null;
 }
 
 // ---------------------------------------------------------------------------

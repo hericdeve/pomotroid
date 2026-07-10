@@ -1361,11 +1361,14 @@ pub struct ScheduledBlock {
     pub day_of_week: i32,
     pub start_minute: i32,
     pub end_minute: i32,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub round_tags: Option<String>,
 }
 
 pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
     let mut stmt = conn.prepare(
-        "SELECT id, subject, day_of_week, start_minute, end_minute 
+        "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags 
          FROM scheduled_blocks 
          ORDER BY day_of_week ASC, start_minute ASC"
     )?;
@@ -1377,6 +1380,9 @@ pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
             day_of_week: row.get(2)?,
             start_minute: row.get(3)?,
             end_minute: row.get(4)?,
+            subject_topic: row.get(5)?,
+            study_type: row.get(6)?,
+            round_tags: row.get(7)?,
         })
     })?;
 
@@ -1392,12 +1398,15 @@ pub fn schedule_add_block(
     subject: &str, 
     day_of_week: i32, 
     start_minute: i32, 
-    end_minute: i32
+    end_minute: i32,
+    subject_topic: Option<&str>,
+    study_type: Option<&str>,
+    round_tags: Option<&str>,
 ) -> Result<i64> {
     conn.execute(
-        "INSERT INTO scheduled_blocks (subject, day_of_week, start_minute, end_minute, created_at) 
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![subject.trim(), day_of_week, start_minute, end_minute, unix_now()],
+        "INSERT INTO scheduled_blocks (subject, day_of_week, start_minute, end_minute, created_at, subject_topic, study_type, round_tags) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![subject.trim(), day_of_week, start_minute, end_minute, unix_now(), subject_topic.map(|s| s.trim()), study_type.map(|s| s.trim()), round_tags],
     )?;
     Ok(conn.last_insert_rowid())
 }
@@ -1415,13 +1424,16 @@ pub fn schedule_update_block(
     id: i64, 
     day_of_week: i32, 
     start_minute: i32, 
-    end_minute: i32
+    end_minute: i32,
+    subject_topic: Option<&str>,
+    study_type: Option<&str>,
+    round_tags: Option<&str>,
 ) -> Result<()> {
     conn.execute(
         "UPDATE scheduled_blocks 
-         SET day_of_week = ?1, start_minute = ?2, end_minute = ?3 
-         WHERE id = ?4",
-        params![day_of_week, start_minute, end_minute, id],
+         SET day_of_week = ?1, start_minute = ?2, end_minute = ?3, subject_topic = ?4, study_type = ?5, round_tags = ?6 
+         WHERE id = ?7",
+        params![day_of_week, start_minute, end_minute, subject_topic.map(|s| s.trim()), study_type.map(|s| s.trim()), round_tags, id],
     )?;
     Ok(())
 }

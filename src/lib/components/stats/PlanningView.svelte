@@ -31,7 +31,16 @@
   async function handleBlockAdd(day: number, startMin: number, endMin: number, subject: string) {
     try {
       const id = await scheduleAddBlock(subject, day, startMin, endMin);
-      blocks = [...blocks, { id, subject, day_of_week: day, start_minute: startMin, end_minute: endMin }];
+      blocks = [...blocks, { 
+        id, 
+        subject, 
+        day_of_week: day, 
+        start_minute: startMin, 
+        end_minute: endMin,
+        subject_topic: null,
+        study_type: null,
+        round_tags: null
+      }];
     } catch (e) {
       logError(`Failed to add block: ${e}`);
       alert(`Failed to add block: ${e}`);

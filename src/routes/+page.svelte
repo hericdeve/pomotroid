@@ -8,7 +8,7 @@
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { showGoalModal, sessionGoalRounds } from '$lib/stores/sessionGoal';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerSkip, timerRestartRound, scheduleGetAll, studySessionUpdate } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerReset, timerSkip, updateSession, studySessionUpdate, scheduleGetAll } from '$lib/ipc';
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
@@ -48,6 +48,7 @@
   // Smart Schedule Detection state
   let scheduleBlocks = $state<ScheduledBlock[]>([]);
   let activeScheduledSubject = $state<string | null>(null);
+  let pendingRoundTags = $state<Record<number, { topic?: string, studyType?: string }>>({});
 
   function checkSchedule() {
     const now = new Date();
@@ -67,12 +68,31 @@
 
   function handleStartScheduled() {
     if (activeScheduledSubject) {
+      const activeBlock = scheduleBlocks.find(b => {
+        const now = new Date();
+        const jsDay = now.getDay();
+        const currentDay = jsDay === 0 ? 6 : jsDay - 1;
+        const currentMinute = now.getHours() * 60 + now.getMinutes();
+        return b.day_of_week === currentDay && currentMinute >= b.start_minute && currentMinute < b.end_minute;
+      });
+
       pendingTags.set({
         subject: activeScheduledSubject,
-        subject_topic: '',
-        study_type: '',
+        subject_topic: activeBlock?.subject_topic || '',
+        study_type: activeBlock?.study_type || '',
         notes: ''
       });
+      
+      if (activeBlock?.round_tags) {
+        try {
+          pendingRoundTags = JSON.parse(activeBlock.round_tags);
+        } catch(e) {
+          pendingRoundTags = {};
+        }
+      } else {
+        pendingRoundTags = {};
+      }
+
       if (!$timerState.is_running) {
         timerToggle();
       }
@@ -100,6 +120,7 @@
   });
 
   let prevActiveStudySessionId = $state<number | null>(null);
+  let prevWorkRoundNumber = $state<number | null>(null);
 
   $effect(() => {
     const currentId = $timerState.active_study_session_id;
@@ -115,6 +136,32 @@
         }).catch(console.error);
       }
       prevActiveStudySessionId = currentId;
+    }
+  });
+
+  $effect(() => {
+    const roundNum = $timerState.work_round_number;
+    const activeRoundId = $timerState.active_session_id; // "session" maps to "round" in timer state for backwards compat
+    const isRunning = $timerState.is_running;
+    const roundType = $timerState.round_type;
+    
+    // When a work round starts or becomes active
+    if (isRunning && roundType === 'work' && roundNum !== prevWorkRoundNumber && activeRoundId) {
+      prevWorkRoundNumber = roundNum;
+      
+      const specificTags = pendingRoundTags[roundNum];
+      if (specificTags && (specificTags.topic || specificTags.studyType)) {
+        updateSession(activeRoundId, {
+          subject: null,
+          subject_topic: specificTags.topic || null,
+          study_type: specificTags.studyType || null,
+          notes: null
+        }).catch(console.error);
+      }
+    } else if (!isRunning && roundType === 'work' && roundNum !== prevWorkRoundNumber) {
+        // It resets or stops, we don't necessarily want to do anything here yet,
+        // but we keep track to know when a NEW round actually starts.
+        prevWorkRoundNumber = roundNum;
     }
   });
 

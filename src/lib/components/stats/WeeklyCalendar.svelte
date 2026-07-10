@@ -3,6 +3,7 @@
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import BlockTimelineModal from './BlockTimelineModal.svelte';
+  import { scheduleUpdateBlock } from '$lib/ipc';
 
   interface Props {
     blocks: ScheduledBlock[];
@@ -26,6 +27,30 @@
   let currentDay = $derived((now.getDay() + 6) % 7); // 0 = Mon, 6 = Sun
   let currentMinute = $derived(now.getHours() * 60 + now.getMinutes());
   let calendarBodyRef: HTMLElement | null = $state(null);
+
+  async function handleModalSave(updatedBlock: ScheduledBlock) {
+    try {
+      await scheduleUpdateBlock(
+        updatedBlock.id!,
+        updatedBlock.day_of_week,
+        updatedBlock.start_minute,
+        updatedBlock.end_minute,
+        updatedBlock.subject_topic,
+        updatedBlock.study_type,
+        updatedBlock.round_tags
+      );
+      
+      const idx = blocks.findIndex(b => b.id === updatedBlock.id);
+      if (idx !== -1) {
+        blocks[idx] = updatedBlock;
+        blocks = [...blocks];
+      }
+      
+      selectedBlockForModal = null;
+    } catch (e) {
+      console.error('Failed to save block tags', e);
+    }
+  }
 
   onMount(() => {
     const interval = setInterval(() => {
@@ -137,7 +162,7 @@
     if (!calendarContainer) return;
 
     activeDrag = {
-      id: block.id,
+      id: block.id!,
       initialY: e.clientY,
       startMin: block.start_minute,
       endMin: block.end_minute,
@@ -228,7 +253,7 @@
     e.stopPropagation();
     e.preventDefault();
     activeResize = {
-      id: block.id,
+      id: block.id!,
       type,
       initialY: e.clientY,
       startMin: block.start_minute,
@@ -405,7 +430,7 @@
                 {#if seg.isPrimary}
                   <button 
                     class="btn-delete-block" 
-                    onclick={() => onBlockDelete(seg.block.id)}
+                    onclick={() => onBlockDelete(seg.block.id!)}
                     title="Remove block"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -430,10 +455,9 @@
 
 {#if selectedBlockForModal}
   <BlockTimelineModal 
-    subject={selectedBlockForModal.subject}
-    startMin={selectedBlockForModal.start_minute}
-    endMin={selectedBlockForModal.end_minute}
+    block={selectedBlockForModal}
     onClose={() => selectedBlockForModal = null}
+    onSave={handleModalSave}
   />
 {/if}
 
