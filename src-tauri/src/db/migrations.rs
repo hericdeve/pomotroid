@@ -220,6 +220,28 @@ const MIGRATION_12: &str = "
     INSERT INTO schema_version VALUES (12);
 ";
 
+/// Fix study_session_id for historical break rounds (migration 11 artifact)
+const MIGRATION_13: &str = "
+    UPDATE rounds
+    SET study_session_id = (
+        SELECT study_session_id
+        FROM rounds AS r2
+        WHERE r2.round_type = 'work'
+          AND r2.started_at <= rounds.started_at
+          AND (rounds.started_at - r2.started_at) < 43200
+          AND r2.deleted_at IS NULL
+        ORDER BY r2.started_at DESC
+        LIMIT 1
+    )
+    WHERE round_type IN ('short-break', 'long-break')
+      AND deleted_at IS NULL;
+
+    DELETE FROM study_sessions
+    WHERE id NOT IN (SELECT DISTINCT study_session_id FROM rounds WHERE study_session_id IS NOT NULL);
+
+    INSERT INTO schema_version VALUES (13);
+";
+
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
 pub fn run(conn: &Connection) -> Result<()> {
@@ -296,6 +318,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] applying MIGRATION_12: add scheduled blocks tags");
         conn.execute_batch(&format!("BEGIN; {MIGRATION_12} COMMIT;"))?;
         log::info!("[db/migrations] MIGRATION_12 complete");
+    }
+
+    if version < 13 {
+        log::info!("[db/migrations] applying MIGRATION_13: fix historical break rounds");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_13} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_13 complete");
     }
 
     Ok(())

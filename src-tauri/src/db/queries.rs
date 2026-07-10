@@ -593,7 +593,7 @@ pub fn subjects_get_all(conn: &Connection) -> Result<Vec<SubjectStats>> {
             COUNT(se.id) as pomodoro_count,
             sb.weekly_goal
          FROM subjects sb
-         LEFT JOIN sessions se ON se.subject = sb.name AND se.round_type = 'work' AND se.completed = 1 AND se.deleted_at IS NULL
+         LEFT JOIN rounds se ON se.subject = sb.name AND se.round_type = 'work' AND se.completed = 1 AND se.deleted_at IS NULL
          GROUP BY sb.id
          ORDER BY sb.name COLLATE NOCASE ASC"
     )?;
