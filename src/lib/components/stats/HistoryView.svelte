@@ -233,65 +233,64 @@
     {:else if history.sessions.length === 0}
       <div class="msg">No sessions found.</div>
     {:else}
-      <table class="table">
-        <colgroup>
-          <col style="width: 18%;">
-          <col style="width: 12%;">
-          <col style="width: 8%;">
-          <col style="width: 12%;">
-          <col style="width: 18%;">
-          <col style="width: 17%;">
-          <col style="width: 15%;">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Duration</th>
-            <th>Subject</th>
-            <th>Topic</th>
-            <th>Study Type</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div class="history-grid">
+        <div class="grid-header">
+          <div>Date</div>
+          <div>Type</div>
+          <div class="text-center">Status</div>
+          <div>Duration</div>
+          <div>Subject</div>
+          <div>Topic</div>
+          <div>Study Type</div>
+        </div>
+        
+        <div class="grid-body">
           {#each history.sessions as session}
-            <!-- Session Row -->
-            <tr class="session-row" onclick={() => onEditStudySession(session.id)}>
-              <td class="font-bold">{formatUnix(session.started_at)}</td>
-              <td class="font-bold">Session</td>
-              <td class="font-bold text-center">Goal: {session.goal_rounds}</td>
-              <td class="font-bold">
-                {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}
-              </td>
-              <td class="font-bold">{session.subject || '-'}</td>
-              <td class="font-bold">{session.subject_topic || '-'}</td>
-              <td class="font-bold">{session.study_type || '-'}</td>
-            </tr>
-            
-            <!-- Child Rounds -->
-            {#each session.rounds as row}
-              <tr class="round-row" onclick={() => onEditSession(row.id)}>
-                <td class="indent pl-6 text-sm opacity-70">↳ {formatUnix(row.started_at)}</td>
-                <td class="text-sm opacity-70">{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</td>
-                <td class="text-sm opacity-70">
-                  {#if row.round_type === 'work'}
-                    {#if row.completed}
-                      <span class="status-badge complete" title="Completed">✓</span>
-                    {:else}
-                      <span class="status-badge incomplete" title="Incomplete">✕</span>
-                    {/if}
-                  {/if}
-                </td>
-                <td class="text-sm opacity-70">{formatDuration(row.duration_secs)}</td>
-                <td class="text-sm opacity-70">{row.subject || '-'}</td>
-                <td class="text-sm opacity-70">{row.subject_topic || '-'}</td>
-                <td class="text-sm opacity-70">{row.study_type || '-'}</td>
-              </tr>
-            {/each}
+            <div class="session-card">
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="session-row grid-row" onclick={() => onEditStudySession(session.id)}>
+                <div class="font-bold">{formatUnix(session.started_at)}</div>
+                <div class="font-bold">Session</div>
+                <div class="font-bold text-center">Goal: {session.goal_rounds}</div>
+                <div class="font-bold">
+                  {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}
+                </div>
+                <div class="font-bold">{session.subject || '-'}</div>
+                <div class="font-bold">{session.subject_topic || '-'}</div>
+                <div class="font-bold">{session.study_type || '-'}</div>
+              </div>
+              
+              <div class="rounds-container">
+                {#each session.rounds as row}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div class="round-row grid-row" onclick={() => onEditSession(row.id)}>
+                    <div class="pl-6 text-sm opacity-70 flex items-center gap-2">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-50"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>
+                      {formatUnix(row.started_at)}
+                    </div>
+                    <div class="text-sm opacity-70">{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</div>
+                    <div class="text-sm opacity-70 text-center">
+                      {#if row.round_type === 'work'}
+                        {#if row.completed}
+                          <span class="status-badge complete" title="Completed">✓</span>
+                        {:else}
+                          <span class="status-badge incomplete" title="Incomplete">✕</span>
+                        {/if}
+                      {/if}
+                    </div>
+                    <div class="text-sm opacity-70">{formatDuration(row.duration_secs)}</div>
+                    <div class="text-sm opacity-70">{row.subject || '-'}</div>
+                    <div class="text-sm opacity-70">{row.subject_topic || '-'}</div>
+                    <div class="text-sm opacity-70">{row.study_type || '-'}</div>
+                  </div>
+                {/each}
+              </div>
+            </div>
           {/each}
-        </tbody>
-      </table>
+        </div>
+      </div>
     {/if}
   </div>
 
@@ -529,44 +528,89 @@
     color: var(--color-foreground-darker);
   }
 
-  .table {
-    width: 100%;
-    table-layout: fixed;
-    border-collapse: collapse;
+  .history-grid {
+    display: flex;
+    flex-direction: column;
     font-size: 0.85rem;
   }
-
-  .table th, .table td {
-    padding: 10px 16px;
-    text-align: left;
-    border-bottom: 1px solid var(--color-separator);
+  
+  .grid-header, .grid-row {
+    display: grid;
+    grid-template-columns: 18% 12% 8% 12% 18% 17% 15%;
+    align-items: center;
   }
 
-  .table th {
+  .grid-header {
     background: var(--color-background);
     color: var(--color-foreground-darker);
     font-weight: 600;
     position: sticky;
     top: 0;
+    z-index: 10;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-separator);
   }
 
-  .table tbody tr {
+  .grid-header > div, .grid-row > div {
+    padding-right: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .grid-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .session-card {
+    border: 1px solid var(--color-separator);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--color-background);
+  }
+
+  .session-row {
+    padding: 12px 16px;
+    background: var(--color-hover);
     cursor: pointer;
     transition: background 0.1s;
+    border-bottom: 1px solid var(--color-separator);
   }
 
-  .table tbody tr:hover {
+  .session-row:hover {
+    filter: brightness(1.1);
+  }
+
+  .rounds-container {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .round-row {
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background 0.1s;
+    border-bottom: 1px solid var(--color-separator);
+  }
+  
+  .round-row:last-child {
+    border-bottom: none;
+  }
+
+  .round-row:hover {
     background: var(--color-hover);
   }
-  .session-row {
-    background: var(--bg-hover);
-  }
-  .session-row td {
-    border-top: 2px solid var(--border);
-  }
-  .session-row:hover, .round-row:hover {
-    background: var(--primary);
-    color: var(--primary-content);
-    cursor: pointer;
-  }
+  
+  .pl-6 { padding-left: 24px; }
+  .opacity-70 { opacity: 0.7; }
+  .opacity-50 { opacity: 0.5; }
+  .text-sm { font-size: 0.8rem; }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .gap-2 { gap: 8px; }
+  .font-bold { font-weight: 600; }
+  .text-center { text-align: center; }
 </style>
