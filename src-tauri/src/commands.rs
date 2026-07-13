@@ -60,7 +60,9 @@ pub fn timer_restart_round(timer: State<'_, TimerController>) {
 /// Called once on frontend mount to hydrate stores.
 #[tauri::command]
 pub fn timer_get_state(timer: State<'_, TimerController>) -> TimerSnapshot {
-    timer.get_snapshot()
+    let snap = timer.get_snapshot();
+    log::info!("[timer_get_state] total_secs={} elapsed={} is_running={}", snap.total_secs, snap.elapsed_secs, snap.is_running);
+    snap
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +132,9 @@ pub fn settings_set(
     // state.  The timer:reset handler only calls timerState.set(), so emitting
     // while running does not interrupt the countdown; the next timer:tick
     // event will reconcile total_secs from the engine within one second.
-    app.emit("timer:reset", &timer.get_snapshot()).ok();
+    let snap = timer.get_snapshot();
+    log::info!("[settings_set] key={key} val={value} => snap.total_secs={}", snap.total_secs);
+    app.emit("timer:reset", &snap).ok();
 
     // Propagate volume and tick-sound changes to the audio engine (optional state).
     if let Some(audio) = app.try_state::<Arc<AudioManager>>() {
@@ -1016,6 +1020,12 @@ pub fn session_add_extra_time(id: i64, extra_secs: i64, db: State<'_, DbState>) 
 pub fn session_delete(id: i64, db: State<'_, DbState>) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     queries::delete_session(&conn, id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn study_session_delete(id: i64, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::delete_study_session(&conn, id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

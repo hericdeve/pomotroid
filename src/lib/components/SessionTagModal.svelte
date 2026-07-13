@@ -94,18 +94,25 @@
     }, 500);
   });
 
-  import { sessionDelete } from '$lib/ipc';
+  import { sessionDelete, studySessionDelete } from '$lib/ipc';
 
   async function handleDelete() {
-    if (confirm('Are you sure you want to delete this session?')) {
-      if (sessionId !== null) {
-        try {
+    const isStudySession = studySessionId !== null;
+    const msg = isStudySession 
+      ? 'Are you sure you want to delete this entire study session and all its rounds?' 
+      : 'Are you sure you want to delete this session?';
+      
+    if (confirm(msg)) {
+      try {
+        if (isStudySession) {
+          await studySessionDelete(studySessionId!);
+        } else if (sessionId !== null) {
           await sessionDelete(sessionId);
-          onDeleted?.();
-          onClose();
-        } catch (e) {
-          console.error('Failed to delete session', e);
         }
+        onDeleted?.();
+        onClose();
+      } catch (e) {
+        console.error('Failed to delete', e);
       }
     }
   }
@@ -117,7 +124,7 @@
     <div class="header">
       <h2>Tag Session</h2>
       <div class="header-actions">
-        {#if allowDelete && sessionId !== null}
+        {#if allowDelete && (sessionId !== null || studySessionId !== null)}
           <button class="delete-btn" onclick={handleDelete} aria-label="Delete Session" title="Delete Session">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18"></path>

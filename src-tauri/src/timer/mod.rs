@@ -49,6 +49,7 @@ pub struct TimerSnapshot {
 
 struct TimerShared {
     elapsed_secs: u32,
+    total_secs: u32,
     is_running: bool,
     active_session_id: Option<i64>,
     last_completed_session_id: Option<i64>,
@@ -87,6 +88,7 @@ impl TimerController {
         let settings_arc = Arc::new(Mutex::new(settings));
         let shared = Arc::new(Mutex::new(TimerShared {
             elapsed_secs: 0,
+            total_secs: duration,
             is_running: false,
             active_session_id: None,
             last_completed_session_id: None,
@@ -209,7 +211,7 @@ impl TimerController {
             round_type: seq.current_round.as_str().to_string(),
             previous_round_type: seq.previous_round.map(|r| r.as_str().to_string()).unwrap_or_default(),
             elapsed_secs: shared.elapsed_secs,
-            total_secs: seq.current_duration_secs(&settings),
+            total_secs: shared.total_secs,
             is_running: shared.is_running,
             is_paused: !shared.is_running && shared.elapsed_secs > 0,
             work_round_number: seq.work_round_number,
@@ -234,10 +236,21 @@ impl TimerController {
         // reflect the new long_break_interval immediately.
         self.sequence.lock().unwrap().work_rounds_total = new.long_break_interval;
         *self.settings.lock().unwrap() = new;
-        let s = self.shared.lock().unwrap();
-        let is_idle = !s.is_running && s.elapsed_secs == 0;
-        drop(s);
+        let is_idle = {
+            let s = self.shared.lock().unwrap();
+            !s.is_running && s.elapsed_secs == 0
+        };
         if is_idle {
+            // Compute the new duration from the freshly-updated settings and
+            // write it into shared *before* emitting timer:reset, so that the
+            // snapshot returned by get_snapshot() already carries the correct
+            // total_secs without waiting for the async Reconfigure reply.
+            let new_duration = {
+                let seq = self.sequence.lock().unwrap();
+                let settings = self.settings.lock().unwrap();
+                seq.current_duration_secs(&settings)
+            };
+            self.shared.lock().unwrap().total_secs = new_duration;
             self.reconfigure();
         }
     }
@@ -273,7 +286,11 @@ fn listen_events(
         match event {
             TimerEvent::Started { total_secs } => {
                 log::info!("[timer] started total={total_secs}s");
-                shared.lock().unwrap().is_running = true;
+                {
+                    let mut s = shared.lock().unwrap();
+                    s.is_running = true;
+                    s.total_secs = total_secs;
+                }
                 let _ = app.emit("timer:started", serde_json::json!({ "total_secs": total_secs }));
                 if let Some(ws) = app.try_state::<Arc<WsState>>() {
                     websocket::broadcast_started(&ws, total_secs);
@@ -286,6 +303,7 @@ fn listen_events(
                     let mut s = shared.lock().unwrap();
                     s.elapsed_secs = elapsed_secs;
                     s.is_running = true;
+                    s.total_secs = total_secs;
                 }
 
 
@@ -378,6 +396,7 @@ fn listen_events(
                     let mut s = shared.lock().unwrap();
                     s.elapsed_secs = 0;
                     s.is_running = false;
+                    s.total_secs = next_duration;
                 }
 
                 // Arm the next round's duration without risking a late

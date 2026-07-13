@@ -28,7 +28,7 @@ use commands::{
     settings_get, settings_reset_defaults, settings_set,
     shortcuts_reload,
     sessions_clear, sessions_import_xlsx, sessions_export, sessions_import,
-    session_get, study_session_get, session_update, study_session_update, session_delete, session_create_manual, session_get_subjects, subjects_get_all, subject_create, subject_delete, subject_set_weekly_goal, subject_get_weekly_progress, session_get_topics, session_get_study_types, sessions_get_history, session_add_extra_time,
+    session_get, study_session_get, session_update, study_session_update, session_delete, study_session_delete, session_create_manual, session_get_subjects, subjects_get_all, subject_create, subject_delete, subject_set_weekly_goal, subject_get_weekly_progress, session_get_topics, session_get_study_types, sessions_get_history, session_add_extra_time,
     stats_get_detailed, stats_get_heatmap, stats_get_insights,
     schedule_get_all, schedule_add_block, schedule_delete_block, schedule_update_block,
     themes_list,
@@ -394,6 +394,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             // Timer
+            timer_get_state,
             timer_toggle,
             timer_reset,
             timer_restart_round,
@@ -416,6 +417,7 @@ pub fn run() {
             study_session_update,
             session_add_extra_time,
             session_delete,
+            study_session_delete,
             session_create_manual,
             session_get_subjects,
             subjects_get_all,

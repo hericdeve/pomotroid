@@ -104,6 +104,7 @@ export const updateSession = (id: number, payload: UpdateSessionPayload) => invo
 export const sessionAddExtraTime = (id: number, extraSecs: number) => invoke<void>('session_add_extra_time', { id, extraSecs });
 export const studySessionUpdate = (id: number, payload: UpdateStudySessionPayload) => invoke<void>('study_session_update', { id, payload });
 export const sessionDelete = (id: number) => invoke<void>('session_delete', { id });
+export const studySessionDelete = (id: number) => invoke<void>('study_session_delete', { id });
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
 export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');
 export const subjectsGetAll = () => invoke<SubjectStats[]>('subjects_get_all');

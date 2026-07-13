@@ -8,7 +8,7 @@
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { showGoalModal, sessionGoalRounds } from '$lib/stores/sessionGoal';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerReset, timerSkip, updateSession, studySessionUpdate, scheduleGetAll } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerReset, timerSkip, timerRestartRound, updateSession, studySessionUpdate, scheduleGetAll } from '$lib/ipc';
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';

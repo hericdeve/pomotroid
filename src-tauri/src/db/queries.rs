@@ -250,6 +250,10 @@ pub fn get_history(
         
         let mut r_stmt = conn.prepare(&rounds_query)?;
         let r_iter = r_stmt.query_map([session.id], |row| {
+             let r_subject: Option<String> = row.get(7)?;
+             let r_topic: Option<String> = row.get(8)?;
+             let r_type: Option<String> = row.get(9)?;
+             let r_notes: Option<String> = row.get(10)?;
              Ok(SessionRow {
                  id: row.get(0)?,
                  uuid: row.get(1)?,
@@ -258,10 +262,10 @@ pub fn get_history(
                  round_type: row.get(4)?,
                  duration_secs: row.get(5)?,
                  completed: row.get::<_, i64>(6)? != 0,
-                 subject: row.get(7)?,
-                 subject_topic: row.get(8)?,
-                 study_type: row.get(9)?,
-                 notes: row.get(10)?,
+                 subject: r_subject.or_else(|| session.subject.clone()),
+                 subject_topic: r_topic.or_else(|| session.subject_topic.clone()),
+                 study_type: r_type.or_else(|| session.study_type.clone()),
+                 notes: r_notes.or_else(|| session.notes.clone()),
                  updated_at: row.get(11)?,
                  deleted_at: row.get(12)?,
              })
@@ -466,6 +470,22 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
             unix_now(),
             id
         ],
+    )?;
+
+    Ok(())
+}
+
+pub fn delete_study_session(conn: &Connection, id: i64) -> Result<()> {
+    let now = unix_now();
+    // Soft delete the study session
+    conn.execute(
+        "UPDATE study_sessions SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3",
+        params![now, now, id],
+    )?;
+    // Cascade soft delete to all rounds in this study session
+    conn.execute(
+        "UPDATE rounds SET deleted_at = ?1, updated_at = ?2 WHERE study_session_id = ?3 AND deleted_at IS NULL",
+        params![now, now, id],
     )?;
     Ok(())
 }

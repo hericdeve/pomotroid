@@ -266,7 +266,11 @@
   <SessionTagModal 
     sessionId={editingSessionId} 
     allowDelete={true}
-    onClose={() => editingSessionId = null} 
+    onClose={() => {
+      editingSessionId = null;
+      refreshTrigger++;
+      loadData();
+    }} 
     onDeleted={() => {
       editingSessionId = null;
       refreshTrigger++;
@@ -279,8 +283,12 @@
   <SessionTagModal 
     sessionId={null}
     studySessionId={editingStudySessionId} 
-    allowDelete={false}
-    onClose={() => editingStudySessionId = null} 
+    allowDelete={true}
+    onClose={() => {
+      editingStudySessionId = null;
+      refreshTrigger++;
+      loadData();
+    }} 
     onDeleted={() => {
       editingStudySessionId = null;
       refreshTrigger++;
