@@ -489,11 +489,10 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
             );
         }
     }
-    
-    let current_row: (i64, u32) = conn.query_row(
-        "SELECT started_at, duration_secs FROM rounds WHERE id = ?1",
+    let current_row: (i64, u32, String) = conn.query_row(
+        "SELECT started_at, duration_secs, round_type FROM rounds WHERE id = ?1",
         params![id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     
     let new_started_at = payload.started_at.unwrap_or(current_row.0);
@@ -515,6 +514,23 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
     if let Some(duration) = payload.duration_secs {
         update_query.push_str(&format!(", duration_secs = ?{}", params.len() + 1));
         params.push(duration.into());
+        
+        // Revalidate completion status based on current settings
+        if let Ok(settings) = crate::settings::load(conn) {
+            let target_secs = match current_row.2.as_str() {
+                "work" => settings.time_work_secs,
+                "short-break" => settings.time_short_break_secs,
+                "long-break" => settings.time_long_break_secs,
+                _ => settings.time_work_secs,
+            };
+            
+            let is_completed = duration >= target_secs;
+            let is_half = !is_completed && duration >= (target_secs as f32 * settings.half_session_threshold_percent as f32 / 100.0) as u32;
+            
+            update_query.push_str(&format!(", completed = ?{}, is_half_session = ?{}", params.len() + 1, params.len() + 2));
+            params.push((if is_completed { 1 } else { 0 }).into());
+            params.push((if is_half { 1 } else { 0 }).into());
+        }
     }
     
     if let Some(exclude) = payload.exclude_from_stats {
