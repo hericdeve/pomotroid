@@ -134,6 +134,7 @@ pub struct UpdateSessionPayload {
     pub notes: Option<String>,
     pub duration_secs: Option<u32>,
     pub exclude_from_stats: Option<bool>,
+    pub started_at: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -476,15 +477,27 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
         }
     }
     
+    let current_row: (i64, u32) = conn.query_row(
+        "SELECT started_at, duration_secs FROM rounds WHERE id = ?1",
+        params![id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    
+    let new_started_at = payload.started_at.unwrap_or(current_row.0);
+    let new_duration_secs = payload.duration_secs.unwrap_or(current_row.1);
+    let new_ended_at = new_started_at + (new_duration_secs as i64);
+
     let mut update_query = String::from("UPDATE rounds SET ");
     let mut params: Vec<rusqlite::types::Value> = Vec::new();
     
-    update_query.push_str("subject = ?1, subject_topic = ?2, study_type = ?3, notes = ?4, updated_at = ?5");
+    update_query.push_str("subject = ?1, subject_topic = ?2, study_type = ?3, notes = ?4, updated_at = ?5, started_at = ?6, ended_at = ?7");
     params.push(payload.subject.into());
     params.push(payload.subject_topic.into());
     params.push(payload.study_type.into());
     params.push(payload.notes.into());
     params.push(unix_now().into());
+    params.push(new_started_at.into());
+    params.push(new_ended_at.into());
 
     if let Some(duration) = payload.duration_secs {
         update_query.push_str(&format!(", duration_secs = ?{}", params.len() + 1));
@@ -500,6 +513,15 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
     params.push(id.into());
 
     conn.execute(&update_query, rusqlite::params_from_iter(params.iter()))?;
+
+    // Cascade timestamp updates to parent study_session
+    conn.execute(
+        "UPDATE study_sessions
+         SET started_at = (SELECT MIN(started_at) FROM rounds WHERE study_session_id = study_sessions.id AND deleted_at IS NULL),
+             ended_at = (SELECT MAX(ended_at) FROM rounds WHERE study_session_id = study_sessions.id AND deleted_at IS NULL)
+         WHERE id = (SELECT study_session_id FROM rounds WHERE id = ?1)",
+        params![id],
+    )?;
 
     Ok(())
 }
@@ -583,16 +605,36 @@ pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayl
         }
     }
 
-    let uuid = uuid::Uuid::new_v4().to_string();
     let ended_at = payload.started_at + (payload.duration_secs as i64);
-    
+    let study_session_uuid = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO study_sessions (
+            uuid, started_at, ended_at, goal_rounds, subject, subject_topic, study_type, notes, created_at, updated_at
+        ) VALUES (
+            ?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9
+        )",
+        params![
+            study_session_uuid,
+            payload.started_at,
+            ended_at,
+            payload.subject,
+            payload.subject_topic,
+            payload.study_type,
+            payload.notes,
+            unix_now(),
+            unix_now()
+        ],
+    )?;
+    let study_session_id = conn.last_insert_rowid();
+
+    let uuid = uuid::Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO rounds (
             uuid, started_at, ended_at, round_type, duration_secs, completed,
-            subject, subject_topic, study_type, notes, updated_at, is_half_session, exclude_from_stats
+            subject, subject_topic, study_type, notes, updated_at, is_half_session, exclude_from_stats, study_session_id
         ) VALUES (
             ?1, ?2, ?3, 'work', ?4, 1,
-            ?5, ?6, ?7, ?8, ?9, 0, 0
+            ?5, ?6, ?7, ?8, ?9, 0, 0, ?10
         )",
         params![
             uuid,
@@ -603,7 +645,8 @@ pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayl
             payload.subject_topic,
             payload.study_type,
             payload.notes,
-            unix_now()
+            unix_now(),
+            study_session_id
         ],
     )?;
     

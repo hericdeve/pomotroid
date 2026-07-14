@@ -259,6 +259,37 @@ const MIGRATION_16: &str = "
     INSERT INTO schema_version VALUES (16);
 ";
 
+const MIGRATION_17: &str = "
+    INSERT INTO study_sessions (
+        uuid, started_at, ended_at, goal_rounds, total_pause_secs, subject, subject_topic, study_type, notes, created_at, updated_at
+    )
+    SELECT
+        lower(hex(randomblob(16))) as uuid,
+        started_at,
+        ended_at,
+        1 as goal_rounds,
+        0 as total_pause_secs,
+        subject,
+        subject_topic,
+        study_type,
+        notes,
+        started_at as created_at,
+        updated_at
+    FROM rounds
+    WHERE study_session_id IS NULL AND deleted_at IS NULL;
+
+    UPDATE rounds
+    SET study_session_id = (
+        SELECT id FROM study_sessions
+        WHERE study_sessions.started_at = rounds.started_at
+        ORDER BY id DESC
+        LIMIT 1
+    )
+    WHERE study_session_id IS NULL AND deleted_at IS NULL;
+
+    INSERT INTO schema_version VALUES (17);
+";
+
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
 pub fn run(conn: &Connection) -> Result<()> {
@@ -441,6 +472,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] applying MIGRATION_16: add exclude_from_stats to rounds");
         conn.execute_batch(&format!("BEGIN; {MIGRATION_16} COMMIT;"))?;
         log::info!("[db/migrations] MIGRATION_16 complete");
+    }
+
+    if version < 17 {
+        log::info!("[db/migrations] applying MIGRATION_17: fix orphaned manual rounds");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_17} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_17 complete");
     }
 
     Ok(())

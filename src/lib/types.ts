@@ -204,6 +204,7 @@ export interface UpdateSessionPayload {
   notes: string | null;
   duration_secs?: number;
   exclude_from_stats?: boolean;
+  started_at?: number;
 }
 
 export interface UpdateStudySessionPayload {

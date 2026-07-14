@@ -21,8 +21,10 @@
     notes: string;
     duration_secs?: number;
     exclude_from_stats?: boolean;
+    started_at?: number;
   } | null>(null);
   let durationStr = $state("");
+  let startedAtStr = $state("");
   let initialLoaded = $state(false);
   let advancedMode = $state(false);
   let isEditingRound = $derived(sessionId !== null && studySessionId === null);
@@ -44,6 +46,16 @@
     return isNaN(val) ? 0 : val * 60;
   }
 
+  function formatDatetimeLocal(unixSeconds: number): string {
+    const d = new Date(unixSeconds * 1000);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function parseDatetimeLocal(dt: string): number {
+    return Math.floor(new Date(dt).getTime() / 1000);
+  }
+
   onMount(async () => {
     try {
       if (sessionId !== null) {
@@ -56,8 +68,10 @@
             notes: row.notes || '',
             duration_secs: row.duration_secs,
             exclude_from_stats: row.exclude_from_stats,
+            started_at: row.started_at,
           };
           durationStr = formatDuration(row.duration_secs);
+          startedAtStr = formatDatetimeLocal(row.started_at);
           initialLoaded = true;
         } else {
           onClose();
@@ -104,6 +118,7 @@
             notes: p.notes || null,
             duration_secs: p.duration_secs,
             exclude_from_stats: p.exclude_from_stats,
+            started_at: p.started_at,
           });
         }
         if (studySessionId !== null) {
@@ -195,6 +210,16 @@
                   if (payload) payload.duration_secs = parseDuration(durationStr);
                 }}
                 placeholder="25:00" 
+              />
+            </label>
+            <label>
+              <span>Started At</span>
+              <input 
+                type="datetime-local" 
+                bind:value={startedAtStr} 
+                oninput={() => {
+                  if (payload && startedAtStr) payload.started_at = parseDatetimeLocal(startedAtStr);
+                }}
               />
             </label>
             <label class="checkbox-label">
