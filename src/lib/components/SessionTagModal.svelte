@@ -19,8 +19,30 @@
     subject_topic: string;
     study_type: string;
     notes: string;
+    duration_secs?: number;
+    exclude_from_stats?: boolean;
   } | null>(null);
+  let durationStr = $state("");
   let initialLoaded = $state(false);
+  let advancedMode = $state(false);
+  let isEditingRound = $derived(sessionId !== null && studySessionId === null);
+
+  function formatDuration(secs: number): string {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+  
+  function parseDuration(str: string): number {
+    const parts = str.split(':');
+    if (parts.length === 2) {
+      const m = parseInt(parts[0], 10) || 0;
+      const s = parseInt(parts[1], 10) || 0;
+      return m * 60 + s;
+    }
+    const val = parseInt(str, 10);
+    return isNaN(val) ? 0 : val * 60;
+  }
 
   onMount(async () => {
     try {
@@ -32,7 +54,10 @@
             subject_topic: row.subject_topic || '',
             study_type: row.study_type || '',
             notes: row.notes || '',
+            duration_secs: row.duration_secs,
+            exclude_from_stats: row.exclude_from_stats,
           };
+          durationStr = formatDuration(row.duration_secs);
           initialLoaded = true;
         } else {
           onClose();
@@ -77,6 +102,8 @@
             subject_topic: p.subject_topic || null,
             study_type: p.study_type || null,
             notes: p.notes || null,
+            duration_secs: p.duration_secs,
+            exclude_from_stats: p.exclude_from_stats,
           });
         }
         if (studySessionId !== null) {
@@ -124,6 +151,18 @@
     <div class="header">
       <h2>Tag Session</h2>
       <div class="header-actions">
+        {#if isEditingRound}
+          <button 
+            class="advanced-toggle-btn {advancedMode ? 'active' : ''}" 
+            onclick={() => advancedMode = !advancedMode} 
+            title="Advanced Options"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        {/if}
         {#if allowDelete && (sessionId !== null || studySessionId !== null)}
           <button class="delete-btn" onclick={handleDelete} aria-label="Delete Session" title="Delete Session">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -145,6 +184,25 @@
     <div class="content">
       {#if initialLoaded && payload}
         <EntryDetail bind:payload />
+        {#if advancedMode && isEditingRound}
+          <div class="advanced-section">
+            <label>
+              <span>Duration (MM:SS)</span>
+              <input 
+                type="text" 
+                bind:value={durationStr} 
+                oninput={() => {
+                  if (payload) payload.duration_secs = parseDuration(durationStr);
+                }}
+                placeholder="25:00" 
+              />
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={payload.exclude_from_stats} />
+              <span>Exclude from statistics</span>
+            </label>
+          </div>
+        {/if}
       {:else}
         <div class="loading">Loading...</div>
       {/if}
@@ -213,6 +271,25 @@
     opacity: 1;
     background: var(--color-hover);
   }
+  .advanced-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    opacity: 0.7;
+    transition: all 0.2s;
+  }
+  .advanced-toggle-btn:hover, .advanced-toggle-btn.active {
+    opacity: 1;
+    background: var(--color-hover);
+    color: var(--color-accent);
+  }
   .close-btn {
     background: none;
     border: none;
@@ -238,6 +315,41 @@
     color: var(--color-foreground-darker, var(--color-foreground));
     text-align: center;
     padding: 20px;
+  }
+  .advanced-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--color-background-light);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .advanced-section label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: var(--color-foreground-darker);
+  }
+  .advanced-section input[type="text"] {
+    background: var(--color-background-light);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--color-foreground);
+    font-size: 0.95rem;
+    transition: all 0.2s;
+  }
+  .advanced-section input[type="text"]:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
+  }
+  .advanced-section .checkbox-label {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
   }
   @keyframes fade-in {
     from { opacity: 0; }

@@ -253,6 +253,12 @@ const MIGRATION_15: &str = "
     INSERT INTO schema_version VALUES (15);
 ";
 
+const MIGRATION_16: &str = "
+    ALTER TABLE rounds ADD COLUMN exclude_from_stats INTEGER NOT NULL DEFAULT 0;
+    
+    INSERT INTO schema_version VALUES (16);
+";
+
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
 pub fn run(conn: &Connection) -> Result<()> {
@@ -431,6 +437,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_15 complete");
     }
 
+    if version < 16 {
+        log::info!("[db/migrations] applying MIGRATION_16: add exclude_from_stats to rounds");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_16} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_16 complete");
+    }
+
     Ok(())
 }
 
@@ -466,7 +478,7 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 15);
+        assert_eq!(v, 16);
     }
 
     #[test]

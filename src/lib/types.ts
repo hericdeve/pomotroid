@@ -193,6 +193,8 @@ export interface SessionRow {
   notes: string | null;
   updated_at: number | null;
   deleted_at: number | null;
+  is_half_session: boolean;
+  exclude_from_stats: boolean;
 }
 
 export interface UpdateSessionPayload {
@@ -200,6 +202,8 @@ export interface UpdateSessionPayload {
   subject_topic: string | null;
   study_type: string | null;
   notes: string | null;
+  duration_secs?: number;
+  exclude_from_stats?: boolean;
 }
 
 export interface UpdateStudySessionPayload {
