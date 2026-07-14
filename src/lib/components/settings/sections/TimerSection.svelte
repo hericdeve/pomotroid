@@ -313,6 +313,26 @@
     </div>
   </div>
 
+  <!-- Half session threshold -->
+  <div class="slider-row">
+    <div class="slider-meta">
+      <span class="slider-label">Half session threshold (%)</span>
+      <span class="slider-value slider-value--static">{$settings.half_session_threshold_percent > 0 ? `${$settings.half_session_threshold_percent}%` : 'Off'}</span>
+    </div>
+    <div class="slider-wrap">
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        value={$settings.half_session_threshold_percent}
+        class="slider"
+        oninput={(e) => handleChange('half_session_threshold_percent', (e.target as HTMLInputElement).valueAsNumber)}
+      />
+      <div class="bar bar--rounds" style="width: {barWidth($settings.half_session_threshold_percent, 0, 100)}"></div>
+    </div>
+  </div>
+
   <SettingsToggle
     label={m.timer_toggle_auto_start_work()}
     description={m.timer_toggle_auto_start_work_desc()}

@@ -46,4 +46,5 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("history_show_breaks", "true"),
     ("session_goal_rounds", "8"),
     ("half_year_start_month", "7"),
+    ("half_session_threshold_percent", "0"),
 ];

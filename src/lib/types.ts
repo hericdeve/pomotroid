@@ -71,6 +71,7 @@ export interface Settings {
   local_shortcut_stats: string;
   history_show_breaks: boolean;
   session_goal_rounds: number;
+  half_session_threshold_percent: number;
 }
 
 /** Returned by `check_update` — describes an available update. */

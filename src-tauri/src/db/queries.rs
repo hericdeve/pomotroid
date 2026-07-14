@@ -82,13 +82,24 @@ pub fn complete_round(
     conn: &Connection,
     session_id: i64,
     completed: bool,
+    is_half_session: bool,
+    actual_duration_secs: Option<u32>,
 ) -> Result<()> {
     let now = unix_now();
-    conn.execute(
-        "UPDATE rounds SET ended_at = ?1, completed = ?2, updated_at = ?3 WHERE id = ?4",
-        params![now, completed as i64, now, session_id],
-    )?;
-    log::debug!("[db] session ended: id={session_id} completed={completed}");
+    
+    if let Some(duration) = actual_duration_secs {
+        conn.execute(
+            "UPDATE rounds SET ended_at = ?1, completed = ?2, is_half_session = ?3, duration_secs = ?4, updated_at = ?5 WHERE id = ?6",
+            params![now, completed as i64, is_half_session as i64, duration, now, session_id],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE rounds SET ended_at = ?1, completed = ?2, is_half_session = ?3, updated_at = ?4 WHERE id = ?5",
+            params![now, completed as i64, is_half_session as i64, now, session_id],
+        )?;
+    }
+    
+    log::debug!("[db] session ended: id={session_id} completed={completed} is_half={is_half_session} actual_duration={:?}", actual_duration_secs);
     Ok(())
 }
 
@@ -278,7 +289,7 @@ pub fn get_history(
     }
 
     // Compute stats for all filtered WORK sessions
-    let mut stats_query = String::from("SELECT started_at, duration_secs FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
+    let mut stats_query = String::from("SELECT started_at, duration_secs FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND (completed = 1 OR is_half_session = 1)");
     let mut stats_params = Vec::<rusqlite::types::Value>::new();
 
     if let Some(subject) = &filter.subject {
@@ -613,7 +624,7 @@ pub fn subjects_get_all(conn: &Connection) -> Result<Vec<SubjectStats>> {
             COUNT(se.id) as pomodoro_count,
             sb.weekly_goal
          FROM subjects sb
-         LEFT JOIN rounds se ON se.subject = sb.name AND se.round_type = 'work' AND se.completed = 1 AND se.deleted_at IS NULL
+         LEFT JOIN rounds se ON se.subject = sb.name AND se.round_type = 'work' AND (se.completed = 1 OR se.is_half_session = 1) AND se.deleted_at IS NULL
          GROUP BY sb.id
          ORDER BY sb.name COLLATE NOCASE ASC"
     )?;
@@ -668,7 +679,7 @@ pub fn subject_get_weekly_progress(conn: &Connection, name: &str) -> Result<Subj
         "SELECT COUNT(id) FROM rounds 
          WHERE subject = ?1 
          AND round_type = 'work' 
-         AND completed = 1 
+         AND (completed = 1 OR is_half_session = 1) 
          AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') >= date('now', 'localtime', '-3 days', 'weekday 4', '-3 days')",
         params![name.trim()],
@@ -732,14 +743,14 @@ pub fn get_all_time_stats(conn: &Connection) -> Result<SessionStats> {
     )?;
 
     let completed_work_sessions: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM rounds WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
+        "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM rounds WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1) AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
 
     let total_work_secs: i64 = conn.query_row(
         "SELECT COALESCE(SUM(duration_secs), 0)
-         FROM rounds WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL",
+         FROM rounds WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1) AND deleted_at IS NULL",
         [],
         |r| r.get(0),
     )?;
@@ -804,7 +815,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
 
     let completed: f64 = conn.query_row(
         "SELECT COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) FROM rounds
-         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
+         WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1) AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
         |r| r.get(0),
@@ -812,7 +823,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
 
     let focus_secs: i64 = conn.query_row(
         "SELECT COALESCE(SUM(duration_secs), 0) FROM rounds
-         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
+         WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1) AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') = ?1",
         [&today],
         |r| r.get(0),
@@ -823,7 +834,7 @@ pub fn get_daily_stats(conn: &Connection) -> Result<DailyStats> {
         "SELECT CAST(strftime('%H', datetime(started_at, 'unixepoch', 'localtime')) AS INTEGER) as h,
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as cnt
          FROM rounds
-         WHERE round_type = 'work' AND completed = 1
+         WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1)
          AND date(started_at, 'unixepoch', 'localtime') = ?1
          GROUP BY h",
     )?;
@@ -849,7 +860,7 @@ pub fn get_weekly_stats(conn: &Connection) -> Result<Vec<DayStat>> {
         "SELECT date(started_at, 'unixepoch', 'localtime') as day,
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as rounds
          FROM rounds
-         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
+         WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1) AND deleted_at IS NULL
          AND date(started_at, 'unixepoch', 'localtime') >= date('now', 'localtime', '-6 days')
          GROUP BY day
          ORDER BY day",
@@ -867,7 +878,7 @@ pub fn get_heatmap_data(conn: &Connection) -> Result<Vec<HeatmapEntry>> {
                 COALESCE(SUM(CAST(duration_secs AS REAL) / COALESCE((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'time_work_secs'), 1500)), 0) as cnt,
                 COALESCE(SUM(duration_secs), 0) as focus_secs
          FROM rounds
-         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
+         WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1) AND deleted_at IS NULL
          GROUP BY day
          ORDER BY day",
     )?;
@@ -889,7 +900,7 @@ pub fn get_streak(conn: &Connection) -> Result<StreakInfo> {
     let mut stmt = conn.prepare(
         "SELECT date(started_at, 'unixepoch', 'localtime') as day
          FROM rounds
-         WHERE round_type = 'work' AND completed = 1 AND deleted_at IS NULL
+         WHERE round_type = 'work' AND (completed = 1 OR is_half_session = 1) AND deleted_at IS NULL
          GROUP BY day
          ORDER BY day",
     )?;
@@ -1223,7 +1234,7 @@ pub struct InsightsStats {
 }
 
 pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<InsightsStats> {
-    let mut base_query = String::from("FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1");
+    let mut base_query = String::from("FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND (completed = 1 OR is_half_session = 1)");
     let mut params = Vec::<rusqlite::types::Value>::new();
 
     if let Some(subject) = &filter.subject {
@@ -1262,7 +1273,7 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
                 (IFNULL(ss.ended_at, strftime('%s', 'now')) - ss.started_at) as session_time,
                 SUM(CASE WHEN r.round_type != 'work' THEN r.overtime_secs ELSE 0 END) as lazytime,
                 SUM(CASE WHEN r.round_type = 'work' THEN r.duration_secs + r.overtime_secs ELSE 0 END) as studying_time,
-                SUM(CASE WHEN r.round_type = 'work' AND r.completed = 1 THEN 1 ELSE 0 END) as completed_work_rounds
+                SUM(CASE WHEN r.round_type = 'work' AND (r.completed = 1 OR r.is_half_session = 1) THEN 1 ELSE 0 END) as completed_work_rounds
             FROM study_sessions ss
             JOIN rounds r ON r.study_session_id = ss.id
             WHERE ss.deleted_at IS NULL
@@ -1277,7 +1288,7 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
             SUM(CASE WHEN goal_rounds > 0 THEN 1 ELSE 0 END) as total_goal_sessions,
             SUM(CASE WHEN goal_rounds > 0 AND completed_work_rounds >= goal_rounds THEN 1 ELSE 0 END) as adhered_sessions
         FROM session_metrics
-    ", base_query.replace("FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND completed = 1", "").replace(" started_at", " ss.started_at").replace(" subject", " ss.subject").replace(" study_type", " ss.study_type"));
+    ", base_query.replace("FROM rounds WHERE deleted_at IS NULL AND round_type = 'work' AND (completed = 1 OR is_half_session = 1)", "").replace(" started_at", " ss.started_at").replace(" subject", " ss.subject").replace(" study_type", " ss.study_type"));
 
     let mut break_efficiency_percentage: Option<f64> = None;
     let mut schedule_adherence_percentage: Option<f64> = None;

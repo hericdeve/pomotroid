@@ -372,8 +372,27 @@ fn listen_events(
 
                 // --- Session recording: mark the completed round ---
                 if let Some(session_id) = current_session_id.take() {
+                    let mut is_half = false;
+                    let mut actual_dur = None;
+                    
+                    if was_skipped {
+                        let (elapsed, total, threshold) = {
+                            let s = shared.lock().unwrap();
+                            let set = settings.lock().unwrap();
+                            (s.elapsed_secs, s.total_secs, set.half_session_threshold_percent)
+                        };
+                        
+                        actual_dur = Some(elapsed);
+                        if threshold > 0 && total > 0 {
+                            let percent = (elapsed as f64 / total as f64) * 100.0;
+                            if percent >= threshold as f64 {
+                                is_half = true;
+                            }
+                        }
+                    }
+
                     if let Ok(conn) = db.lock() {
-                        let _ = queries::complete_round(&conn, session_id, !was_skipped);
+                        let _ = queries::complete_round(&conn, session_id, !was_skipped, is_half, actual_dur);
                     }
                     if !was_skipped {
                         shared.lock().unwrap().last_completed_session_id = Some(session_id);
@@ -526,7 +545,7 @@ fn listen_events(
                 }
                 if let Some(rid) = current_session_id.take() {
                     if let Ok(conn) = db.lock() {
-                        let _ = queries::complete_round(&conn, rid, false);
+                        let _ = queries::complete_round(&conn, rid, false, false, None);
                     }
                 }
                 log::debug!("[timer] idle");
