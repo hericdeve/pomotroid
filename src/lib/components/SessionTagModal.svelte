@@ -25,7 +25,8 @@
     started_at?: number;
   } | null>(null);
   let durationStr = $state("");
-  let startedAtStr = $state("");
+  let startDateStr = $state("");
+  let startTimeStr = $state("");
   let initialLoaded = $state(false);
   let advancedMode = $state(false);
   let isEditingRound = $derived(sessionId !== null && studySessionId === null);
@@ -48,14 +49,16 @@
     return isNaN(val) ? 0 : val * 60;
   }
 
-  function formatDatetimeLocal(unixSeconds: number): string {
+  function formatDatetimeLocal(unixSeconds: number) {
     const d = new Date(unixSeconds * 1000);
     const pad = (n: number) => n.toString().padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    startDateStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    startTimeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  function parseDatetimeLocal(dt: string): number {
-    return Math.floor(new Date(dt).getTime() / 1000);
+  function parseDatetimeLocal(): number {
+    if (!startDateStr || !startTimeStr) return 0;
+    return Math.floor(new Date(`${startDateStr}T${startTimeStr}`).getTime() / 1000);
   }
 
   onMount(async () => {
@@ -73,7 +76,7 @@
             started_at: row.started_at,
           };
           durationStr = formatDuration(row.duration_secs);
-          startedAtStr = formatDatetimeLocal(row.started_at);
+          formatDatetimeLocal(row.started_at);
           initialLoaded = true;
           
           if (isEditingRound) {
@@ -236,13 +239,22 @@
             </label>
             <label>
               <span>Started At</span>
-              <input 
-                type="datetime-local" 
-                bind:value={startedAtStr} 
-                oninput={() => {
-                  if (payload && startedAtStr) payload.started_at = parseDatetimeLocal(startedAtStr);
-                }}
-              />
+              <div class="datetime-split">
+                <input 
+                  type="date" 
+                  bind:value={startDateStr} 
+                  oninput={() => {
+                    if (payload) payload.started_at = parseDatetimeLocal();
+                  }}
+                />
+                <input 
+                  type="time" 
+                  bind:value={startTimeStr} 
+                  oninput={() => {
+                    if (payload) payload.started_at = parseDatetimeLocal();
+                  }}
+                />
+              </div>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" bind:checked={payload.exclude_from_stats} />
@@ -405,10 +417,26 @@
     font-size: 0.95rem;
     transition: all 0.2s;
   }
-  .advanced-section input[type="text"]:focus {
+  .advanced-section input[type="text"]:focus,
+  .advanced-section input[type="date"]:focus,
+  .advanced-section input[type="time"]:focus {
     outline: none;
     border-color: var(--color-accent);
     box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
+  }
+  .datetime-split {
+    display: flex;
+    gap: 8px;
+  }
+  .datetime-split input {
+    flex: 1;
+    background: var(--color-background-light);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--color-foreground);
+    font-size: 0.95rem;
+    transition: all 0.2s;
   }
   .advanced-section .checkbox-label {
     flex-direction: row;
