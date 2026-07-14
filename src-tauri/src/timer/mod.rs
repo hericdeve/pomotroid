@@ -544,8 +544,22 @@ fn listen_events(
                     }
                 }
                 if let Some(rid) = current_session_id.take() {
+                    let mut is_half = false;
+                    let (elapsed, total, threshold) = {
+                        let s = shared.lock().unwrap();
+                        let set = settings.lock().unwrap();
+                        (s.elapsed_secs, s.total_secs, set.half_session_threshold_percent)
+                    };
+                    
+                    if threshold > 0 && total > 0 {
+                        let percent = (elapsed as f64 / total as f64) * 100.0;
+                        if percent >= threshold as f64 {
+                            is_half = true;
+                        }
+                    }
+
                     if let Ok(conn) = db.lock() {
-                        let _ = queries::complete_round(&conn, rid, false, false, None);
+                        let _ = queries::complete_round(&conn, rid, false, is_half, Some(elapsed));
                     }
                 }
                 log::debug!("[timer] idle");
