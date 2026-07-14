@@ -106,6 +106,8 @@
                     {#if row.round_type === 'work'}
                       {#if row.completed}
                         <span class="status-badge complete" title="Completed">✓</span>
+                      {:else if row.is_half_session}
+                        <span class="status-badge half" title="Half Completed">½</span>
                       {:else}
                         <span class="status-badge incomplete" title="Incomplete">✕</span>
                       {/if}
@@ -281,6 +283,10 @@
   .status-badge.incomplete {
     background: rgba(231, 76, 60, 0.2);
     color: #e74c3c;
+  }
+  .status-badge.half {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
   }
 
   .type {

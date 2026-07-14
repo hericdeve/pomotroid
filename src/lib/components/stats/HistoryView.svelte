@@ -274,6 +274,8 @@
                       {#if row.round_type === 'work'}
                         {#if row.completed}
                           <span class="status-badge complete" title="Completed">✓</span>
+                        {:else if row.is_half_session}
+                          <span class="status-badge half" title="Half Completed">½</span>
                         {:else}
                           <span class="status-badge incomplete" title="Incomplete">✕</span>
                         {/if}
@@ -615,4 +617,27 @@
   .gap-2 { gap: 8px; }
   .font-bold { font-weight: 600; }
   .text-center { text-align: center; }
+  
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: bold;
+  }
+  .status-badge.complete {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+  }
+  .status-badge.incomplete {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+  }
+  .status-badge.half {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+  }
 </style>
