@@ -239,9 +239,9 @@
           <div>Type</div>
           <div class="text-center">Status</div>
           <div>Duration</div>
-          <div>Date</div>
           <div>Topic</div>
           <div>Study Type</div>
+          <div>Date</div>
         </div>
         
         <div class="grid-body">
@@ -256,9 +256,9 @@
                 <div class="font-bold">
                   {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}
                 </div>
-                <div class="font-bold">{formatUnix(session.started_at)}</div>
                 <div class="font-bold">{session.subject_topic || '-'}</div>
                 <div class="font-bold">{session.study_type || '-'}</div>
+                <div class="font-bold">{formatUnix(session.started_at)}</div>
               </div>
               
               <div class="rounds-container">
@@ -280,11 +280,11 @@
                       {/if}
                     </div>
                     <div class="text-sm opacity-70">{formatDuration(row.duration_secs)}</div>
+                    <div class="text-sm opacity-70">{row.subject_topic || '-'}</div>
+                    <div class="text-sm opacity-70">{row.study_type || '-'}</div>
                     <div class="text-sm opacity-70">
                       <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatUnix(row.started_at)}</span>
                     </div>
-                    <div class="text-sm opacity-70">{row.subject_topic || '-'}</div>
-                    <div class="text-sm opacity-70">{row.study_type || '-'}</div>
                   </div>
                 {/each}
               </div>
@@ -537,7 +537,7 @@
   
   .grid-header, .grid-row {
     display: grid;
-    grid-template-columns: 18% 12% 8% 12% 18% 17% 15%;
+    grid-template-columns: 18% 12% 8% 12% 17% 15% 18%;
     align-items: center;
   }
 
