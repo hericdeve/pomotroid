@@ -235,11 +235,11 @@
     {:else}
       <div class="history-grid">
         <div class="grid-header">
-          <div>Date</div>
+          <div>Subject</div>
           <div>Type</div>
           <div class="text-center">Status</div>
           <div>Duration</div>
-          <div>Subject</div>
+          <div>Date</div>
           <div>Topic</div>
           <div>Study Type</div>
         </div>
@@ -250,13 +250,13 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="session-row grid-row" onclick={() => onEditStudySession(session.id)}>
-                <div class="font-bold">{formatUnix(session.started_at)}</div>
+                <div class="font-bold pl-2">{session.subject || '-'}</div>
                 <div class="font-bold">Session</div>
                 <div class="font-bold text-center">Goal: {session.goal_rounds}</div>
                 <div class="font-bold">
                   {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}
                 </div>
-                <div class="font-bold">{session.subject || '-'}</div>
+                <div class="font-bold">{formatUnix(session.started_at)}</div>
                 <div class="font-bold">{session.subject_topic || '-'}</div>
                 <div class="font-bold">{session.study_type || '-'}</div>
               </div>
@@ -266,9 +266,8 @@
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div class="round-row grid-row" onclick={() => onEditSession(row.id)}>
-                    <div class="pl-6 text-sm opacity-70 flex items-center gap-2">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-50"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>
-                      {formatUnix(row.started_at)}
+                    <div class="pl-6 flex items-center">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-50" style="flex-shrink: 0;"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>
                     </div>
                     <div class="text-sm opacity-70">{row.round_type === 'work' ? 'Work' : row.round_type === 'short-break' ? 'Short Break' : 'Long Break'}</div>
                     <div class="text-sm opacity-70 text-center">
@@ -281,7 +280,9 @@
                       {/if}
                     </div>
                     <div class="text-sm opacity-70">{formatDuration(row.duration_secs)}</div>
-                    <div class="text-sm opacity-70">{row.subject || '-'}</div>
+                    <div class="text-sm opacity-70">
+                      <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatUnix(row.started_at)}</span>
+                    </div>
                     <div class="text-sm opacity-70">{row.subject_topic || '-'}</div>
                     <div class="text-sm opacity-70">{row.study_type || '-'}</div>
                   </div>
@@ -556,6 +557,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
   }
 
   .grid-body {
