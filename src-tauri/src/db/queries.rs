@@ -555,6 +555,34 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
     Ok(())
 }
 
+pub fn reevaluate_all_rounds_completion(conn: &Connection, settings: &crate::settings::Settings) -> Result<()> {
+    conn.execute(
+        "UPDATE rounds SET 
+            completed = CASE WHEN duration_secs >= ?1 THEN 1 ELSE 0 END,
+            is_half_session = CASE WHEN duration_secs < ?1 AND duration_secs >= (?1 * ?2 / 100) THEN 1 ELSE 0 END
+         WHERE round_type = 'work'",
+        params![settings.time_work_secs, settings.half_session_threshold_percent],
+    )?;
+
+    conn.execute(
+        "UPDATE rounds SET 
+            completed = CASE WHEN duration_secs >= ?1 THEN 1 ELSE 0 END,
+            is_half_session = CASE WHEN duration_secs < ?1 AND duration_secs >= (?1 * ?2 / 100) THEN 1 ELSE 0 END
+         WHERE round_type = 'short-break'",
+        params![settings.time_short_break_secs, settings.half_session_threshold_percent],
+    )?;
+
+    conn.execute(
+        "UPDATE rounds SET 
+            completed = CASE WHEN duration_secs >= ?1 THEN 1 ELSE 0 END,
+            is_half_session = CASE WHEN duration_secs < ?1 AND duration_secs >= (?1 * ?2 / 100) THEN 1 ELSE 0 END
+         WHERE round_type = 'long-break'",
+        params![settings.time_long_break_secs, settings.half_session_threshold_percent],
+    )?;
+
+    Ok(())
+}
+
 pub fn delete_study_session(conn: &Connection, id: i64) -> Result<()> {
     let now = unix_now();
     // Soft delete the study session

@@ -126,10 +126,18 @@ pub fn settings_set(
             settings::save_setting(&conn, "min_to_tray", "false").map_err(|e| e.to_string())?;
             settings::save_setting(&conn, "min_to_tray_on_close", "false").map_err(|e| e.to_string())?;
         }
-        settings::load(&conn).map_err(|e| {
+        let loaded = settings::load(&conn).map_err(|e| {
             log::error!("[settings] failed to reload after save: {e}");
             e.to_string()
-        })?
+        })?;
+
+        if matches!(key.as_str(), "half_session_threshold_percent" | "time_work_mins" | "time_short_break_mins" | "time_long_break_mins") {
+            if let Err(e) = crate::db::queries::reevaluate_all_rounds_completion(&conn, &loaded) {
+                log::error!("[settings] failed to reevaluate rounds completion: {e}");
+            }
+        }
+
+        loaded
     };
 
     // Apply verbose_logging change immediately without a restart.
