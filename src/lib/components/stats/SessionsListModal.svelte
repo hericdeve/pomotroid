@@ -115,13 +115,15 @@
                     <span class="duration">&bull; {formatDuration(row.duration_secs)}</span>
                   </div>
                   <div class="secondary">
-                    {#if row.subject}
-                      <span class="subject">{row.subject}</span>
-                      {#if row.subject_topic}
-                        <span class="topic"> / {row.subject_topic}</span>
+                    {#if row.round_type === 'work'}
+                      {#if row.subject}
+                        <span class="subject">{row.subject}</span>
+                        {#if row.subject_topic}
+                          <span class="topic"> / {row.subject_topic}</span>
+                        {/if}
+                      {:else}
+                        <span class="no-tags">No tags</span>
                       {/if}
-                    {:else}
-                      <span class="no-tags">No tags</span>
                     {/if}
                   </div>
                 </div>

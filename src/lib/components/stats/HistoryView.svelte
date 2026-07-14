@@ -282,8 +282,8 @@
                       {/if}
                     </div>
                     <div class="text-sm opacity-70">{formatDuration(row.duration_secs)}</div>
-                    <div class="text-sm opacity-70">{row.subject_topic || '-'}</div>
-                    <div class="text-sm opacity-70">{row.study_type || '-'}</div>
+                    <div class="text-sm opacity-70">{row.round_type === 'work' ? (row.subject_topic || '-') : '-'}</div>
+                    <div class="text-sm opacity-70">{row.round_type === 'work' ? (row.study_type || '-') : '-'}</div>
                     <div class="text-sm opacity-70">
                       <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{formatUnix(row.started_at)}</span>
                     </div>

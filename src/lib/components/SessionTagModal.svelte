@@ -30,7 +30,8 @@
   let initialLoaded = $state(false);
   let advancedMode = $state(false);
   let isEditingRound = $derived(sessionId !== null && studySessionId === null);
-  let adjacentSessions = $state<AdjacentSessions | null>(null);
+  let adjacentSessions: { previous: any | null, next: any | null } = $state({ previous: null, next: null });
+  let roundType = $state('');
 
   function formatDuration(secs: number): string {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -77,6 +78,7 @@
           };
           durationStr = formatDuration(row.duration_secs);
           formatDatetimeLocal(row.started_at);
+          roundType = row.round_type || 'work';
           initialLoaded = true;
           
           if (isEditingRound) {
@@ -223,7 +225,11 @@
     </div>
     <div class="content">
       {#if initialLoaded && payload}
-        <EntryDetail bind:payload />
+        {#if roundType === 'work' || !isEditingRound}
+          <EntryDetail bind:payload />
+        {:else}
+          <div class="break-message">Tags are disabled for break sessions.</div>
+        {/if}
         {#if advancedMode && isEditingRound}
           <div class="advanced-section">
             <label>
@@ -478,5 +484,19 @@
   }
   .merge-btn:hover {
     background: var(--color-background-light-hover, #444);
+  }
+  .no-adjacent {
+    color: var(--color-foreground-darker);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+  .break-message {
+    padding: 16px;
+    text-align: center;
+    color: var(--color-foreground-darker);
+    font-style: italic;
+    background: var(--color-background);
+    border-radius: 6px;
+    margin-bottom: 16px;
   }
 </style>
