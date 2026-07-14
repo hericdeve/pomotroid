@@ -258,3 +258,13 @@ export interface CreateManualSessionPayload {
   notes: string | null;
 }
 
+export interface AdjacentSessionPreview {
+  id: number;
+  started_at: number;
+  subject: string | null;
+}
+
+export interface AdjacentSessions {
+  previous: AdjacentSessionPreview | null;
+  next: AdjacentSessionPreview | null;
+}

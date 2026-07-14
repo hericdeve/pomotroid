@@ -176,6 +176,19 @@ pub struct StudySessionRow {
 }
 
 #[derive(Debug, Serialize)]
+pub struct AdjacentSessionPreview {
+    pub id: i64,
+    pub started_at: i64,
+    pub subject: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdjacentSessions {
+    pub previous: Option<AdjacentSessionPreview>,
+    pub next: Option<AdjacentSessionPreview>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct SessionHistoryPage {
     pub sessions: Vec<StudySessionRow>,
     pub total: u32,
@@ -701,10 +714,89 @@ pub fn subjects_get_all(conn: &Connection) -> Result<Vec<SubjectStats>> {
     })?;
 
     let mut subjects = Vec::new();
-    for row in rows {
-        subjects.push(row?);
+    for r in rows {
+        subjects.push(r?);
     }
     Ok(subjects)
+}
+
+pub fn get_adjacent_sessions(conn: &Connection, round_id: i64) -> Result<AdjacentSessions> {
+    let (round_started, current_session_id): (i64, Option<i64>) = conn.query_row(
+        "SELECT started_at, study_session_id FROM rounds WHERE id = ?1",
+        params![round_id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    
+    let cur_sid = current_session_id.unwrap_or(-1);
+
+    let prev: Option<AdjacentSessionPreview> = conn.query_row(
+        "SELECT id, started_at, subject FROM study_sessions 
+         WHERE started_at <= ?1 AND id != ?2 AND deleted_at IS NULL
+         ORDER BY started_at DESC LIMIT 1",
+        params![round_started, cur_sid],
+        |r| Ok(AdjacentSessionPreview { id: r.get(0)?, started_at: r.get(1)?, subject: r.get(2)? }),
+    ).optional()?;
+
+    let next: Option<AdjacentSessionPreview> = conn.query_row(
+        "SELECT id, started_at, subject FROM study_sessions 
+         WHERE started_at > ?1 AND id != ?2 AND deleted_at IS NULL
+         ORDER BY started_at ASC LIMIT 1",
+        params![round_started, cur_sid],
+        |r| Ok(AdjacentSessionPreview { id: r.get(0)?, started_at: r.get(1)?, subject: r.get(2)? }),
+    ).optional()?;
+
+    Ok(AdjacentSessions { previous: prev, next })
+}
+
+pub fn move_round_to_session(conn: &Connection, round_id: i64, target_session_id: i64) -> Result<()> {
+    let old_session_id: Option<i64> = conn.query_row(
+        "SELECT study_session_id FROM rounds WHERE id = ?1",
+        params![round_id],
+        |r| r.get(0),
+    ).optional()?.flatten();
+
+    // Move round
+    conn.execute(
+        "UPDATE rounds SET study_session_id = ?1 WHERE id = ?2",
+        params![target_session_id, round_id],
+    )?;
+
+    // Update target session bounds
+    conn.execute(
+        "UPDATE study_sessions
+         SET started_at = (SELECT MIN(started_at) FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL),
+             ended_at = (SELECT MAX(ended_at) FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL)
+         WHERE id = ?1",
+        params![target_session_id],
+    )?;
+
+    // Handle old session
+    if let Some(old_sid) = old_session_id {
+        if old_sid != target_session_id {
+            let rounds_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL",
+                params![old_sid],
+                |r| r.get(0),
+            )?;
+            
+            if rounds_count == 0 {
+                conn.execute(
+                    "UPDATE study_sessions SET deleted_at = ?1 WHERE id = ?2",
+                    params![unix_now(), old_sid],
+                )?;
+            } else {
+                conn.execute(
+                    "UPDATE study_sessions
+                     SET started_at = (SELECT MIN(started_at) FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL),
+                         ended_at = (SELECT MAX(ended_at) FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL)
+                     WHERE id = ?1",
+                    params![old_sid],
+                )?;
+            }
+        }
+    }
+    
+    Ok(())
 }
 
 pub fn subject_create(conn: &Connection, name: &str) -> Result<i64> {

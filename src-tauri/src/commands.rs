@@ -65,6 +65,25 @@ pub fn timer_get_state(timer: State<'_, TimerController>) -> TimerSnapshot {
     snap
 }
 
+#[tauri::command]
+pub fn timer_get_adjacent_sessions(
+    db: State<'_, DbState>,
+    round_id: i64,
+) -> Result<crate::db::queries::AdjacentSessions, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    crate::db::queries::get_adjacent_sessions(&conn, round_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn timer_move_round_to_session(
+    db: State<'_, DbState>,
+    round_id: i64,
+    target_session_id: i64,
+) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    crate::db::queries::move_round_to_session(&conn, round_id, target_session_id).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // CMD-02 — Settings commands
 // ---------------------------------------------------------------------------

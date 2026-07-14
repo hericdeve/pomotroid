@@ -32,7 +32,8 @@ use commands::{
     stats_get_detailed, stats_get_heatmap, stats_get_insights,
     schedule_get_all, schedule_add_block, schedule_delete_block, schedule_update_block,
     themes_list,
-    timer_get_state, timer_reset, timer_restart_round, timer_skip, timer_toggle, timer_add_completed_rounds,
+    timer_add_completed_rounds, timer_get_state, timer_reset, timer_restart_round, timer_skip,
+    timer_toggle, timer_get_adjacent_sessions, timer_move_round_to_session,
     window_set_visibility,
     palette_open, palette_close, palette_submit,
 };
@@ -400,6 +401,8 @@ pub fn run() {
             timer_restart_round,
             timer_skip,
             timer_add_completed_rounds,
+            timer_get_adjacent_sessions,
+            timer_move_round_to_session,
             // Settings
             settings_get,
             settings_set,

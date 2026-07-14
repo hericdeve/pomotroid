@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getSession, getStudySession, updateSession, studySessionUpdate } from '$lib/ipc';
+  import { getSession, getStudySession, updateSession, studySessionUpdate, timerGetAdjacentSessions, timerMoveRoundToSession } from '$lib/ipc';
+  import type { AdjacentSessions } from '$lib/types';
   import EntryDetail from './EntryDetail.svelte';
   import { pendingTags } from '$lib/stores/pendingTags';
   import { get } from 'svelte/store';
@@ -28,6 +29,7 @@
   let initialLoaded = $state(false);
   let advancedMode = $state(false);
   let isEditingRound = $derived(sessionId !== null && studySessionId === null);
+  let adjacentSessions = $state<AdjacentSessions | null>(null);
 
   function formatDuration(secs: number): string {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -73,6 +75,14 @@
           durationStr = formatDuration(row.duration_secs);
           startedAtStr = formatDatetimeLocal(row.started_at);
           initialLoaded = true;
+          
+          if (isEditingRound) {
+            try {
+              adjacentSessions = await timerGetAdjacentSessions(sessionId);
+            } catch (e) {
+              console.error("Failed to load adjacent sessions", e);
+            }
+          }
         } else {
           onClose();
         }
@@ -158,6 +168,18 @@
       }
     }
   }
+
+  async function handleMerge(targetSessionId: number) {
+    if (!sessionId) return;
+    try {
+      await timerMoveRoundToSession(sessionId, targetSessionId);
+      onDeleted?.(); // acts as a refresh for the history view
+      onClose();
+    } catch (e) {
+      console.error('Failed to merge round', e);
+      alert('Failed to merge round into session.');
+    }
+  }
 </script>
 
 <div class="modal-overlay" role="presentation" onclick={onClose}>
@@ -226,6 +248,24 @@
               <input type="checkbox" bind:checked={payload.exclude_from_stats} />
               <span>Exclude from statistics</span>
             </label>
+            
+            {#if adjacentSessions?.previous || adjacentSessions?.next}
+              <div class="merge-section">
+                <span>Move to Session</span>
+                <div class="merge-buttons">
+                  {#if adjacentSessions.previous}
+                    <button class="merge-btn" onclick={() => handleMerge(adjacentSessions!.previous!.id)}>
+                      ⬆️ Merge with Previous
+                    </button>
+                  {/if}
+                  {#if adjacentSessions.next}
+                    <button class="merge-btn" onclick={() => handleMerge(adjacentSessions!.next!.id)}>
+                      ⬇️ Merge with Next
+                    </button>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         {/if}
       {:else}
@@ -379,5 +419,36 @@
   @keyframes fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  .merge-section {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-background-light);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .merge-section span {
+    font-size: 0.85rem;
+    color: var(--color-foreground-darker);
+  }
+  .merge-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  .merge-btn {
+    flex: 1;
+    background: var(--color-background-light);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: var(--color-foreground);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .merge-btn:hover {
+    background: var(--color-background-light-hover, #444);
   }
 </style>

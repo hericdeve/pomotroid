@@ -24,15 +24,19 @@ import type {
   SubjectStats,
   SubjectWeeklyProgress,
   ScheduledBlock,
+  AdjacentSessions,
 } from '$lib/types';
 
 // --- Timer commands ---
 
+export const timerGetState = () => invoke<TimerState>('timer_get_state');
 export const timerToggle = () => invoke<void>('timer_toggle');
 export const timerReset = () => invoke<void>('timer_reset');
 export const timerRestartRound = () => invoke<void>('timer_restart_round');
 export const timerSkip = () => invoke<void>('timer_skip');
 export const timerAddCompletedRounds = (count: number) => invoke<void>('timer_add_completed_rounds', { count });
+export const timerGetAdjacentSessions = (roundId: number) => invoke<AdjacentSessions>('timer_get_adjacent_sessions', { roundId });
+export const timerMoveRoundToSession = (roundId: number, targetSessionId: number) => invoke<void>('timer_move_round_to_session', { roundId, targetSessionId });
 export const getTimerState = () => invoke<TimerState>('timer_get_state');
 
 // --- Settings commands ---
