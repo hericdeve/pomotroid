@@ -255,7 +255,7 @@
                 <div class="font-bold text-center">Goal: {session.goal_rounds}</div>
                 <div 
                   class="font-bold" 
-                  title="Total time (including breaks): {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}"
+                  title={`Study time: ${formatDuration(session.rounds.filter(r => r.round_type === 'work').reduce((acc, r) => acc + r.duration_secs, 0))}\nBreak time: ${formatDuration(session.rounds.filter(r => r.round_type !== 'work').reduce((acc, r) => acc + r.duration_secs, 0))}`}
                 >
                   {formatDuration(session.rounds.filter(r => r.round_type === 'work').reduce((acc, r) => acc + r.duration_secs, 0))}
                 </div>
