@@ -253,8 +253,11 @@
                 <div class="font-bold pl-2">{session.subject || '-'}</div>
                 <div class="font-bold">Session</div>
                 <div class="font-bold text-center">Goal: {session.goal_rounds}</div>
-                <div class="font-bold">
-                  {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}
+                <div 
+                  class="font-bold" 
+                  title="Total time (including breaks): {formatDuration(session.rounds.reduce((acc, r) => acc + r.duration_secs, 0))}"
+                >
+                  {formatDuration(session.rounds.filter(r => r.round_type === 'work').reduce((acc, r) => acc + r.duration_secs, 0))}
                 </div>
                 <div class="font-bold">{session.subject_topic || '-'}</div>
                 <div class="font-bold">{session.study_type || '-'}</div>
