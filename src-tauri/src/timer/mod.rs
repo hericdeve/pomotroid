@@ -537,7 +537,7 @@ fn listen_events(
                 tray::update_menu_items(&tray, true, false);
             }
 
-            TimerEvent::Reset => {
+            TimerEvent::Reset { elapsed_secs } => {
                 if let Some(sid) = current_study_session_id.take() {
                     if let Ok(conn) = db.lock() {
                         let _ = queries::complete_study_session(&conn, sid);
@@ -545,21 +545,21 @@ fn listen_events(
                 }
                 if let Some(rid) = current_session_id.take() {
                     let mut is_half = false;
-                    let (elapsed, total, threshold) = {
+                    let (total, threshold) = {
                         let s = shared.lock().unwrap();
                         let set = settings.lock().unwrap();
-                        (s.elapsed_secs, s.total_secs, set.half_session_threshold_percent)
+                        (s.total_secs, set.half_session_threshold_percent)
                     };
                     
                     if threshold > 0 && total > 0 {
-                        let percent = (elapsed as f64 / total as f64) * 100.0;
+                        let percent = (elapsed_secs as f64 / total as f64) * 100.0;
                         if percent >= threshold as f64 {
                             is_half = true;
                         }
                     }
 
                     if let Ok(conn) = db.lock() {
-                        let _ = queries::complete_round(&conn, rid, false, is_half, Some(elapsed));
+                        let _ = queries::complete_round(&conn, rid, false, is_half, Some(elapsed_secs));
                     }
                 }
                 log::debug!("[timer] idle");

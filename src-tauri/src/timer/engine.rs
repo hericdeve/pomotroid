@@ -40,7 +40,7 @@ pub enum TimerEvent {
     Complete { skipped: bool },
     Paused { elapsed_secs: u32 },
     Resumed { elapsed_secs: u32 },
-    Reset,
+    Reset { elapsed_secs: u32 },
     Suspended { elapsed_secs: u32 },
 }
 
@@ -135,8 +135,8 @@ fn run_loop(
                 // this handler the command would be silently swallowed,
                 // leaving the listener blocked in recv() and the UI stale.
                 Ok(TimerCommand::Reset) => {
+                    let _ = event_tx.send(TimerEvent::Reset { elapsed_secs });
                     elapsed_secs = 0;
-                    let _ = event_tx.send(TimerEvent::Reset);
                     Transition::Stay
                 }
                 // Skip while Idle: advance to the next round without starting.
@@ -159,8 +159,8 @@ fn run_loop(
                     }))
                 }
                 Ok(TimerCommand::Reset) => {
+                    let _ = event_tx.send(TimerEvent::Reset { elapsed_secs });
                     elapsed_secs = 0;
-                    let _ = event_tx.send(TimerEvent::Reset);
                     Transition::To(Phase::Idle)
                 }
                 Ok(TimerCommand::Skip) => {
@@ -222,8 +222,8 @@ fn run_loop(
                         Transition::To(Phase::Idle)
                     }
                     Ok(TimerCommand::Reset) => {
+                        let _ = event_tx.send(TimerEvent::Reset { elapsed_secs });
                         elapsed_secs = 0;
-                        let _ = event_tx.send(TimerEvent::Reset);
                         Transition::To(Phase::Idle)
                     }
                     Ok(TimerCommand::Reconfigure { duration_secs: d }) => {
@@ -378,7 +378,7 @@ mod tests {
 
         let events = drain(&rx);
         assert!(
-            events.iter().any(|e| matches!(e, TimerEvent::Reset)),
+            events.iter().any(|e| matches!(e, TimerEvent::Reset { .. })),
             "expected Reset event"
         );
         // No Complete should have fired.
@@ -483,7 +483,7 @@ mod tests {
 
         let events = drain(&rx);
         assert!(
-            events.iter().any(|e| matches!(e, TimerEvent::Reset)),
+            events.iter().any(|e| matches!(e, TimerEvent::Reset { .. })),
             "Reset while Idle must emit a Reset event"
         );
     }

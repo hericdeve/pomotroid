@@ -390,9 +390,12 @@ pub struct CreateManualSessionPayload {
 
 pub fn get_session(conn: &Connection, id: i64) -> Result<Option<SessionRow>> {
     conn.query_row(
-        "SELECT id, uuid, started_at, ended_at, round_type, duration_secs, completed,
-                subject, subject_topic, study_type, notes, updated_at, deleted_at, is_half_session, exclude_from_stats
-         FROM rounds WHERE id = ?1",
+        "SELECT r.id, r.uuid, r.started_at, r.ended_at, r.round_type, r.duration_secs, r.completed,
+                COALESCE(r.subject, s.subject), COALESCE(r.subject_topic, s.subject_topic), COALESCE(r.study_type, s.study_type), 
+                COALESCE(r.notes, s.notes), r.updated_at, r.deleted_at, r.is_half_session, r.exclude_from_stats
+         FROM rounds r
+         LEFT JOIN study_sessions s ON r.study_session_id = s.id
+         WHERE r.id = ?1",
         [id],
         |r| {
             Ok(SessionRow {
