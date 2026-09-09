@@ -1202,7 +1202,7 @@ mod tests {
         let id = insert_round(&conn, None, "work", 1500).unwrap();
         // let _s = get_round(&conn, id).unwrap(); // function doesn't exist, we don't need it for this test
 
-        complete_round(&conn, id, true).unwrap();
+        complete_round(&conn, id, true, false, None).unwrap();
 
         let completed: i64 = conn
             .query_row(
@@ -1295,21 +1295,21 @@ mod tests {
 
         // 339 s = 5:39 → rounds up to 6 min (remainder 39 ≥ 30).
         let id1 = insert_round(&conn, None, "work", 339).unwrap();
-        complete_round(&conn, id1, true).unwrap();
+        complete_round(&conn, id1, true, false, None).unwrap();
         let stats = get_daily_stats(&conn).unwrap();
         assert_eq!(stats.focus_mins, 6, "339 s should round to 6 min");
 
         // Reset and test round-down: 324 s = 5:24 → rounds down to 5 min (remainder 24 < 30).
         let conn2 = setup();
         let id2 = insert_round(&conn2, None, "work", 324).unwrap();
-        complete_round(&conn2, id2, true).unwrap();
+        complete_round(&conn2, id2, true, false, None).unwrap();
         let stats2 = get_daily_stats(&conn2).unwrap();
         assert_eq!(stats2.focus_mins, 5, "324 s should round to 5 min");
 
         // Exact minute boundary: 1500 s = 25:00 → stays 25 min.
         let conn3 = setup();
         let id3 = insert_round(&conn3, None, "work", 1500).unwrap();
-        complete_round(&conn3, id3, true).unwrap();
+        complete_round(&conn3, id3, true, false, None).unwrap();
         let stats3 = get_daily_stats(&conn3).unwrap();
         assert_eq!(stats3.focus_mins, 25, "1500 s should be exactly 25 min");
     }
@@ -1319,10 +1319,10 @@ mod tests {
         let conn = setup();
 
         let id1 = insert_round(&conn, None, "work", 1500).unwrap();
-        complete_round(&conn, id1, true).unwrap();
+        complete_round(&conn, id1, true, false, None).unwrap();
 
         let id2 = insert_round(&conn, None, "work", 1500).unwrap();
-        complete_round(&conn, id2, false).unwrap(); // skipped
+        complete_round(&conn, id2, false, false, None).unwrap(); // skipped
 
         let _id3 = insert_round(&conn, None, "short-break", 300).unwrap();
 

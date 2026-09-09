@@ -1211,6 +1211,87 @@ pub fn schedule_update_block(
     queries::schedule_update_block(&conn, id, day_of_week, start_minute, end_minute, subject_topic.as_deref(), study_type.as_deref(), round_tags.as_deref())
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn tags_sync(
+    subject: String,
+    subject_topic: String,
+    study_type: String,
+    notes: String,
+    app: AppHandle,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(dbus_state) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+            {
+                let mut tags = dbus_state.pending_tags.lock().unwrap();
+                tags.subject = subject.clone();
+                tags.subject_topic = subject_topic.clone();
+                tags.study_type = study_type.clone();
+                tags.notes = notes.clone();
+            }
+            let dbus_state_clone = Arc::clone(&dbus_state);
+            tauri::async_runtime::spawn(async move {
+                if let Some(ref conn) = *dbus_state_clone.connection.lock().await {
+                    let _ = conn.emit_signal(
+                        None::<()>,
+                        "/org/pomotroid/Pomodoro",
+                        "org.pomotroid.Pomodoro",
+                        "TagsChanged",
+                        &(subject, subject_topic, study_type, notes),
+                    ).await;
+                }
+            });
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn goal_sync(
+    goal: u32,
+    app: AppHandle,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(dbus_state) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+            dbus_state.goal_rounds.store(goal, std::sync::atomic::Ordering::Relaxed);
+            let dbus_state_clone = Arc::clone(&dbus_state);
+            tauri::async_runtime::spawn(async move {
+                if let Some(ref conn) = *dbus_state_clone.connection.lock().await {
+                    let _ = conn.emit_signal(
+                        None::<()>,
+                        "/org/pomotroid/Pomodoro",
+                        "org.pomotroid.Pomodoro",
+                        "GoalChanged",
+                        &(goal,),
+                    ).await;
+                }
+            });
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn tags_get_pending(
+    app: AppHandle,
+) -> Result<Option<serde_json::Value>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(dbus_state) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+            let tags = dbus_state.pending_tags.lock().unwrap().clone();
+            return Ok(Some(serde_json::json!({
+                "subject": tags.subject,
+                "subject_topic": tags.subject_topic,
+                "study_type": tags.study_type,
+                "notes": tags.notes,
+            })));
+        }
+    }
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;
@@ -1224,7 +1305,7 @@ mod tests {
 
     fn seed_sessions(conn: &Connection) {
         conn.execute(
-            "INSERT INTO rounds (started_at, round_type, duration_secs) VALUES (1, 'work', 10), (2, 'short-break', 300)",
+            "INSERT INTO rounds (started_at, round_type, duration_secs, uuid) VALUES (1, 'work', 10, 'u1'), (2, 'short-break', 300, 'u2')",
             [],
         ).unwrap();
     }
@@ -1246,7 +1327,7 @@ mod tests {
     #[test]
     fn sessions_clear_on_empty_table_returns_zero() {
         let conn = setup();
-        let n = conn.execute("DELETE FROM sessions", []).unwrap();
+        let n = conn.execute("DELETE FROM rounds", []).unwrap();
         assert_eq!(n, 0);
     }
 }

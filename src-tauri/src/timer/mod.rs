@@ -204,7 +204,6 @@ impl TimerController {
 
     pub fn get_snapshot(&self) -> TimerSnapshot {
         let seq = self.sequence.lock().unwrap();
-        let settings = self.settings.lock().unwrap();
         let shared = self.shared.lock().unwrap();
 
         TimerSnapshot {
@@ -295,6 +294,14 @@ fn listen_events(
                 if let Some(ws) = app.try_state::<Arc<WsState>>() {
                     websocket::broadcast_started(&ws, total_secs);
                 }
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    let snap = build_snapshot(&sequence, &settings, &shared);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_state_changed(&dbus_clone, &snap).await;
+                    });
+                }
                 tray::update_menu_items(&tray, true, false);
             }
 
@@ -343,6 +350,14 @@ fn listen_events(
                     "timer:tick",
                     serde_json::json!({ "elapsed_secs": elapsed_secs, "total_secs": total_secs, "active_session_id": active_session_id }),
                 );
+
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_tick(&dbus_clone, elapsed_secs, total_secs).await;
+                    });
+                }
 
                 // --- Tick sound ---
                 let rt = sequence.lock().unwrap().current_round.as_str().to_string();
@@ -471,6 +486,15 @@ fn listen_events(
                     websocket::broadcast_round_change(&ws, snap);
                 }
 
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    let snap = build_snapshot(&sequence, &settings, &shared);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_state_changed(&dbus_clone, &snap).await;
+                    });
+                }
+
                 // Auto-start if configured.
                 let should_auto = match next_round {
                     RoundType::Work => auto_start_work,
@@ -506,6 +530,15 @@ fn listen_events(
                 let progress = if total > 0 { elapsed_secs as f32 / total as f32 } else { 0.0 };
                 tray::update_icon(&tray, &rt, true, progress);
                 tray::update_menu_items(&tray, false, true);
+
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    let snap = build_snapshot(&sequence, &settings, &shared);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_state_changed(&dbus_clone, &snap).await;
+                    });
+                }
             }
 
             TimerEvent::Resumed { elapsed_secs } => {
@@ -535,6 +568,15 @@ fn listen_events(
                 tray::update_icon(&tray, &rt, false, progress);
                 last_tray_progress = progress;
                 tray::update_menu_items(&tray, true, false);
+
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    let snap = build_snapshot(&sequence, &settings, &shared);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_state_changed(&dbus_clone, &snap).await;
+                    });
+                }
             }
 
             TimerEvent::Reset { elapsed_secs } => {
@@ -594,6 +636,15 @@ fn listen_events(
                 tray::update_icon(&tray, &rt, false, 0.0);
                 last_tray_progress = -1.0;
                 tray::update_menu_items(&tray, false, false);
+
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    let snap = build_snapshot(&sequence, &settings, &shared);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_state_changed(&dbus_clone, &snap).await;
+                    });
+                }
             }
 
             TimerEvent::Suspended { elapsed_secs } => {
@@ -613,6 +664,15 @@ fn listen_events(
                 };
                 let progress = if total > 0 { elapsed_secs as f32 / total as f32 } else { 0.0 };
                 tray::update_icon(&tray, &rt, true, progress);
+
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    let snap = build_snapshot(&sequence, &settings, &shared);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_state_changed(&dbus_clone, &snap).await;
+                    });
+                }
             }
         }
     }

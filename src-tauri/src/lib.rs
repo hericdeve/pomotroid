@@ -9,6 +9,8 @@ pub mod themes;
 pub mod timer;
 pub mod tray;
 pub mod websocket;
+#[cfg(target_os = "linux")]
+pub mod dbus;
 
 use std::sync::Arc;
 
@@ -36,6 +38,7 @@ use commands::{
     timer_toggle, timer_get_adjacent_sessions, timer_move_round_to_session,
     window_set_visibility,
     palette_open, palette_close, palette_submit,
+    tags_sync, goal_sync, tags_get_pending,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -208,6 +211,19 @@ pub fn run() {
                 let app_clone = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     websocket::start(port, app_clone, &ws_state).await;
+                });
+            }
+
+            // --- D-Bus server for Tide Island & desktop integration (Linux) ---
+            #[cfg(target_os = "linux")]
+            {
+                let default_goal = initial_settings.session_goal_rounds;
+                let dbus_state = Arc::new(dbus::DbusState::new(default_goal));
+                app.manage(Arc::clone(&dbus_state));
+                let app_handle = app.handle().clone();
+                let dbus_state_clone = Arc::clone(&dbus_state);
+                tauri::async_runtime::spawn(async move {
+                    dbus::start(app_handle, dbus_state_clone).await;
                 });
             }
 
@@ -444,6 +460,9 @@ pub fn run() {
             palette_open,
             palette_close,
             palette_submit,
+            tags_sync,
+            goal_sync,
+            tags_get_pending,
             // Shortcuts
             shortcuts_reload,
             // Audio

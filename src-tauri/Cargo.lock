@@ -3339,6 +3339,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "uuid",
+ "zbus",
 ]
 
 [[package]]
@@ -5291,6 +5292,7 @@ dependencies = [
  "signal-hook-registry",
  "socket2",
  "tokio-macros",
+ "tracing",
  "windows-sys 0.61.2",
 ]
 
@@ -6799,6 +6801,7 @@ dependencies = [
  "rustix",
  "serde",
  "serde_repr",
+ "tokio",
  "tracing",
  "uds_windows",
  "uuid",

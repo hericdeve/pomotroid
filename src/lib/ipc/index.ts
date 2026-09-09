@@ -216,3 +216,32 @@ export const onThemesChanged = (cb: (themes: Theme[]) => void): Promise<Unlisten
 
 export const onSessionsCleared = (cb: () => void): Promise<UnlistenFn> =>
   listen<void>('sessions:cleared', () => cb());
+
+// --- D-Bus / Desktop Integration commands & events ---
+
+export interface PendingTagsPayload {
+  subject: string;
+  subject_topic: string;
+  study_type: string;
+  notes: string;
+}
+
+export const tagsSync = (payload: PendingTagsPayload) =>
+  invoke<void>('tags_sync', {
+    subject: payload.subject,
+    subjectTopic: payload.subject_topic,
+    studyType: payload.study_type,
+    notes: payload.notes,
+  });
+
+export const goalSync = (goal: number) =>
+  invoke<void>('goal_sync', { goal });
+
+export const tagsGetPending = () =>
+  invoke<PendingTagsPayload>('tags_get_pending');
+
+export const onTagsChanged = (cb: (tags: PendingTagsPayload) => void): Promise<UnlistenFn> =>
+  listen<PendingTagsPayload>('tags:changed', (e) => cb(e.payload));
+
+export const onGoalChanged = (cb: (goal: number) => void): Promise<UnlistenFn> =>
+  listen<number>('goal:changed', (e) => cb(e.payload));

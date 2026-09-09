@@ -8,7 +8,7 @@
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { showGoalModal, sessionGoalRounds } from '$lib/stores/sessionGoal';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerReset, timerSkip, timerRestartRound, updateSession, studySessionUpdate, scheduleGetAll } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerReset, timerSkip, timerRestartRound, updateSession, studySessionUpdate, scheduleGetAll, tagsSync, goalSync, tagsGetPending, onTagsChanged, onGoalChanged } from '$lib/ipc';
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
@@ -201,6 +201,15 @@
 
         // Apply the stored locale on mount.
         setLocale(s.language);
+        sessionGoalRounds.set(s.session_goal_rounds);
+        try {
+          const pending = await tagsGetPending();
+          if (pending && (pending.subject || pending.subject_topic || pending.study_type || pending.notes)) {
+            pendingTags.set(pending);
+          }
+        } catch (e) {
+          console.error('[main] failed to get pending tags:', e);
+        }
         await info(`[main] settings loaded, locale=${s.language}`);
 
         // Load and apply the active theme using OS color scheme.
@@ -298,7 +307,7 @@
               if (state.elapsed_secs > 0) {
                 await timerRestartRound();
               }
-              // timerRestartRound stops the timer. We want it to start ticking immediately, 
+              // timerRestartRound stops the timer. We want it to start ticking immediately,
               // or if it was already stopped at 0:00, we want it to start ticking.
               setTimeout(() => {
                 if (!get(timerState).is_running) {
@@ -309,6 +318,40 @@
           }
         )
       );
+
+      let isSyncingTagsFromBackend = false;
+      let isSyncingGoalFromBackend = false;
+
+      cleanups.push(
+        await onTagsChanged((tags) => {
+          isSyncingTagsFromBackend = true;
+          pendingTags.set(tags);
+          setTimeout(() => {
+            isSyncingTagsFromBackend = false;
+          }, 50);
+        }),
+        await onGoalChanged((goal) => {
+          isSyncingGoalFromBackend = true;
+          sessionGoalRounds.set(goal);
+          setTimeout(() => {
+            isSyncingGoalFromBackend = false;
+          }, 50);
+        })
+      );
+
+      const unsubTags = pendingTags.subscribe((tags) => {
+        if (!isSyncingTagsFromBackend) {
+          tagsSync(tags).catch(console.error);
+        }
+      });
+      cleanups.push(unsubTags);
+
+      const unsubGoal = sessionGoalRounds.subscribe((goal) => {
+        if (!isSyncingGoalFromBackend) {
+          goalSync(goal).catch(console.error);
+        }
+      });
+      cleanups.push(unsubGoal);
     })();
 
     return () => {
