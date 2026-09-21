@@ -290,6 +290,46 @@ const MIGRATION_17: &str = "
     INSERT INTO schema_version VALUES (17);
 ";
 
+const MIGRATION_18: &str = "
+    CREATE TABLE google_auth (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        client_id TEXT NOT NULL,
+        client_secret TEXT,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        expires_at INTEGER NOT NULL,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE google_calendars (
+        id TEXT PRIMARY KEY,
+        summary TEXT NOT NULL,
+        description TEXT,
+        primary_cal INTEGER NOT NULL DEFAULT 0,
+        background_color TEXT,
+        foreground_color TEXT,
+        is_visible INTEGER NOT NULL DEFAULT 1,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+    );
+
+    ALTER TABLE scheduled_blocks ADD COLUMN calendar_type TEXT NOT NULL DEFAULT 'local';
+    ALTER TABLE scheduled_blocks ADD COLUMN google_calendar_id TEXT;
+    ALTER TABLE scheduled_blocks ADD COLUMN google_event_id TEXT;
+    ALTER TABLE scheduled_blocks ADD COLUMN google_etag TEXT;
+    ALTER TABLE scheduled_blocks ADD COLUMN last_synced_at INTEGER;
+
+    CREATE INDEX IF NOT EXISTS idx_blocks_google_event ON scheduled_blocks(google_event_id);
+
+    INSERT INTO settings (key, value) VALUES ('calendar_local_enabled', 'true')
+    ON CONFLICT(key) DO NOTHING;
+
+    INSERT INTO schema_version VALUES (18);
+";
+
+
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
 pub fn run(conn: &Connection) -> Result<()> {
@@ -480,6 +520,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_17 complete");
     }
 
+    if version < 18 {
+        log::info!("[db/migrations] applying MIGRATION_18: google calendar integration & two-way sync");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_18} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_18 complete");
+    }
+
     Ok(())
 }
 
@@ -515,14 +561,14 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 17);
+        assert_eq!(v, 18);
     }
 
     #[test]
     fn all_tables_created() {
         let conn = Connection::open_in_memory().unwrap();
         run(&conn).unwrap();
-        for table in &["settings", "rounds", "custom_themes", "schema_version", "subjects", "study_sessions"] {
+        for table in &["settings", "rounds", "custom_themes", "schema_version", "subjects", "study_sessions", "google_auth", "google_calendars"] {
             let count: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",

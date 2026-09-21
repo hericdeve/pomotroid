@@ -17,6 +17,7 @@ use crate::timer::{TimerController, TimerSnapshot};
 use crate::tray::{self, TrayState};
 use crate::websocket::{self, WsState};
 use crate::io as pomotroid_io;
+use crate::google_calendar::{self, GoogleAuthStatus, GoogleCalendarItem, GoogleOverlayEvent};
 
 // ---------------------------------------------------------------------------
 // CMD-01 — Timer commands
@@ -1175,7 +1176,7 @@ pub fn schedule_get_all(db: State<'_, DbState>) -> Result<Vec<queries::Scheduled
 }
 
 #[tauri::command]
-pub fn schedule_add_block(
+pub async fn schedule_add_block(
     subject: String,
     day_of_week: i32,
     start_minute: i32,
@@ -1183,21 +1184,70 @@ pub fn schedule_add_block(
     subject_topic: Option<String>,
     study_type: Option<String>,
     round_tags: Option<String>,
-    db: State<DbState>,
+    calendar_type: Option<String>,
+    monday_ymd: Option<String>,
+    db: State<'_, DbState>,
 ) -> Result<i64, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::schedule_add_block(&conn, &subject, day_of_week, start_minute, end_minute, subject_topic.as_deref(), study_type.as_deref(), round_tags.as_deref())
-        .map_err(|e| e.to_string())
+    let cal_type = calendar_type.unwrap_or_else(|| "local".to_string());
+
+    let (google_cal_id, block_id) = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let synced_cal = if cal_type == "google" {
+            queries::get_google_synced_calendar(&conn).map_err(|e| e.to_string())?
+        } else {
+            None
+        };
+        let target_google_cal_id = synced_cal.as_ref().map(|c| c.id.clone());
+        let final_cal_type = if target_google_cal_id.is_some() { "google" } else { "local" };
+
+        let id = queries::schedule_add_block_full(
+            &conn,
+            &subject,
+            day_of_week,
+            start_minute,
+            end_minute,
+            subject_topic.as_deref(),
+            study_type.as_deref(),
+            round_tags.as_deref(),
+            final_cal_type,
+            target_google_cal_id.as_deref(),
+            None,
+        )
+        .map_err(|e| e.to_string())?;
+
+        (target_google_cal_id, id)
+    };
+
+    if let (Some(cal_id), Some(ymd)) = (google_cal_id, monday_ymd) {
+        if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+            let _ = google_calendar::sync::push_block_create_to_google(&db, &token, &cal_id, block_id, &ymd).await;
+        }
+    }
+
+    Ok(block_id)
 }
 
 #[tauri::command]
-pub fn schedule_delete_block(id: i64, db: State<'_, DbState>) -> Result<(), String> {
+pub async fn schedule_delete_block(id: i64, db: State<'_, DbState>) -> Result<(), String> {
+    let block = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::schedule_get_by_id(&conn, id).map_err(|e| e.to_string())?
+    };
+
+    if let Some(b) = block {
+        if let (Some(ref cal_id), Some(ref event_id)) = (&b.google_calendar_id, &b.google_event_id) {
+            if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                let _ = google_calendar::sync::push_block_delete_to_google(&token, cal_id, event_id).await;
+            }
+        }
+    }
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     queries::schedule_delete_block(&conn, id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn schedule_update_block(
+pub async fn schedule_update_block(
     id: i64,
     day_of_week: i32,
     start_minute: i32,
@@ -1205,11 +1255,35 @@ pub fn schedule_update_block(
     subject_topic: Option<String>,
     study_type: Option<String>,
     round_tags: Option<String>,
-    db: State<DbState>,
+    monday_ymd: Option<String>,
+    db: State<'_, DbState>,
 ) -> Result<(), String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::schedule_update_block(&conn, id, day_of_week, start_minute, end_minute, subject_topic.as_deref(), study_type.as_deref(), round_tags.as_deref())
-        .map_err(|e| e.to_string())
+    let block = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::schedule_update_block(
+            &conn,
+            id,
+            day_of_week,
+            start_minute,
+            end_minute,
+            subject_topic.as_deref(),
+            study_type.as_deref(),
+            round_tags.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        queries::schedule_get_by_id(&conn, id).map_err(|e| e.to_string())?
+    };
+
+    if let (Some(b), Some(ymd)) = (block, monday_ymd) {
+        if b.calendar_type == "google" {
+            if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                let _ = google_calendar::sync::push_block_update_to_google(&db, &token, id, &ymd).await;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1290,6 +1364,288 @@ pub fn tags_get_pending(
         }
     }
     Ok(None)
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar Commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn google_calendar_get_status(db: State<'_, DbState>) -> Result<GoogleAuthStatus, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let auth = queries::get_google_auth(&conn).map_err(|e| e.to_string())?;
+    match auth {
+        Some(a) => Ok(GoogleAuthStatus {
+            is_signed_in: !a.access_token.is_empty(),
+            email: a.email,
+            client_id: Some(a.client_id),
+            has_client_secret: a.client_secret.is_some(),
+        }),
+        None => Ok(GoogleAuthStatus {
+            is_signed_in: false,
+            email: None,
+            client_id: None,
+            has_client_secret: false,
+        }),
+    }
+}
+
+#[tauri::command]
+pub fn google_calendar_save_credentials(
+    client_id: String,
+    client_secret: Option<String>,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::save_google_client_credentials(&conn, &client_id, client_secret.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_calendar_auth_start(db: State<'_, DbState>) -> Result<String, String> {
+    let email = google_calendar::auth::start_browser_oauth(&db).await?;
+
+    // Immediately fetch calendars and cache them
+    if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+        match google_calendar::api::fetch_calendars(&token).await {
+            Ok(calendars) => {
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                let rows: Vec<queries::GoogleCalendarRow> = calendars
+                    .into_iter()
+                    .map(|c| queries::GoogleCalendarRow {
+                        id: c.id,
+                        summary: c.summary,
+                        description: c.description,
+                        primary_cal: c.primary,
+                        background_color: Some(c.background_color),
+                        foreground_color: Some(c.foreground_color),
+                        is_visible: true,
+                        is_synced: false,
+                    })
+                    .collect();
+                let _ = queries::save_google_calendars(&conn, &rows);
+            }
+            Err(e) => {
+                log::error!("[gcal] failed to fetch calendars after auth: {e}");
+            }
+        }
+    }
+
+    Ok(email)
+}
+
+#[tauri::command]
+pub fn google_calendar_sign_out(db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::clear_google_auth(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_calendar_get_calendars(db: State<'_, DbState>) -> Result<Vec<GoogleCalendarItem>, String> {
+    // Attempt to refresh from Google API if a valid token exists
+    if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+        match google_calendar::api::fetch_calendars(&token).await {
+            Ok(calendars) => {
+                if let Ok(conn) = db.lock() {
+                    let rows: Vec<queries::GoogleCalendarRow> = calendars
+                        .into_iter()
+                        .map(|c| queries::GoogleCalendarRow {
+                            id: c.id,
+                            summary: c.summary,
+                            description: c.description,
+                            primary_cal: c.primary,
+                            background_color: Some(c.background_color),
+                            foreground_color: Some(c.foreground_color),
+                            is_visible: true,
+                            is_synced: false,
+                        })
+                        .collect();
+                    let _ = queries::save_google_calendars(&conn, &rows);
+                }
+            }
+            Err(e) => {
+                log::warn!("[gcal] fetch_calendars error in google_calendar_get_calendars: {e}");
+            }
+        }
+    }
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let _ = queries::get_google_synced_calendar(&conn);
+    let rows = queries::get_google_calendars(&conn).map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|r| GoogleCalendarItem {
+            id: r.id,
+            summary: r.summary,
+            description: r.description,
+            primary: r.primary_cal,
+            background_color: r.background_color.unwrap_or_else(|| "#4285F4".into()),
+            foreground_color: r.foreground_color.unwrap_or_else(|| "#FFFFFF".into()),
+            is_visible: r.is_visible,
+            is_synced: r.is_synced,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn google_calendar_toggle_visibility(
+    calendar_id: String,
+    visible: bool,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::set_google_calendar_visibility(&conn, &calendar_id, visible).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn google_calendar_set_synced_calendar(
+    calendar_id: Option<String>,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::set_google_synced_calendar(&conn, calendar_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn google_calendar_sync_now(
+    monday_ymd: String,
+    db: State<'_, DbState>,
+) -> Result<Vec<queries::ScheduledBlock>, String> {
+    let token = google_calendar::auth::ensure_valid_token(&db).await?;
+    let synced_cal = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::get_google_synced_calendar(&conn).map_err(|e| e.to_string())?
+    };
+
+    if let Some(cal) = synced_cal {
+        google_calendar::sync::sync_calendar_two_way(&db, &token, &cal.id, &monday_ymd).await
+    } else {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::schedule_get_all(&conn).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn google_calendar_get_overlay_events(
+    monday_ymd: String,
+    db: State<'_, DbState>,
+) -> Result<Vec<GoogleOverlayEvent>, String> {
+    use chrono::Datelike;
+    use chrono::Timelike;
+
+    let token = match google_calendar::auth::ensure_valid_token(&db).await {
+        Ok(tok) => tok,
+        Err(_) => return Ok(vec![]),
+    };
+
+    let overlay_calendars = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let calendars = queries::get_google_calendars(&conn).map_err(|e| e.to_string())?;
+        calendars
+            .into_iter()
+            .filter(|c| c.is_visible && !c.is_synced)
+            .collect::<Vec<_>>()
+    };
+
+    let (time_min, time_max, monday) = google_calendar::sync::calculate_week_bounds(&monday_ymd)?;
+    let mut all_overlay_events = Vec::new();
+
+    for cal in overlay_calendars {
+        if let Ok(events) = google_calendar::api::fetch_events(&token, &cal.id, &time_min, &time_max).await {
+            for ev in events {
+                let color = cal.background_color.clone().unwrap_or_else(|| "#4285F4".into());
+                let title = ev.summary.unwrap_or_else(|| "Event".into());
+
+                if let Some(ref start) = ev.start {
+                    if let Some(ref dt_str) = start.date_time {
+                        if let Ok(s_dt) = chrono::DateTime::parse_from_rfc3339(dt_str) {
+                            let s_local = s_dt.with_timezone(&chrono::Local);
+                            let day_of_week = s_local.weekday().num_days_from_monday() as i32;
+                            let start_minute = (s_local.hour() * 60 + s_local.minute()) as i32;
+
+                            let end_minute = if let Some(ref end) = ev.end {
+                                if let Some(ref edt_str) = end.date_time {
+                                    if let Ok(e_dt) = chrono::DateTime::parse_from_rfc3339(edt_str) {
+                                        let e_local = e_dt.with_timezone(&chrono::Local);
+                                        (e_local.hour() * 60 + e_local.minute()) as i32
+                                    } else {
+                                        start_minute + 60
+                                    }
+                                } else {
+                                    start_minute + 60
+                                }
+                            } else {
+                                start_minute + 60
+                            };
+
+                            all_overlay_events.push(GoogleOverlayEvent {
+                                id: ev.id,
+                                calendar_id: cal.id.clone(),
+                                calendar_summary: cal.summary.clone(),
+                                calendar_color: color,
+                                summary: title,
+                                description: ev.description,
+                                location: ev.location,
+                                html_link: ev.html_link,
+                                start_date_time: Some(dt_str.clone()),
+                                end_date_time: ev.end.and_then(|e| e.date_time),
+                                is_all_day: false,
+                                day_of_week,
+                                start_minute,
+                                end_minute,
+                            });
+                        }
+                    } else if let Some(ref d_str) = start.date {
+                        if let Ok(d) = chrono::NaiveDate::parse_from_str(d_str, "%Y-%m-%d") {
+                            let day_of_week = (d - monday).num_days() as i32;
+                            if day_of_week >= 0 && day_of_week <= 6 {
+                                all_overlay_events.push(GoogleOverlayEvent {
+                                    id: ev.id,
+                                    calendar_id: cal.id.clone(),
+                                    calendar_summary: cal.summary.clone(),
+                                    calendar_color: color,
+                                    summary: title,
+                                    description: ev.description,
+                                    location: ev.location,
+                                    html_link: ev.html_link,
+                                    start_date_time: None,
+                                    end_date_time: None,
+                                    is_all_day: true,
+                                    day_of_week,
+                                    start_minute: 0,
+                                    end_minute: 1440,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(all_overlay_events)
+}
+
+#[tauri::command]
+pub fn calendar_get_local_visible(db: State<'_, DbState>) -> Result<bool, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = 'calendar_local_enabled'")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+    if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let val: String = row.get(0).map_err(|e| e.to_string())?;
+        Ok(val != "false")
+    } else {
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+pub fn calendar_set_local_visible(visible: bool, db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    settings::save_setting(&conn, "calendar_local_enabled", if visible { "true" } else { "false" })
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

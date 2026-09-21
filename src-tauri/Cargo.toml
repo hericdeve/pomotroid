@@ -43,6 +43,10 @@ notify = "8"
 uuid = { version = "1.23.4", features = ["v4"] }
 calamine = { version = "0.25", features = ["dates"] }
 chrono = "0.4"
+reqwest = { version = "0.13", features = ["json"] }
+sha2 = "0.10"
+base64 = "0.22"
+urlencoding = "2.1"
 
 [dev-dependencies]
 tokio-tungstenite = "0.29"

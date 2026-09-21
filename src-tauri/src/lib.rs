@@ -9,6 +9,7 @@ pub mod themes;
 pub mod timer;
 pub mod tray;
 pub mod websocket;
+pub mod google_calendar;
 #[cfg(target_os = "linux")]
 pub mod dbus;
 
@@ -33,6 +34,10 @@ use commands::{
     session_get, study_session_get, session_update, study_session_update, session_delete, study_session_delete, session_create_manual, session_get_subjects, subjects_get_all, subject_create, subject_delete, subject_set_weekly_goal, subject_get_weekly_progress, session_get_topics, session_get_study_types, sessions_get_history, session_add_extra_time,
     stats_get_detailed, stats_get_heatmap, stats_get_insights,
     schedule_get_all, schedule_add_block, schedule_delete_block, schedule_update_block,
+    google_calendar_get_status, google_calendar_save_credentials, google_calendar_auth_start,
+    google_calendar_sign_out, google_calendar_get_calendars, google_calendar_toggle_visibility,
+    google_calendar_set_synced_calendar, google_calendar_sync_now, google_calendar_get_overlay_events,
+    calendar_get_local_visible, calendar_set_local_visible,
     themes_list,
     timer_add_completed_rounds, timer_get_state, timer_reset, timer_restart_round, timer_skip,
     timer_toggle, timer_get_adjacent_sessions, timer_move_round_to_session,
@@ -455,6 +460,18 @@ pub fn run() {
             schedule_add_block,
             schedule_delete_block,
             schedule_update_block,
+            // Google Calendar
+            google_calendar_get_status,
+            google_calendar_save_credentials,
+            google_calendar_auth_start,
+            google_calendar_sign_out,
+            google_calendar_get_calendars,
+            google_calendar_toggle_visibility,
+            google_calendar_set_synced_calendar,
+            google_calendar_sync_now,
+            google_calendar_get_overlay_events,
+            calendar_get_local_visible,
+            calendar_set_local_visible,
             // Window
             window_set_visibility,
             palette_open,

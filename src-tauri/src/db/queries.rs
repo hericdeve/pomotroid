@@ -1588,7 +1588,7 @@ pub fn get_insights_stats(conn: &Connection, filter: &SessionFilter) -> Result<I
 // SCHEDULED BLOCKS
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ScheduledBlock {
     pub id: i64,
     pub subject: String,
@@ -1598,11 +1598,15 @@ pub struct ScheduledBlock {
     pub subject_topic: Option<String>,
     pub study_type: Option<String>,
     pub round_tags: Option<String>,
+    pub calendar_type: String,
+    pub google_calendar_id: Option<String>,
+    pub google_event_id: Option<String>,
 }
 
 pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
     let mut stmt = conn.prepare(
-        "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags 
+        "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags,
+                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id 
          FROM scheduled_blocks 
          ORDER BY day_of_week ASC, start_minute ASC"
     )?;
@@ -1617,6 +1621,9 @@ pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
             subject_topic: row.get(5)?,
             study_type: row.get(6)?,
             round_tags: row.get(7)?,
+            calendar_type: row.get(8)?,
+            google_calendar_id: row.get(9)?,
+            google_event_id: row.get(10)?,
         })
     })?;
 
@@ -1625,6 +1632,62 @@ pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
         blocks.push(b?);
     }
     Ok(blocks)
+}
+
+pub fn schedule_get_by_id(conn: &Connection, id: i64) -> Result<Option<ScheduledBlock>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags,
+                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id 
+         FROM scheduled_blocks 
+         WHERE id = ?1"
+    )?;
+
+    let mut rows = stmt.query(params![id])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(ScheduledBlock {
+            id: row.get(0)?,
+            subject: row.get(1)?,
+            day_of_week: row.get(2)?,
+            start_minute: row.get(3)?,
+            end_minute: row.get(4)?,
+            subject_topic: row.get(5)?,
+            study_type: row.get(6)?,
+            round_tags: row.get(7)?,
+            calendar_type: row.get(8)?,
+            google_calendar_id: row.get(9)?,
+            google_event_id: row.get(10)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn schedule_get_by_google_event_id(conn: &Connection, event_id: &str) -> Result<Option<ScheduledBlock>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags,
+                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id 
+         FROM scheduled_blocks 
+         WHERE google_event_id = ?1"
+    )?;
+
+    let mut rows = stmt.query(params![event_id])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(ScheduledBlock {
+            id: row.get(0)?,
+            subject: row.get(1)?,
+            day_of_week: row.get(2)?,
+            start_minute: row.get(3)?,
+            end_minute: row.get(4)?,
+            subject_topic: row.get(5)?,
+            study_type: row.get(6)?,
+            round_tags: row.get(7)?,
+            calendar_type: row.get(8)?,
+            google_calendar_id: row.get(9)?,
+            google_event_id: row.get(10)?,
+        }))
+    } else {
+        Ok(None)
+    }
 }
 
 pub fn schedule_add_block(
@@ -1637,10 +1700,53 @@ pub fn schedule_add_block(
     study_type: Option<&str>,
     round_tags: Option<&str>,
 ) -> Result<i64> {
+    schedule_add_block_full(
+        conn,
+        subject,
+        day_of_week,
+        start_minute,
+        end_minute,
+        subject_topic,
+        study_type,
+        round_tags,
+        "local",
+        None,
+        None,
+    )
+}
+
+pub fn schedule_add_block_full(
+    conn: &Connection, 
+    subject: &str, 
+    day_of_week: i32, 
+    start_minute: i32, 
+    end_minute: i32,
+    subject_topic: Option<&str>,
+    study_type: Option<&str>,
+    round_tags: Option<&str>,
+    calendar_type: &str,
+    google_calendar_id: Option<&str>,
+    google_event_id: Option<&str>,
+) -> Result<i64> {
     conn.execute(
-        "INSERT INTO scheduled_blocks (subject, day_of_week, start_minute, end_minute, created_at, subject_topic, study_type, round_tags) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![subject.trim(), day_of_week, start_minute, end_minute, unix_now(), subject_topic.map(|s| s.trim()), study_type.map(|s| s.trim()), round_tags],
+        "INSERT INTO scheduled_blocks (
+            subject, day_of_week, start_minute, end_minute, created_at, 
+            subject_topic, study_type, round_tags, calendar_type, google_calendar_id, google_event_id
+         ) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            subject.trim(), 
+            day_of_week, 
+            start_minute, 
+            end_minute, 
+            unix_now(), 
+            subject_topic.map(|s| s.trim()), 
+            study_type.map(|s| s.trim()), 
+            round_tags,
+            calendar_type,
+            google_calendar_id,
+            google_event_id,
+        ],
     )?;
     Ok(conn.last_insert_rowid())
 }
@@ -1649,6 +1755,14 @@ pub fn schedule_delete_block(conn: &Connection, id: i64) -> Result<()> {
     conn.execute(
         "DELETE FROM scheduled_blocks WHERE id = ?1",
         params![id],
+    )?;
+    Ok(())
+}
+
+pub fn schedule_delete_by_google_event_id(conn: &Connection, event_id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM scheduled_blocks WHERE google_event_id = ?1",
+        params![event_id],
     )?;
     Ok(())
 }
@@ -1670,4 +1784,274 @@ pub fn schedule_update_block(
         params![day_of_week, start_minute, end_minute, subject_topic.map(|s| s.trim()), study_type.map(|s| s.trim()), round_tags, id],
     )?;
     Ok(())
+}
+
+pub fn schedule_update_block_name_and_slot(
+    conn: &Connection,
+    id: i64,
+    subject: &str,
+    day_of_week: i32,
+    start_minute: i32,
+    end_minute: i32,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE scheduled_blocks
+         SET subject = ?1, day_of_week = ?2, start_minute = ?3, end_minute = ?4, last_synced_at = ?5
+         WHERE id = ?6",
+        params![subject.trim(), day_of_week, start_minute, end_minute, unix_now(), id],
+    )?;
+    Ok(())
+}
+
+pub fn schedule_update_google_event_id(
+    conn: &Connection,
+    id: i64,
+    google_calendar_id: &str,
+    google_event_id: &str,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE scheduled_blocks
+         SET calendar_type = 'google', google_calendar_id = ?1, google_event_id = ?2, last_synced_at = ?3
+         WHERE id = ?4",
+        params![google_calendar_id, google_event_id, unix_now(), id],
+    )?;
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Authentication & Calendars
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GoogleAuthRow {
+    pub client_id: String,
+    pub client_secret: Option<String>,
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    pub expires_at: i64,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GoogleCalendarRow {
+    pub id: String,
+    pub summary: String,
+    pub description: Option<String>,
+    pub primary_cal: bool,
+    pub background_color: Option<String>,
+    pub foreground_color: Option<String>,
+    pub is_visible: bool,
+    pub is_synced: bool,
+}
+
+pub fn get_google_auth(conn: &Connection) -> Result<Option<GoogleAuthRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT client_id, client_secret, access_token, refresh_token, expires_at, email
+         FROM google_auth WHERE id = 1"
+    )?;
+    let mut rows = stmt.query([])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(GoogleAuthRow {
+            client_id: row.get(0)?,
+            client_secret: row.get(1)?,
+            access_token: row.get(2)?,
+            refresh_token: row.get(3)?,
+            expires_at: row.get(4)?,
+            email: row.get(5)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn save_google_auth(conn: &Connection, auth: &GoogleAuthRow) -> Result<()> {
+    conn.execute(
+        "INSERT INTO google_auth (id, client_id, client_secret, access_token, refresh_token, expires_at, email, created_at, updated_at)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)
+         ON CONFLICT(id) DO UPDATE SET
+            client_id = excluded.client_id,
+            client_secret = excluded.client_secret,
+            access_token = excluded.access_token,
+            refresh_token = COALESCE(excluded.refresh_token, google_auth.refresh_token),
+            expires_at = excluded.expires_at,
+            email = excluded.email,
+            updated_at = excluded.updated_at",
+        params![auth.client_id, auth.client_secret, auth.access_token, auth.refresh_token, auth.expires_at, auth.email, unix_now()],
+    )?;
+    Ok(())
+}
+
+pub fn update_google_tokens(
+    conn: &Connection,
+    access_token: &str,
+    refresh_token: Option<&str>,
+    expires_at: i64,
+) -> Result<()> {
+    if let Some(rt) = refresh_token {
+        conn.execute(
+            "UPDATE google_auth SET access_token = ?1, refresh_token = ?2, expires_at = ?3, updated_at = ?4 WHERE id = 1",
+            params![access_token, rt, expires_at, unix_now()],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE google_auth SET access_token = ?1, expires_at = ?2, updated_at = ?3 WHERE id = 1",
+            params![access_token, expires_at, unix_now()],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn save_google_client_credentials(
+    conn: &Connection,
+    client_id: &str,
+    client_secret: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO google_auth (id, client_id, client_secret, access_token, refresh_token, expires_at, created_at, updated_at)
+         VALUES (1, ?1, ?2, '', '', 0, ?3, ?3)
+         ON CONFLICT(id) DO UPDATE SET
+            client_id = excluded.client_id,
+            client_secret = excluded.client_secret,
+            updated_at = excluded.updated_at",
+        params![client_id.trim(), client_secret.map(|s| s.trim()), unix_now()],
+    )?;
+    Ok(())
+}
+
+pub fn clear_google_auth(conn: &Connection) -> Result<()> {
+    conn.execute("DELETE FROM google_auth", [])?;
+    conn.execute("DELETE FROM google_calendars", [])?;
+    conn.execute(
+        "UPDATE scheduled_blocks 
+         SET calendar_type = 'local', google_calendar_id = NULL, google_event_id = NULL 
+         WHERE calendar_type = 'google'", 
+        []
+    )?;
+    Ok(())
+}
+
+pub fn get_google_calendars(conn: &Connection) -> Result<Vec<GoogleCalendarRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced
+         FROM google_calendars
+         ORDER BY primary_cal DESC, summary ASC"
+    )?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(GoogleCalendarRow {
+            id: row.get(0)?,
+            summary: row.get(1)?,
+            description: row.get(2)?,
+            primary_cal: row.get::<_, i32>(3)? != 0,
+            background_color: row.get(4)?,
+            foreground_color: row.get(5)?,
+            is_visible: row.get::<_, i32>(6)? != 0,
+            is_synced: row.get::<_, i32>(7)? != 0,
+        })
+    })?;
+
+    let mut list = Vec::new();
+    for c in rows {
+        list.push(c?);
+    }
+    Ok(list)
+}
+
+pub fn save_google_calendars(conn: &Connection, calendars: &[GoogleCalendarRow]) -> Result<()> {
+    let now = unix_now();
+    for cal in calendars {
+        conn.execute(
+            "INSERT INTO google_calendars (id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+                summary = excluded.summary,
+                description = excluded.description,
+                primary_cal = excluded.primary_cal,
+                background_color = excluded.background_color,
+                foreground_color = excluded.foreground_color,
+                updated_at = excluded.updated_at",
+            params![
+                cal.id,
+                cal.summary,
+                cal.description,
+                cal.primary_cal as i32,
+                cal.background_color,
+                cal.foreground_color,
+                cal.is_visible as i32,
+                cal.is_synced as i32,
+                now,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn set_google_calendar_visibility(conn: &Connection, calendar_id: &str, visible: bool) -> Result<()> {
+    conn.execute(
+        "UPDATE google_calendars SET is_visible = ?1, updated_at = ?2 WHERE id = ?3",
+        params![visible as i32, unix_now(), calendar_id],
+    )?;
+    Ok(())
+}
+
+pub fn set_google_synced_calendar(conn: &Connection, calendar_id: Option<&str>) -> Result<()> {
+    conn.execute("UPDATE google_calendars SET is_synced = 0, updated_at = ?1", params![unix_now()])?;
+    if let Some(id) = calendar_id {
+        conn.execute(
+            "UPDATE google_calendars SET is_synced = 1, is_visible = 1, updated_at = ?1 WHERE id = ?2",
+            params![unix_now(), id],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn get_google_synced_calendar(conn: &Connection) -> Result<Option<GoogleCalendarRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced
+         FROM google_calendars
+         WHERE is_synced = 1
+         LIMIT 1"
+    )?;
+
+    let mut rows = stmt.query([])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(GoogleCalendarRow {
+            id: row.get(0)?,
+            summary: row.get(1)?,
+            description: row.get(2)?,
+            primary_cal: row.get::<_, i32>(3)? != 0,
+            background_color: row.get(4)?,
+            foreground_color: row.get(5)?,
+            is_visible: row.get::<_, i32>(6)? != 0,
+            is_synced: true,
+        }))
+    } else {
+        // Fallback: if no calendar is explicitly marked synced, auto-select primary or first calendar
+        let mut fb_stmt = conn.prepare(
+            "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced
+             FROM google_calendars
+             ORDER BY primary_cal DESC, is_visible DESC, id ASC
+             LIMIT 1"
+        )?;
+        let mut fb_rows = fb_stmt.query([])?;
+        if let Some(row) = fb_rows.next()? {
+            let cal_id: String = row.get(0)?;
+            let _ = conn.execute(
+                "UPDATE google_calendars SET is_synced = 1, is_visible = 1 WHERE id = ?1",
+                params![cal_id],
+            );
+            Ok(Some(GoogleCalendarRow {
+                id: cal_id,
+                summary: row.get(1)?,
+                description: row.get(2)?,
+                primary_cal: row.get::<_, i32>(3)? != 0,
+                background_color: row.get(4)?,
+                foreground_color: row.get(5)?,
+                is_visible: true,
+                is_synced: true,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
 }

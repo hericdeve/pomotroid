@@ -173,7 +173,46 @@ export interface ScheduledBlock {
   subject_topic: string | null;
   study_type: string | null;
   round_tags: string | null;
+  calendar_type?: 'local' | 'google';
+  google_calendar_id?: string | null;
+  google_event_id?: string | null;
 }
+
+export interface GoogleAuthStatus {
+  is_signed_in: boolean;
+  email: string | null;
+  client_id: string | null;
+  has_client_secret: boolean;
+}
+
+export interface GoogleCalendarItem {
+  id: string;
+  summary: string;
+  description: string | null;
+  primary: boolean;
+  background_color: string;
+  foreground_color: string;
+  is_visible: boolean;
+  is_synced: boolean;
+}
+
+export interface GoogleOverlayEvent {
+  id: string;
+  calendar_id: string;
+  calendar_summary: string;
+  calendar_color: string;
+  summary: string;
+  description: string | null;
+  location: string | null;
+  html_link: string | null;
+  start_date_time: string | null;
+  end_date_time: string | null;
+  is_all_day: boolean;
+  day_of_week: number; // 0 = Mon, 6 = Sun
+  start_minute: number;
+  end_minute: number;
+}
+
 
 // ---------------------------------------------------------------------------
 // Extended Sessions types

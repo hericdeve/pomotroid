@@ -25,6 +25,9 @@ import type {
   SubjectWeeklyProgress,
   ScheduledBlock,
   AdjacentSessions,
+  GoogleAuthStatus,
+  GoogleCalendarItem,
+  GoogleOverlayEvent,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -129,7 +132,9 @@ export const scheduleAddBlock = (
   endMinute: number,
   subjectTopic: string | null = null,
   studyType: string | null = null,
-  roundTags: string | null = null
+  roundTags: string | null = null,
+  calendarType: string | null = null,
+  mondayYmd: string | null = null,
 ) => invoke<number>('schedule_add_block', {
   subject, 
   dayOfWeek, 
@@ -137,7 +142,9 @@ export const scheduleAddBlock = (
   endMinute,
   subjectTopic,
   studyType,
-  roundTags
+  roundTags,
+  calendarType,
+  mondayYmd,
 });
 
 export const scheduleDeleteBlock = (id: number) => invoke<void>('schedule_delete_block', { id });
@@ -149,7 +156,8 @@ export const scheduleUpdateBlock = (
   endMinute: number,
   subjectTopic: string | null = null,
   studyType: string | null = null,
-  roundTags: string | null = null
+  roundTags: string | null = null,
+  mondayYmd: string | null = null,
 ) => invoke<void>('schedule_update_block', {
   id, 
   dayOfWeek, 
@@ -157,8 +165,28 @@ export const scheduleUpdateBlock = (
   endMinute,
   subjectTopic,
   studyType,
-  roundTags
+  roundTags,
+  mondayYmd,
 });
+
+// --- Google Calendar & Local Calendar commands ---
+export const googleCalendarGetStatus = () => invoke<GoogleAuthStatus>('google_calendar_get_status');
+export const googleCalendarSaveCredentials = (clientId: string, clientSecret?: string | null) =>
+  invoke<void>('google_calendar_save_credentials', { clientId, clientSecret: clientSecret || null });
+export const googleCalendarAuthStart = () => invoke<string>('google_calendar_auth_start');
+export const googleCalendarSignOut = () => invoke<void>('google_calendar_sign_out');
+export const googleCalendarGetCalendars = () => invoke<GoogleCalendarItem[]>('google_calendar_get_calendars');
+export const googleCalendarToggleVisibility = (calendarId: string, visible: boolean) =>
+  invoke<void>('google_calendar_toggle_visibility', { calendarId, visible });
+export const googleCalendarSetSyncedCalendar = (calendarId: string | null) =>
+  invoke<void>('google_calendar_set_synced_calendar', { calendarId });
+export const googleCalendarSyncNow = (mondayYmd: string) =>
+  invoke<ScheduledBlock[]>('google_calendar_sync_now', { mondayYmd });
+export const googleCalendarGetOverlayEvents = (mondayYmd: string) =>
+  invoke<GoogleOverlayEvent[]>('google_calendar_get_overlay_events', { mondayYmd });
+export const calendarGetLocalVisible = () => invoke<boolean>('calendar_get_local_visible');
+export const calendarSetLocalVisible = (visible: boolean) => invoke<void>('calendar_set_local_visible', { visible });
+
 
 // --- Stats commands ---
 
