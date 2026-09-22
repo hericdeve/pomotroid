@@ -72,8 +72,13 @@ pub async fn sync_calendar_two_way(
         let conn = db.lock().map_err(|e| e.to_string())?;
 
         for event in &google_events {
-            let event_id = &event.id;
-            seen_google_event_ids.insert(event_id.clone());
+            let effective_event_id = event
+                .recurring_event_id
+                .as_deref()
+                .unwrap_or(&event.id);
+
+            seen_google_event_ids.insert(effective_event_id.to_string());
+            seen_google_event_ids.insert(event.id.clone());
 
             // We only map timed events to study blocks
             if let (Some(start_dt_obj), Some(end_dt_obj)) = (&event.start, &event.end) {
@@ -95,8 +100,23 @@ pub async fn sync_calendar_two_way(
                             .filter(|s| !s.trim().is_empty())
                             .unwrap_or("Study Session");
 
-                        // Check if block already exists locally by google_event_id
-                        if let Some(existing) = local_synced_blocks.iter().find(|b| b.google_event_id.as_deref() == Some(event_id)) {
+                        // Check if block already exists locally by google_event_id (master or instance)
+                        let existing_block = local_synced_blocks.iter().find(|b| {
+                            b.google_event_id.as_deref() == Some(effective_event_id)
+                                || b.google_event_id.as_deref() == Some(&event.id)
+                        });
+
+                        if let Some(existing) = existing_block {
+                            // Ensure google_event_id points to effective (master) event id
+                            if existing.google_event_id.as_deref() != Some(effective_event_id) {
+                                let _ = queries::schedule_update_google_event_id(
+                                    &conn,
+                                    existing.id,
+                                    calendar_id,
+                                    effective_event_id,
+                                );
+                            }
+
                             // Check if name or hour slot changed
                             if existing.subject != summary
                                 || existing.day_of_week != day_of_week
@@ -125,7 +145,7 @@ pub async fn sync_calendar_two_way(
                                 None,
                                 "google",
                                 Some(calendar_id),
-                                Some(event_id),
+                                Some(effective_event_id),
                             );
                         }
                     }

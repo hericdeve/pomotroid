@@ -41,6 +41,8 @@ pub struct GoogleEventItem {
     #[serde(rename = "htmlLink")]
     pub html_link: Option<String>,
     pub status: Option<String>,
+    #[serde(rename = "recurringEventId")]
+    pub recurring_event_id: Option<String>,
     pub start: Option<EventDateTime>,
     pub end: Option<EventDateTime>,
 }
@@ -154,7 +156,10 @@ pub async fn create_event(
     let payload = json!({
         "summary": summary,
         "start": { "dateTime": start_iso },
-        "end": { "dateTime": end_iso }
+        "end": { "dateTime": end_iso },
+        "recurrence": [
+            "RRULE:FREQ=WEEKLY"
+        ]
     });
 
     let res = client
