@@ -18,6 +18,7 @@
     onBlockUpdate: (id: number, day: number, startMin: number, endMin: number) => void;
     onWeekChange?: (mondayYmd: string, offset: number) => void;
     onSyncClick?: () => void;
+    onSettingsClick?: () => void;
   }
 
   let {
@@ -33,6 +34,7 @@
     onBlockUpdate,
     onWeekChange,
     onSyncClick,
+    onSettingsClick,
   }: Props = $props();
 
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -527,6 +529,17 @@
           <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
         </button>
       {/if}
+
+      {#if onSettingsClick}
+        <button
+          class="btn-calendar-settings"
+          onclick={onSettingsClick}
+          title="Configure Calendars in Settings"
+          aria-label="Configure Calendars in Settings"
+        >
+          ⚙️
+        </button>
+      {/if}
     </div>
   </div>
 
@@ -832,6 +845,26 @@
   .btn-sync:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .btn-calendar-settings {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--color-separator);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: var(--color-foreground-darker, #a1a1aa);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-calendar-settings:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--color-subtext, rgba(255, 255, 255, 0.3));
+    color: var(--color-foreground, #fff);
   }
 
   .sync-icon.spinning {
