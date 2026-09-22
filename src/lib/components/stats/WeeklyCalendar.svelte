@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { settings } from '$lib/stores/settings';
   import type { ScheduledBlock, GoogleOverlayEvent, GoogleCalendarItem } from '$lib/types';
   import BlockTimelineModal from './BlockTimelineModal.svelte';
   import GoogleEventDetailModal from './GoogleEventDetailModal.svelte';
@@ -66,6 +67,72 @@
     const b = parseInt(hex.substring(4, 6), 16);
     const yiq = (r * 299 + g * 587 + b * 114) / 1000;
     return yiq >= 128 ? '#000000' : '#ffffff';
+  }
+
+  interface BlockTimingInfo {
+    rounds: number;
+    studyMins: number;
+    estSessionMins: number;
+    formattedStudyTime: string;
+    formattedSessionTime: string;
+  }
+
+  function formatMinsDuration(totalMinutes: number): string {
+    if (totalMinutes <= 0) return '0m';
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  }
+
+  function getBlockTimingInfo(startMin: number, endMin: number): BlockTimingInfo {
+    const workMins = $settings.time_work_secs / 60;
+    if (workMins <= 0) {
+      return {
+        rounds: 0,
+        studyMins: 0,
+        estSessionMins: 0,
+        formattedStudyTime: '0m',
+        formattedSessionTime: '0m',
+      };
+    }
+    const shortBreakMins = $settings.short_breaks_enabled ? ($settings.time_short_break_secs / 60) : 0;
+    const longBreakMins = $settings.long_breaks_enabled ? ($settings.time_long_break_secs / 60) : 0;
+    const interval = $settings.long_break_interval;
+
+    let remainingMins = endMin - startMin;
+    let rounds = 0;
+    let cyclePosition = 1;
+    let breakMinsUsed = 0;
+
+    while (remainingMins >= workMins) {
+      remainingMins -= workMins;
+      rounds++;
+      if (remainingMins <= 0) break;
+
+      const isLongBreak = interval > 0 && cyclePosition % interval === 0;
+      const bMins = isLongBreak ? longBreakMins : shortBreakMins;
+
+      if (remainingMins >= workMins + bMins) {
+        breakMinsUsed += bMins;
+        remainingMins -= bMins;
+        cyclePosition = isLongBreak ? 1 : cyclePosition + 1;
+      } else {
+        break;
+      }
+    }
+
+    const studyMins = Math.round(rounds * workMins);
+    const estSessionMins = rounds > 0 ? (studyMins + Math.round(breakMinsUsed)) : 0;
+
+    return {
+      rounds,
+      studyMins,
+      estSessionMins,
+      formattedStudyTime: formatMinsDuration(studyMins),
+      formattedSessionTime: formatMinsDuration(estSessionMins),
+    };
   }
 
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -831,6 +898,10 @@
               {@const targetCal = isGoogleSynced ? (calendars.find(c => c.id === seg.block.google_calendar_id) || syncedCalendar) : null}
               {@const blockBg = targetCal ? targetCal.background_color : 'var(--color-focus-round)'}
               {@const blockFg = targetCal ? getContrastTextColor(targetCal.background_color, targetCal.foreground_color) : 'var(--color-background)'}
+              {@const timing = getBlockTimingInfo(seg.originalStart, seg.originalEnd)}
+              {@const isNarrow = seg.totalCols >= 2}
+              {@const hasStudyTime = timing.studyMins > 0}
+              {@const hasSessionTime = timing.estSessionMins > 0 && timing.estSessionMins !== timing.studyMins}
 
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -840,11 +911,11 @@
                 class:dragging={seg.isDragging}
                 class:is-overflow={!seg.isPrimary}
                 class:is-google-synced={isGoogleSynced}
-                class:is-short={height < 30}
+                class:is-short={height < 32}
                 onmousedown={(e) => handleBlockMouseDown(e, seg.block, seg.isPrimary)}
                 onclick={(e) => handleBlockClick(e, seg.block)}
                 style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px); background-color: {blockBg}; color: {blockFg}; border-color: color-mix(in srgb, {blockBg} 70%, #000000);"
-                title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}){isGoogleSynced ? ' • Synced with Google' : ''}"
+                title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}) • {timing.rounds} {timing.rounds === 1 ? 'round' : 'rounds'} allocated • Study: {timing.formattedStudyTime}{timing.estSessionMins > 0 ? ' • Est. Session: ' + timing.formattedSessionTime : ''}{seg.block.subject_topic ? ' • ' + seg.block.subject_topic : ''}{seg.block.study_type ? ' • ' + seg.block.study_type : ''}{isGoogleSynced ? ' • Synced with Google' : ''}"
               >
                 <!-- Resize top handle -->
                 {#if seg.isPrimary}
@@ -853,9 +924,15 @@
                 {/if}
 
                 <div class="block-content">
-                  {#if height < 30}
+                  {#if height < 32}
                     <div class="block-compact-line">
                       <span class="block-subject">{seg.block.subject}</span>
+                      <span class="block-rounds-pill compact">
+                        {timing.rounds} {timing.rounds === 1 ? 'rd' : 'rds'}
+                      </span>
+                      {#if !isNarrow && hasStudyTime}
+                        <span class="block-study-pill compact">{timing.formattedStudyTime}</span>
+                      {/if}
                       <span class="block-time">
                         {#if !seg.isPrimary}
                           (Cont.)
@@ -877,13 +954,36 @@
                     <div class="block-header-line">
                       <span class="block-subject">{seg.block.subject}</span>
                     </div>
-                    {#if height >= 80 && (seg.block.subject_topic || seg.block.study_type)}
+
+                    <!-- Dynamic Metrics chips row (Rounds, Study Time, Estimated Session Time) -->
+                    {#if height >= 52}
+                      <div class="block-metrics-group">
+                        <span class="block-rounds-pill">
+                          <span class="rounds-dot"></span>
+                          {timing.rounds} {timing.rounds === 1 ? 'round' : 'rounds'}
+                        </span>
+                        {#if hasStudyTime}
+                          <span class="block-study-pill">
+                            {timing.formattedStudyTime} study
+                          </span>
+                        {/if}
+                        {#if hasSessionTime && (height >= 85 || !isNarrow)}
+                          <span class="block-session-pill">
+                            est. {timing.formattedSessionTime}
+                          </span>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Topic line if set and height permits -->
+                    {#if height >= 115 && (seg.block.subject_topic || seg.block.study_type)}
                       <div class="block-topic-line">
                         <span class="block-topic">
                           {seg.block.subject_topic || ''}{seg.block.subject_topic && seg.block.study_type ? ' • ' : ''}{seg.block.study_type || ''}
                         </span>
                       </div>
                     {/if}
+
                     <div class="block-footer-line">
                       <span class="block-time">
                         {#if !seg.isPrimary}
@@ -891,6 +991,18 @@
                         {/if}
                         {formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}
                       </span>
+                      {#if height < 52}
+                        <div class="block-footer-badges">
+                          <span class="block-rounds-pill compact">
+                            {timing.rounds} {timing.rounds === 1 ? 'rd' : 'rds'}
+                          </span>
+                          {#if !isNarrow && hasStudyTime}
+                            <span class="block-study-pill compact">
+                              {timing.formattedStudyTime}
+                            </span>
+                          {/if}
+                        </div>
+                      {/if}
                       {#if isGoogleSynced && seg.isPrimary}
                         <span class="gcal-sync-badge" title="Synced with Google Calendar">
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1482,6 +1594,97 @@
     gap: 4px;
     overflow: hidden;
     min-width: 0;
+  }
+
+  .block-metrics-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3.5px;
+    margin-top: 2px;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .block-rounds-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.67rem;
+    font-weight: 600;
+    color: inherit;
+    opacity: 0.92;
+    background: color-mix(in srgb, currentColor 15%, transparent);
+    padding: 1px 5.5px;
+    border-radius: 999px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+    flex-shrink: 0;
+  }
+
+  .block-rounds-pill.compact {
+    font-size: 0.6rem;
+    padding: 0px 4px;
+    opacity: 0.88;
+    gap: 2px;
+  }
+
+  .block-study-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0.88;
+    background: color-mix(in srgb, currentColor 11%, transparent);
+    padding: 1px 5px;
+    border-radius: 999px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+    flex-shrink: 0;
+  }
+
+  .block-study-pill.compact {
+    font-size: 0.6rem;
+    padding: 0px 4px;
+    opacity: 0.82;
+  }
+
+  .block-session-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0.82;
+    background: color-mix(in srgb, currentColor 9%, transparent);
+    padding: 1px 5px;
+    border-radius: 999px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+    flex-shrink: 0;
+  }
+
+  .rounds-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.85;
+    flex-shrink: 0;
+  }
+
+  .block-footer-badges {
+    display: flex;
+    align-items: center;
+    gap: 3.5px;
+    flex-shrink: 0;
   }
 
   .block-topic-line {

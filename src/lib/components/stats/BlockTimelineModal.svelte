@@ -16,6 +16,15 @@
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
+  function formatMinsDuration(totalMinutes: number): string {
+    if (totalMinutes <= 0) return '0m';
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  }
+
   interface TimelineEvent {
     startStr: string;
     endStr: string;
@@ -124,6 +133,10 @@
     
     return result;
   });
+
+  let workRounds = $derived(events.filter(e => !e.isBreak).length);
+  let studyMins = $derived(Math.round(workRounds * ($settings.time_work_secs / 60)));
+  let totalBlockMins = $derived(block.end_minute - block.start_minute);
 </script>
 
 <div class="modal-overlay" role="presentation" onclick={onClose}>
@@ -131,7 +144,12 @@
   <div class="modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
     <!-- Header -->
     <div class="header">
-      <h2>{block.subject} ({formatTime(block.start_minute)} - {formatTime(block.end_minute)})</h2>
+      <div class="header-titles">
+        <h2>{block.subject}</h2>
+        <span class="header-sub">
+          {formatTime(block.start_minute)} - {formatTime(block.end_minute)} • {workRounds} {workRounds === 1 ? 'round' : 'rounds'} • {formatMinsDuration(studyMins)} study • est. {formatMinsDuration(totalBlockMins)} session
+        </span>
+      </div>
       <button class="close-btn" onclick={onClose} aria-label="Close">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -225,6 +243,13 @@
     border-bottom: 1px solid var(--color-background-light, rgba(255,255,255,0.08));
   }
 
+  .header-titles {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
   .header h2 {
     margin: 0;
     font-size: 1rem;
@@ -233,6 +258,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .header-sub {
+    font-size: 0.72rem;
+    color: var(--color-foreground-darker, rgba(255, 255, 255, 0.6));
   }
 
   .close-btn {
