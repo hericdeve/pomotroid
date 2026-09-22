@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { slide } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import {
     subjectsGetAll,
     scheduleGetAll,
@@ -320,72 +322,77 @@
 <div class="planning-view" class:sidebar-open={showSidebar}>
   <!-- Left Sidebar: Subjects (toggled by user) -->
   {#if showSidebar}
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <span class="section-title">Subjects</span>
-        <button
-          class="btn-sidebar-collapse"
-          onclick={() => showSidebar = false}
-          title="Collapse sidebar"
-          aria-label="Collapse sidebar"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
-      </div>
+    <aside
+      class="sidebar"
+      transition:slide={{ axis: 'x', duration: 250, easing: cubicOut }}
+    >
+      <div class="sidebar-inner">
+        <div class="sidebar-header">
+          <span class="section-title">Subjects</span>
+          <button
+            class="btn-sidebar-collapse"
+            onclick={() => showSidebar = false}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+        </div>
 
-      <div class="subjects-list">
-        {#if loading}
-          <div class="empty">Loading...</div>
-        {:else if subjects.length === 0}
-          <div class="empty">No subjects available.</div>
-        {:else}
-          {#each subjects as subject (subject.id)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div 
-              class="subject-item"
-              draggable="true"
-              ondragstart={(e) => handleDragStart(e, subject)}
-            >
-              <div class="subject-main">
-                <span class="subject-name">{subject.name}</span>
-                <span class="drag-handle" title="Drag onto calendar">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="9" cy="5" r="1"/>
-                    <circle cx="9" cy="12" r="1"/>
-                    <circle cx="9" cy="19" r="1"/>
-                    <circle cx="15" cy="5" r="1"/>
-                    <circle cx="15" cy="12" r="1"/>
-                    <circle cx="15" cy="19" r="1"/>
-                  </svg>
-                </span>
-              </div>
-              
-              {#if subject.weekly_goal}
-                {@const mockAllocated = calculateAllocatedRounds(subject.name)} 
-                {@const goal = subject.weekly_goal}
-                {@const overAllocated = mockAllocated > goal}
-                <div class="allocation">
-                  <div class="allocation-label">
-                    <span class="allocated-text" class:over={overAllocated}>
-                      {mockAllocated} / {goal} <span class="unit">rounds allocated</span>
-                    </span>
-                  </div>
-                  <div class="progress-track" class:over={overAllocated}>
-                    <div 
-                      class="progress-fill" 
-                      class:over={overAllocated}
-                      style="width: {Math.min(100, (mockAllocated / goal) * 100)}%"
-                    ></div>
-                  </div>
+        <div class="subjects-list">
+          {#if loading}
+            <div class="empty">Loading...</div>
+          {:else if subjects.length === 0}
+            <div class="empty">No subjects available.</div>
+          {:else}
+            {#each subjects as subject (subject.id)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div 
+                class="subject-item"
+                draggable="true"
+                ondragstart={(e) => handleDragStart(e, subject)}
+              >
+                <div class="subject-main">
+                  <span class="subject-name">{subject.name}</span>
+                  <span class="drag-handle" title="Drag onto calendar">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="9" cy="5" r="1"/>
+                      <circle cx="9" cy="12" r="1"/>
+                      <circle cx="9" cy="19" r="1"/>
+                      <circle cx="15" cy="5" r="1"/>
+                      <circle cx="15" cy="12" r="1"/>
+                      <circle cx="15" cy="19" r="1"/>
+                    </svg>
+                  </span>
                 </div>
-              {:else}
-                <div class="no-goal">No weekly goal set</div>
-              {/if}
-            </div>
-          {/each}
-        {/if}
+                
+                {#if subject.weekly_goal}
+                  {@const mockAllocated = calculateAllocatedRounds(subject.name)} 
+                  {@const goal = subject.weekly_goal}
+                  {@const overAllocated = mockAllocated > goal}
+                  <div class="allocation">
+                    <div class="allocation-label">
+                      <span class="allocated-text" class:over={overAllocated}>
+                        {mockAllocated} / {goal} <span class="unit">rounds allocated</span>
+                      </span>
+                    </div>
+                    <div class="progress-track" class:over={overAllocated}>
+                      <div 
+                        class="progress-fill" 
+                        class:over={overAllocated}
+                        style="width: {Math.min(100, (mockAllocated / goal) * 100)}%"
+                      ></div>
+                    </div>
+                  </div>
+                {:else}
+                  <div class="no-goal">No weekly goal set</div>
+                {/if}
+              </div>
+            {/each}
+          {/if}
+        </div>
       </div>
     </aside>
   {/if}
@@ -417,7 +424,6 @@
   .planning-view {
     display: flex;
     height: 100%;
-    gap: 1rem;
     padding: 1rem;
     color: var(--color-text);
   }
@@ -425,12 +431,21 @@
   /* ── Sidebar ───────────────────────────────────── */
   .sidebar {
     width: 270px;
-    min-width: 270px;
+    margin-right: 1rem;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     background: transparent;
     border-right: 1px solid var(--color-separator);
+    overflow: hidden;
+  }
+
+  .sidebar-inner {
+    width: 270px;
+    min-width: 270px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 

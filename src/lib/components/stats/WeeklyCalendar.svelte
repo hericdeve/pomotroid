@@ -491,11 +491,10 @@
           title={showSidebar ? "Hide Subjects Sidebar" : "Show Subjects Sidebar"}
           aria-label="Toggle Subjects Sidebar"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
             <line x1="9" x2="9" y1="3" y2="21"/>
           </svg>
-          <span class="sidebar-toggle-text">Subjects</span>
         </button>
       {/if}
 
@@ -811,39 +810,36 @@
   }
 
   .btn-toggle-sidebar {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: var(--color-foreground-darkest, rgba(255, 255, 255, 0.05));
-    border: 1px solid var(--color-separator);
+    justify-content: center;
+    background: transparent;
+    border: none;
     border-radius: 6px;
-    padding: 0.3rem 0.65rem;
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: var(--color-text);
+    padding: 0.35rem;
+    color: var(--color-foreground-darker, #a1a1aa);
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s;
   }
 
   .btn-toggle-sidebar:hover {
     background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text);
   }
 
   .btn-toggle-sidebar.is-active {
-    background: var(--color-focus-round, #4285f4);
-    color: var(--color-background);
-    border-color: var(--color-focus-round, #4285f4);
+    color: var(--color-focus-round, #4285f4);
+    background: transparent;
   }
 
-  .sidebar-toggle-text {
-    font-size: 0.8rem;
-    font-weight: 500;
+  .btn-toggle-sidebar.is-active:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .nav-buttons {
     display: flex;
     align-items: center;
-    background: var(--color-foreground-darkest, rgba(255, 255, 255, 0.05));
+    background: transparent;
     border: 1px solid var(--color-separator);
     border-radius: 6px;
     overflow: hidden;
