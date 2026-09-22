@@ -1595,7 +1595,8 @@ pub async fn google_calendar_get_overlay_events(
     for cal in overlay_calendars {
         if let Ok(events) = google_calendar::api::fetch_events(&token, &cal.id, &time_min, &time_max).await {
             for ev in events {
-                let color = cal.background_color.clone().unwrap_or_else(|| "#4285F4".into());
+                let color = cal.background_color.clone().unwrap_or_else(|| "#4285f4".into());
+                let fg_color = cal.foreground_color.clone().unwrap_or_else(|| "#ffffff".into());
                 let title = ev.summary.unwrap_or_else(|| "Event".into());
 
                 if let Some(ref start) = ev.start {
@@ -1624,13 +1625,14 @@ pub async fn google_calendar_get_overlay_events(
                                 id: ev.id,
                                 calendar_id: cal.id.clone(),
                                 calendar_summary: cal.summary.clone(),
-                                calendar_color: color,
-                                summary: title,
-                                description: ev.description,
-                                location: ev.location,
-                                html_link: ev.html_link,
+                                calendar_color: color.clone(),
+                                calendar_foreground_color: fg_color.clone(),
+                                summary: title.clone(),
+                                description: ev.description.clone(),
+                                location: ev.location.clone(),
+                                html_link: ev.html_link.clone(),
                                 start_date_time: Some(dt_str.clone()),
-                                end_date_time: ev.end.and_then(|e| e.date_time),
+                                end_date_time: ev.end.as_ref().and_then(|e| e.date_time.clone()),
                                 is_all_day: false,
                                 day_of_week,
                                 start_minute,
@@ -1646,6 +1648,7 @@ pub async fn google_calendar_get_overlay_events(
                                     calendar_id: cal.id.clone(),
                                     calendar_summary: cal.summary.clone(),
                                     calendar_color: color,
+                                    calendar_foreground_color: fg_color,
                                     summary: title,
                                     description: ev.description,
                                     location: ev.location,

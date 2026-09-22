@@ -30,6 +30,7 @@ pub struct GoogleOverlayEvent {
     pub calendar_id: String,
     pub calendar_summary: String,
     pub calendar_color: String,
+    pub calendar_foreground_color: String,
     pub summary: String,
     pub description: Option<String>,
     pub location: Option<String>,

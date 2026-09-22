@@ -201,6 +201,7 @@ export interface GoogleOverlayEvent {
   calendar_id: string;
   calendar_summary: string;
   calendar_color: string;
+  calendar_foreground_color: string;
   summary: string;
   description: string | null;
   location: string | null;

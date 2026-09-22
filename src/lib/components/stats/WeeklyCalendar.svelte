@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ScheduledBlock, GoogleOverlayEvent } from '$lib/types';
+  import type { ScheduledBlock, GoogleOverlayEvent, GoogleCalendarItem } from '$lib/types';
   import BlockTimelineModal from './BlockTimelineModal.svelte';
   import GoogleEventDetailModal from './GoogleEventDetailModal.svelte';
   import { scheduleUpdateBlock } from '$lib/ipc';
@@ -8,6 +8,8 @@
   interface Props {
     blocks: ScheduledBlock[];
     overlayEvents?: GoogleOverlayEvent[];
+    calendars?: GoogleCalendarItem[];
+    syncedCalendar?: GoogleCalendarItem | null;
     showLocalCalendar?: boolean;
     showSyncedCalendar?: boolean;
     syncedCalendarId?: string | null;
@@ -27,6 +29,8 @@
   let {
     blocks,
     overlayEvents = [],
+    calendars = [],
+    syncedCalendar = null,
     showLocalCalendar = true,
     showSyncedCalendar = true,
     syncedCalendarId = null,
@@ -42,6 +46,27 @@
     onSyncClick,
     onSettingsClick,
   }: Props = $props();
+
+  function getContrastTextColor(hexBg: string | undefined | null, fallbackFg?: string | null): string {
+    if (fallbackFg && fallbackFg.trim().length > 0) {
+      return fallbackFg;
+    }
+    if (!hexBg || !hexBg.startsWith('#')) {
+      return '#ffffff';
+    }
+    let hex = hexBg.replace('#', '');
+    if (hex.length === 3) {
+      hex = hex.split('').map(c => c + c).join('');
+    }
+    if (hex.length !== 6) {
+      return '#ffffff';
+    }
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 128 ? '#000000' : '#ffffff';
+  }
 
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -644,7 +669,12 @@
 
     <div class="toolbar-actions">
       {#if syncedCalendarSummary}
-        <div class="synced-badge" title="Two-way synced with Google Calendar: {syncedCalendarSummary}">
+        {@const syncedCalColor = syncedCalendar?.background_color || '#4285f4'}
+        <div 
+          class="synced-badge" 
+          style="--synced-color: {syncedCalColor};"
+          title="Two-way synced with Google Calendar: {syncedCalendarSummary}"
+        >
           <span class="sync-dot"></span>
           <span class="sync-text">⇄ {syncedCalendarSummary}</span>
         </div>
@@ -711,9 +741,11 @@
           {#each weekDays as _, dayIdx}
             <div class="day-column all-day-cell">
               {#each getAllDayEventsForDay(dayIdx) as ev (ev.id)}
+                {@const allDayBg = ev.calendar_color}
+                {@const allDayFg = getContrastTextColor(allDayBg, ev.calendar_foreground_color)}
                 <button
                   class="overlay-all-day-badge"
-                  style="background-color: {ev.calendar_color};"
+                  style="background-color: {allDayBg}; color: {allDayFg};"
                   onclick={() => selectedOverlayEvent = ev}
                   title="{ev.summary} ({ev.calendar_summary})"
                 >
@@ -769,16 +801,17 @@
               {@const height = Math.max(20, (ev.end_minute - ev.start_minute) * PIXELS_PER_MINUTE)}
               {@const leftPct = (item.col / item.totalCols) * 100}
               {@const widthPct = (1 / item.totalCols) * 100}
+              {@const overlayBg = ev.calendar_color}
+              {@const overlayFg = getContrastTextColor(overlayBg, ev.calendar_foreground_color)}
               <button
                 class="overlay-block"
-                style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px); border-left-color: {ev.calendar_color};"
+                style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px); background-color: {overlayBg}; color: {overlayFg}; border-color: color-mix(in srgb, {overlayBg} 70%, #000000);"
                 onclick={(e) => {
                   e.stopPropagation();
                   selectedOverlayEvent = ev;
                 }}
                 title="{ev.summary} ({formatTime(ev.start_minute)} – {formatTime(ev.end_minute)}) • {ev.calendar_summary}"
               >
-                <div class="overlay-badge-pill" style="background-color: {ev.calendar_color};"></div>
                 <div class="overlay-content">
                   <span class="overlay-title">{ev.summary}</span>
                   {#if height >= 30}
@@ -795,6 +828,9 @@
               {@const isGoogleSynced = seg.block.calendar_type === 'google' || !!seg.block.google_event_id}
               {@const leftPct = (seg.col / seg.totalCols) * 100}
               {@const widthPct = (1 / seg.totalCols) * 100}
+              {@const targetCal = isGoogleSynced ? (calendars.find(c => c.id === seg.block.google_calendar_id) || syncedCalendar) : null}
+              {@const blockBg = targetCal ? targetCal.background_color : 'var(--color-focus-round)'}
+              {@const blockFg = targetCal ? getContrastTextColor(targetCal.background_color, targetCal.foreground_color) : 'var(--color-background)'}
 
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -807,7 +843,7 @@
                 class:is-short={height < 30}
                 onmousedown={(e) => handleBlockMouseDown(e, seg.block, seg.isPrimary)}
                 onclick={(e) => handleBlockClick(e, seg.block)}
-                style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px);"
+                style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px); background-color: {blockBg}; color: {blockFg}; border-color: color-mix(in srgb, {blockBg} 70%, #000000);"
                 title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}){isGoogleSynced ? ' • Synced with Google' : ''}"
               >
                 <!-- Resize top handle -->
@@ -1022,9 +1058,9 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    background: rgba(66, 133, 244, 0.12);
-    border: 1px solid rgba(66, 133, 244, 0.3);
-    color: #4285f4;
+    background: color-mix(in srgb, var(--synced-color, #4285f4) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--synced-color, #4285f4) 35%, transparent);
+    color: var(--synced-color, #4285f4);
     padding: 0.25rem 0.6rem;
     border-radius: 999px;
     font-size: 0.75rem;
@@ -1035,7 +1071,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #34a853;
+    background: var(--synced-color, #4285f4);
   }
 
   .btn-sync {
@@ -1199,13 +1235,12 @@
     padding: 2px 6px;
     font-size: 0.7rem;
     font-weight: 500;
-    color: #ffffff;
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     cursor: pointer;
-    opacity: 0.9;
+    opacity: 0.95;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     transition: opacity 0.15s, transform 0.1s;
   }
@@ -1313,29 +1348,18 @@
     overflow: hidden;
     display: flex;
     align-items: flex-start;
-    gap: 5px;
     cursor: pointer;
     z-index: 5;
-    background: rgba(30, 30, 45, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-left: 3px solid;
+    border: 1px solid rgba(0, 0, 0, 0.12);
     text-align: left;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    transition: background 0.15s, border-color 0.15s, z-index 0.15s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    transition: opacity 0.15s, box-shadow 0.15s, z-index 0.15s;
   }
 
   .overlay-block:hover {
     z-index: 8;
-    background: rgba(40, 40, 60, 0.95);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  }
-
-  .overlay-badge-pill {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    margin-top: 4px;
-    flex-shrink: 0;
+    opacity: 0.95;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   }
 
   .overlay-content {
@@ -1349,20 +1373,24 @@
     font-weight: 600;
     font-size: 0.75rem;
     line-height: 1.25;
-    color: var(--color-text);
+    color: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   .overlay-time {
     font-size: 0.65rem;
-    color: var(--color-foreground-darker);
-    opacity: 0.9;
+    color: inherit;
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* ── Pomotroid Scheduled Blocks ───────────────────────────── */
@@ -1386,10 +1414,6 @@
   .scheduled-block.is-short {
     padding: 1px 4px;
     border-radius: 3px;
-  }
-
-  .scheduled-block.is-google-synced {
-    border-left: 3px solid rgba(66, 133, 244, 0.85);
   }
 
   .scheduled-block:active {
@@ -1442,13 +1466,13 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding-right: 22px;
+    padding-right: 4px;
     min-width: 0;
     pointer-events: none;
   }
 
   .scheduled-block.is-short .block-content {
-    padding-right: 16px;
+    padding-right: 4px;
     justify-content: center;
   }
 
@@ -1468,6 +1492,7 @@
 
   .block-topic {
     font-size: 0.65rem;
+    color: inherit;
     opacity: 0.82;
     white-space: nowrap;
     overflow: hidden;
@@ -1497,6 +1522,7 @@
   .block-compact-line .block-subject {
     font-size: 0.7rem;
     font-weight: 600;
+    color: inherit;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1505,6 +1531,7 @@
 
   .block-compact-line .block-time {
     font-size: 0.62rem;
+    color: inherit;
     opacity: 0.85;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1512,7 +1539,7 @@
 
   .block-compact-line .gcal-sync-badge {
     color: currentColor;
-    background: rgba(0, 0, 0, 0.14);
+    background: color-mix(in srgb, currentColor 16%, transparent);
     border-radius: 3px;
     width: 11px;
     height: 11px;
@@ -1530,13 +1557,15 @@
     font-weight: 600;
     font-size: 0.78rem;
     line-height: 1.25;
+    color: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
     min-width: 0;
   }
 
@@ -1545,7 +1574,7 @@
     align-items: center;
     justify-content: center;
     color: currentColor;
-    background: rgba(0, 0, 0, 0.14);
+    background: color-mix(in srgb, currentColor 16%, transparent);
     border-radius: 4px;
     padding: 2px;
     flex-shrink: 0;
@@ -1556,15 +1585,19 @@
 
   .block-time {
     font-size: 0.7rem;
+    color: inherit;
     opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .btn-delete-block {
     position: absolute;
     top: 4px;
     right: 4px;
-    background: rgba(0, 0, 0, 0.25);
-    color: var(--color-background);
+    background: color-mix(in srgb, currentColor 18%, transparent);
+    color: currentColor;
     border: none;
     border-radius: 4px;
     width: 18px;
@@ -1596,6 +1629,6 @@
   }
 
   .btn-delete-block:hover {
-    background: rgba(0, 0, 0, 0.55);
+    background: color-mix(in srgb, currentColor 35%, transparent);
   }
 </style>

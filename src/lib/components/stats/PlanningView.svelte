@@ -397,6 +397,8 @@
     <WeeklyCalendar 
       {blocks}
       {overlayEvents}
+      {calendars}
+      {syncedCalendar}
       {showLocalCalendar}
       {showSyncedCalendar}
       syncedCalendarId={syncedCalendar?.id || null}
