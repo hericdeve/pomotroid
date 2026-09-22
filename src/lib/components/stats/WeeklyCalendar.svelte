@@ -669,7 +669,6 @@
 
                 <div class="block-content">
                   <div class="block-header-line">
-                    <span class="block-subject">{seg.block.subject}</span>
                     {#if isGoogleSynced && seg.isPrimary}
                       <span class="gcal-sync-badge" title="Synced with Google Calendar">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -680,6 +679,7 @@
                         </svg>
                       </span>
                     {/if}
+                    <span class="block-subject">{seg.block.subject}</span>
                   </div>
                   <span class="block-time">
                     {#if !seg.isPrimary}
@@ -1209,6 +1209,8 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    padding-right: 22px;
+    min-width: 0;
     pointer-events: none;
   }
 
@@ -1217,6 +1219,7 @@
     align-items: center;
     gap: 4px;
     overflow: hidden;
+    min-width: 0;
   }
 
   .block-subject {
@@ -1224,16 +1227,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
   }
 
   .gcal-sync-badge {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     color: #4285f4;
     background: rgba(255, 255, 255, 0.9);
     border-radius: 50%;
     padding: 2px;
     flex-shrink: 0;
+    width: 14px;
+    height: 14px;
   }
 
   .block-time {
@@ -1245,17 +1252,18 @@
     position: absolute;
     top: 4px;
     right: 4px;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.25);
     color: var(--color-background);
     border: none;
     border-radius: 4px;
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     opacity: 0;
+    z-index: 20;
     transition: opacity 0.2s, background 0.2s;
   }
 
@@ -1264,6 +1272,6 @@
   }
 
   .btn-delete-block:hover {
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.55);
   }
 </style>
