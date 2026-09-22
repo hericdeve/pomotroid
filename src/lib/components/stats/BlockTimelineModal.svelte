@@ -146,9 +146,17 @@
     <div class="header">
       <div class="header-titles">
         <h2>{block.subject}</h2>
-        <span class="header-sub">
-          {formatTime(block.start_minute)} - {formatTime(block.end_minute)} • {workRounds} {workRounds === 1 ? 'round' : 'rounds'} • {formatMinsDuration(studyMins)} study • est. {formatMinsDuration(totalBlockMins)} session
-        </span>
+        <div class="header-meta">
+          <span class="meta-time">{formatTime(block.start_minute)} – {formatTime(block.end_minute)}</span>
+          <span class="meta-badge rounds">
+            <span class="rounds-dot"></span>
+            {workRounds} {workRounds === 1 ? 'round' : 'rounds'}
+          </span>
+          <span class="meta-badge study">{formatMinsDuration(studyMins)} study</span>
+          {#if totalBlockMins > studyMins}
+            <span class="meta-badge session">{formatMinsDuration(totalBlockMins)} total</span>
+          {/if}
+        </div>
       </div>
       <button class="close-btn" onclick={onClose} aria-label="Close">
         <svg width="12" height="12" viewBox="0 0 12 12">
@@ -260,9 +268,44 @@
     text-overflow: ellipsis;
   }
 
-  .header-sub {
-    font-size: 0.72rem;
-    color: var(--color-foreground-darker, rgba(255, 255, 255, 0.6));
+  .header-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .meta-time {
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    opacity: 0.85;
+  }
+
+  .meta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3.5px;
+    font-size: 0.67rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+    background: var(--color-background-light, rgba(255, 255, 255, 0.08));
+    padding: 1.5px 6.5px;
+    border-radius: 999px;
+    opacity: 0.9;
+  }
+
+  .meta-badge.study {
+    background: color-mix(in srgb, var(--color-focus-round, #4a90e2) 18%, transparent);
+    color: var(--color-foreground);
+  }
+
+  .rounds-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--color-focus-round, currentColor);
   }
 
   .close-btn {

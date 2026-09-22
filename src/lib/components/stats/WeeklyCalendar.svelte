@@ -927,12 +927,10 @@
                   {#if height < 32}
                     <div class="block-compact-line">
                       <span class="block-subject">{seg.block.subject}</span>
-                      <span class="block-rounds-pill compact">
-                        {timing.rounds} {timing.rounds === 1 ? 'rd' : 'rds'}
+                      <span class="block-metric-badge compact">
+                        <span class="rounds-dot"></span>
+                        <span class="metric-highlight">{timing.rounds}</span> {timing.rounds === 1 ? 'rd' : 'rds'}{#if !isNarrow && hasStudyTime}<span class="metric-sep">·</span><span>{timing.formattedStudyTime}</span>{/if}
                       </span>
-                      {#if !isNarrow && hasStudyTime}
-                        <span class="block-study-pill compact">{timing.formattedStudyTime}</span>
-                      {/if}
                       <span class="block-time">
                         {#if !seg.isPrimary}
                           (Cont.)
@@ -955,23 +953,21 @@
                       <span class="block-subject">{seg.block.subject}</span>
                     </div>
 
-                    <!-- Dynamic Metrics chips row (Rounds, Study Time, Estimated Session Time) -->
+                    <!-- Dynamic cohesive metrics badge (Rounds, Study Time, Total Session Duration) -->
                     {#if height >= 52}
-                      <div class="block-metrics-group">
-                        <span class="block-rounds-pill">
+                      <div class="block-metrics-row">
+                        <span class="block-metric-badge">
                           <span class="rounds-dot"></span>
-                          {timing.rounds} {timing.rounds === 1 ? 'round' : 'rounds'}
+                          <span class="metric-highlight">{timing.rounds}</span> {timing.rounds === 1 ? (isNarrow ? 'rd' : 'round') : (isNarrow ? 'rds' : 'rounds')}
+                          {#if hasStudyTime}
+                            <span class="metric-sep">·</span>
+                            <span>{timing.formattedStudyTime} study</span>
+                          {/if}
+                          {#if hasSessionTime && (height >= 85 || !isNarrow)}
+                            <span class="metric-sep">·</span>
+                            <span class="session-total-text">{timing.formattedSessionTime} total</span>
+                          {/if}
                         </span>
-                        {#if hasStudyTime}
-                          <span class="block-study-pill">
-                            {timing.formattedStudyTime} study
-                          </span>
-                        {/if}
-                        {#if hasSessionTime && (height >= 85 || !isNarrow)}
-                          <span class="block-session-pill">
-                            est. {timing.formattedSessionTime}
-                          </span>
-                        {/if}
                       </div>
                     {/if}
 
@@ -992,16 +988,14 @@
                         {formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}
                       </span>
                       {#if height < 52}
-                        <div class="block-footer-badges">
-                          <span class="block-rounds-pill compact">
-                            {timing.rounds} {timing.rounds === 1 ? 'rd' : 'rds'}
-                          </span>
+                        <span class="block-metric-badge compact">
+                          <span class="rounds-dot"></span>
+                          <span class="metric-highlight">{timing.rounds}</span> {timing.rounds === 1 ? 'rd' : 'rds'}
                           {#if !isNarrow && hasStudyTime}
-                            <span class="block-study-pill compact">
-                              {timing.formattedStudyTime}
-                            </span>
+                            <span class="metric-sep">·</span>
+                            <span>{timing.formattedStudyTime}</span>
                           {/if}
-                        </div>
+                        </span>
                       {/if}
                       {#if isGoogleSynced && seg.isPrimary}
                         <span class="gcal-sync-badge" title="Synced with Google Calendar">
@@ -1596,79 +1590,53 @@
     min-width: 0;
   }
 
-  .block-metrics-group {
+  .block-metrics-row {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 3.5px;
+    gap: 4px;
     margin-top: 2px;
     overflow: hidden;
     min-width: 0;
   }
 
-  .block-rounds-pill {
+  .block-metric-badge {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 3.5px;
     font-size: 0.67rem;
-    font-weight: 600;
+    font-weight: 500;
     color: inherit;
     opacity: 0.92;
-    background: color-mix(in srgb, currentColor 15%, transparent);
-    padding: 1px 5.5px;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    padding: 1.5px 6px;
     border-radius: 999px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.25;
+    max-width: 100%;
     flex-shrink: 0;
   }
 
-  .block-rounds-pill.compact {
+  .block-metric-badge.compact {
     font-size: 0.6rem;
-    padding: 0px 4px;
+    padding: 0.5px 5px;
+    gap: 2.5px;
     opacity: 0.88;
-    gap: 2px;
   }
 
-  .block-study-pill {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.65rem;
-    font-weight: 500;
-    color: inherit;
-    opacity: 0.88;
-    background: color-mix(in srgb, currentColor 11%, transparent);
-    padding: 1px 5px;
-    border-radius: 999px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.25;
-    flex-shrink: 0;
+  .metric-highlight {
+    font-weight: 600;
   }
 
-  .block-study-pill.compact {
-    font-size: 0.6rem;
-    padding: 0px 4px;
-    opacity: 0.82;
+  .metric-sep {
+    opacity: 0.55;
+    font-weight: 400;
+    margin: 0 1px;
   }
 
-  .block-session-pill {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.65rem;
-    font-weight: 500;
-    color: inherit;
-    opacity: 0.82;
-    background: color-mix(in srgb, currentColor 9%, transparent);
-    padding: 1px 5px;
-    border-radius: 999px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.25;
-    flex-shrink: 0;
+  .session-total-text {
+    opacity: 0.85;
   }
 
   .rounds-dot {
@@ -1677,13 +1645,6 @@
     border-radius: 50%;
     background: currentColor;
     opacity: 0.85;
-    flex-shrink: 0;
-  }
-
-  .block-footer-badges {
-    display: flex;
-    align-items: center;
-    gap: 3.5px;
     flex-shrink: 0;
   }
 
