@@ -244,6 +244,9 @@ export interface UpdateSessionPayload {
   duration_secs?: number;
   exclude_from_stats?: boolean;
   started_at?: number;
+  completed?: boolean;
+  is_half_session?: boolean;
+  round_type?: string;
 }
 
 export interface UpdateStudySessionPayload {
@@ -295,6 +298,23 @@ export interface CreateManualSessionPayload {
   subject_topic: string | null;
   study_type: string | null;
   notes: string | null;
+  goal_rounds?: number;
+  rounds_count?: number;
+  break_duration_secs?: number;
+}
+
+export interface CreateManualRoundPayload {
+  study_session_id?: number | null;
+  started_at: number;
+  duration_secs: number;
+  round_type: RoundType;
+  completed: boolean;
+  is_half_session: boolean;
+  exclude_from_stats?: boolean;
+  subject?: string | null;
+  subject_topic?: string | null;
+  study_type?: string | null;
+  notes?: string | null;
 }
 
 export interface AdjacentSessionPreview {

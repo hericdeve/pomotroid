@@ -172,6 +172,9 @@ impl PomotroidDbus {
                             duration_secs: None,
                             exclude_from_stats: None,
                             started_at: None,
+                            completed: None,
+                            is_half_session: None,
+                            round_type: None,
                         });
                     }
                 }

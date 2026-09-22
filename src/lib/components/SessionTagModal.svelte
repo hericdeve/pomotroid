@@ -23,6 +23,9 @@
     duration_secs?: number;
     exclude_from_stats?: boolean;
     started_at?: number;
+    completed?: boolean;
+    is_half_session?: boolean;
+    round_type?: string;
   } | null>(null);
   let durationStr = $state("");
   let startDateStr = $state("");
@@ -31,7 +34,8 @@
   let advancedMode = $state(false);
   let isEditingRound = $derived(sessionId !== null && studySessionId === null);
   let adjacentSessions: { previous: any | null, next: any | null } = $state({ previous: null, next: null });
-  let roundType = $state('');
+  let roundType = $state('work');
+  let roundStatus = $state<'completed' | 'half' | 'incomplete'>('completed');
 
   function formatDuration(secs: number): string {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -75,10 +79,20 @@
             duration_secs: row.duration_secs,
             exclude_from_stats: row.exclude_from_stats,
             started_at: row.started_at,
+            completed: row.completed,
+            is_half_session: row.is_half_session,
+            round_type: row.round_type,
           };
           durationStr = formatDuration(row.duration_secs);
           formatDatetimeLocal(row.started_at);
           roundType = row.round_type || 'work';
+          if (row.completed) {
+            roundStatus = 'completed';
+          } else if (row.is_half_session) {
+            roundStatus = 'half';
+          } else {
+            roundStatus = 'incomplete';
+          }
           initialLoaded = true;
           
           if (isEditingRound) {
@@ -121,6 +135,8 @@
     
     // Read properties to subscribe to changes
     const p = { ...payload };
+    const curStatus = roundStatus;
+    const curType = roundType;
     
     clearTimeout(timeout);
     timeout = setTimeout(async () => {
@@ -134,6 +150,9 @@
             duration_secs: p.duration_secs,
             exclude_from_stats: p.exclude_from_stats,
             started_at: p.started_at,
+            completed: curStatus === 'completed',
+            is_half_session: curStatus === 'half',
+            round_type: curType,
           });
         }
         if (studySessionId !== null) {
@@ -232,6 +251,96 @@
         {/if}
         {#if advancedMode && isEditingRound}
           <div class="advanced-section">
+            <div class="advanced-field">
+              <span class="field-title">Round Status</span>
+              <div class="segmented-toggles">
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  class:active={roundStatus === 'completed'}
+                  onclick={() => {
+                    roundStatus = 'completed';
+                    if (payload) {
+                      payload.completed = true;
+                      payload.is_half_session = false;
+                    }
+                  }}
+                >
+                  <span class="status-badge complete">✓</span>
+                  <span>Completed</span>
+                </button>
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  class:active={roundStatus === 'half'}
+                  onclick={() => {
+                    roundStatus = 'half';
+                    if (payload) {
+                      payload.completed = false;
+                      payload.is_half_session = true;
+                    }
+                  }}
+                >
+                  <span class="status-badge half">½</span>
+                  <span>Half</span>
+                </button>
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  class:active={roundStatus === 'incomplete'}
+                  onclick={() => {
+                    roundStatus = 'incomplete';
+                    if (payload) {
+                      payload.completed = false;
+                      payload.is_half_session = false;
+                    }
+                  }}
+                >
+                  <span class="status-badge incomplete">✕</span>
+                  <span>Incomplete</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="advanced-field">
+              <span class="field-title">Round Type</span>
+              <div class="segmented-toggles">
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  class:active={roundType === 'work'}
+                  onclick={() => {
+                    roundType = 'work';
+                    if (payload) payload.round_type = 'work';
+                  }}
+                >
+                  Work
+                </button>
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  class:active={roundType === 'short-break'}
+                  onclick={() => {
+                    roundType = 'short-break';
+                    if (payload) payload.round_type = 'short-break';
+                  }}
+                >
+                  Short Break
+                </button>
+                <button
+                  type="button"
+                  class="toggle-opt"
+                  class:active={roundType === 'long-break'}
+                  onclick={() => {
+                    roundType = 'long-break';
+                    if (payload) payload.round_type = 'long-break';
+                  }}
+                >
+                  Long Break
+                </button>
+              </div>
+            </div>
+
             <label>
               <span>Duration (MM:SS)</span>
               <input 
@@ -407,6 +516,82 @@
     flex-direction: column;
     gap: 12px;
   }
+  .advanced-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field-title {
+    font-size: 0.85rem;
+    color: var(--color-foreground-darker);
+    font-weight: 500;
+  }
+  .segmented-toggles {
+    display: flex;
+    gap: 6px;
+    background: var(--color-background-light);
+    padding: 3px;
+    border-radius: 6px;
+  }
+  .toggle-opt {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--color-foreground-darker);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .toggle-opt:hover:not(.active) {
+    color: var(--color-foreground);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .toggle-opt.active {
+    background: var(--color-focus-round, var(--color-accent));
+    color: var(--color-background);
+  }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 1;
+  }
+  .status-badge.complete {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+  }
+  .toggle-opt.active .status-badge.complete {
+    background: rgba(255, 255, 255, 0.3);
+    color: var(--color-background);
+  }
+  .status-badge.half {
+    background: rgba(234, 179, 8, 0.2);
+    color: #facc15;
+  }
+  .toggle-opt.active .status-badge.half {
+    background: rgba(255, 255, 255, 0.3);
+    color: var(--color-background);
+  }
+  .status-badge.incomplete {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+  }
+  .toggle-opt.active .status-badge.incomplete {
+    background: rgba(255, 255, 255, 0.3);
+    color: var(--color-background);
+  }
   .advanced-section label {
     display: flex;
     flex-direction: column;
@@ -484,11 +669,6 @@
   }
   .merge-btn:hover {
     background: var(--color-background-light-hover, #444);
-  }
-  .no-adjacent {
-    color: var(--color-foreground-darker);
-    font-size: 0.85rem;
-    font-style: italic;
   }
   .break-message {
     padding: 16px;

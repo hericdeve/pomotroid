@@ -463,6 +463,9 @@ pub fn sessions_import_xlsx(path: String, db: State<'_, DbState>, app: AppHandle
             subject_topic: get_str(col_conteudo),
             study_type: get_str(col_tipo),
             notes: get_str(col_anotacoes),
+            goal_rounds: None,
+            rounds_count: None,
+            break_duration_secs: None,
         };
 
         if queries::insert_manual_session(&conn, payload).is_ok() {
@@ -1026,15 +1029,19 @@ pub fn study_session_get(id: i64, db: State<'_, DbState>) -> Result<Option<queri
 }
 
 #[tauri::command]
-pub fn session_update(id: i64, payload: queries::UpdateSessionPayload, db: State<'_, DbState>) -> Result<(), String> {
+pub fn session_update(id: i64, payload: queries::UpdateSessionPayload, db: State<'_, DbState>, app: AppHandle) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::update_session(&conn, id, payload).map_err(|e| e.to_string())
+    queries::update_session(&conn, id, payload).map_err(|e| e.to_string())?;
+    app.emit("sessions:cleared", ()).ok();
+    Ok(())
 }
 
 #[tauri::command]
-pub fn study_session_update(id: i64, payload: queries::UpdateStudySessionPayload, db: State<'_, DbState>) -> Result<(), String> {
+pub fn study_session_update(id: i64, payload: queries::UpdateStudySessionPayload, db: State<'_, DbState>, app: AppHandle) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::update_study_session(&conn, id, payload).map_err(|e| e.to_string())
+    queries::update_study_session(&conn, id, payload).map_err(|e| e.to_string())?;
+    app.emit("sessions:cleared", ()).ok();
+    Ok(())
 }
 
 #[tauri::command]
@@ -1061,6 +1068,16 @@ pub fn session_create_manual(payload: queries::CreateManualSessionPayload, db: S
     let id = {
         let conn = db.lock().map_err(|e| e.to_string())?;
         queries::insert_manual_session(&conn, payload).map_err(|e| e.to_string())?
+    };
+    app.emit("sessions:cleared", ()).ok(); // Trigger stats UI refresh
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn round_create_manual(payload: queries::CreateManualRoundPayload, db: State<'_, DbState>, app: AppHandle) -> Result<i64, String> {
+    let id = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::insert_manual_round(&conn, payload).map_err(|e| e.to_string())?
     };
     app.emit("sessions:cleared", ()).ok(); // Trigger stats UI refresh
     Ok(id)

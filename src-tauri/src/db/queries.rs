@@ -135,6 +135,9 @@ pub struct UpdateSessionPayload {
     pub duration_secs: Option<u32>,
     pub exclude_from_stats: Option<bool>,
     pub started_at: Option<i64>,
+    pub completed: Option<bool>,
+    pub is_half_session: Option<bool>,
+    pub round_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -386,6 +389,24 @@ pub struct CreateManualSessionPayload {
     pub subject_topic: Option<String>,
     pub study_type: Option<String>,
     pub notes: Option<String>,
+    pub goal_rounds: Option<u32>,
+    pub rounds_count: Option<u32>,
+    pub break_duration_secs: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateManualRoundPayload {
+    pub study_session_id: Option<i64>,
+    pub started_at: i64,
+    pub duration_secs: u32,
+    pub round_type: String,
+    pub completed: bool,
+    pub is_half_session: bool,
+    pub exclude_from_stats: Option<bool>,
+    pub subject: Option<String>,
+    pub subject_topic: Option<String>,
+    pub study_type: Option<String>,
+    pub notes: Option<String>,
 }
 
 pub fn get_session(conn: &Connection, id: i64) -> Result<Option<SessionRow>> {
@@ -514,13 +535,30 @@ pub fn update_session(conn: &Connection, id: i64, payload: UpdateSessionPayload)
     params.push(new_started_at.into());
     params.push(new_ended_at.into());
 
+    if let Some(rt) = &payload.round_type {
+        update_query.push_str(&format!(", round_type = ?{}", params.len() + 1));
+        params.push(rt.clone().into());
+    }
+
     if let Some(duration) = payload.duration_secs {
         update_query.push_str(&format!(", duration_secs = ?{}", params.len() + 1));
         params.push(duration.into());
-        
-        // Revalidate completion status based on current settings
+    }
+
+    if payload.completed.is_some() || payload.is_half_session.is_some() {
+        if let Some(completed) = payload.completed {
+            update_query.push_str(&format!(", completed = ?{}", params.len() + 1));
+            params.push((if completed { 1 } else { 0 }).into());
+        }
+        if let Some(is_half) = payload.is_half_session {
+            update_query.push_str(&format!(", is_half_session = ?{}", params.len() + 1));
+            params.push((if is_half { 1 } else { 0 }).into());
+        }
+    } else if let Some(duration) = payload.duration_secs {
+        // Revalidate completion status based on current settings only when not explicitly provided
         if let Ok(settings) = crate::settings::load(conn) {
-            let target_secs = match current_row.2.as_str() {
+            let rt_ref = payload.round_type.as_deref().unwrap_or(current_row.2.as_str());
+            let target_secs = match rt_ref {
                 "work" => settings.time_work_secs,
                 "short-break" => settings.time_short_break_secs,
                 "long-break" => settings.time_long_break_secs,
@@ -665,18 +703,31 @@ pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayl
         }
     }
 
-    let ended_at = payload.started_at + (payload.duration_secs as i64);
+    let rounds_count = payload.rounds_count.unwrap_or(1).max(1);
+    let break_duration = payload.break_duration_secs.unwrap_or(300);
+    let goal_rounds = payload.goal_rounds.unwrap_or(rounds_count);
+
+    let mut total_duration = 0i64;
+    for i in 0..rounds_count {
+        total_duration += payload.duration_secs as i64;
+        if i < rounds_count - 1 && break_duration > 0 {
+            total_duration += break_duration as i64;
+        }
+    }
+    let session_ended_at = payload.started_at + total_duration;
+
     let study_session_uuid = uuid::Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO study_sessions (
             uuid, started_at, ended_at, goal_rounds, subject, subject_topic, study_type, notes, created_at, updated_at
         ) VALUES (
-            ?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
         )",
         params![
             study_session_uuid,
             payload.started_at,
-            ended_at,
+            session_ended_at,
+            goal_rounds,
             payload.subject,
             payload.subject_topic,
             payload.study_type,
@@ -687,31 +738,172 @@ pub fn insert_manual_session(conn: &Connection, payload: CreateManualSessionPayl
     )?;
     let study_session_id = conn.last_insert_rowid();
 
+    let mut current_ts = payload.started_at;
+
+    for i in 0..rounds_count {
+        let work_end = current_ts + (payload.duration_secs as i64);
+        let work_uuid = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO rounds (
+                uuid, started_at, ended_at, round_type, duration_secs, completed,
+                subject, subject_topic, study_type, notes, updated_at, is_half_session, exclude_from_stats, study_session_id
+            ) VALUES (
+                ?1, ?2, ?3, 'work', ?4, 1,
+                ?5, ?6, ?7, ?8, ?9, 0, 0, ?10
+            )",
+            params![
+                work_uuid,
+                current_ts,
+                work_end,
+                payload.duration_secs,
+                payload.subject,
+                payload.subject_topic,
+                payload.study_type,
+                payload.notes,
+                unix_now(),
+                study_session_id
+            ],
+        )?;
+        current_ts = work_end;
+
+        if i < rounds_count - 1 && break_duration > 0 {
+            let break_end = current_ts + (break_duration as i64);
+            let break_uuid = uuid::Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT INTO rounds (
+                    uuid, started_at, ended_at, round_type, duration_secs, completed,
+                    subject, subject_topic, study_type, notes, updated_at, is_half_session, exclude_from_stats, study_session_id
+                ) VALUES (
+                    ?1, ?2, ?3, 'short-break', ?4, 1,
+                    ?5, ?6, ?7, ?8, ?9, 0, 0, ?10
+                )",
+                params![
+                    break_uuid,
+                    current_ts,
+                    break_end,
+                    break_duration,
+                    payload.subject,
+                    payload.subject_topic,
+                    payload.study_type,
+                    payload.notes,
+                    unix_now(),
+                    study_session_id
+                ],
+            )?;
+            current_ts = break_end;
+        }
+    }
+    
+    log::debug!("[db] manual session inserted: id={study_session_id} rounds={rounds_count} duration={total_duration}");
+    Ok(study_session_id)
+}
+
+pub fn insert_manual_round(conn: &Connection, payload: CreateManualRoundPayload) -> Result<i64> {
+    if let Some(subject_name) = &payload.subject {
+        if !subject_name.trim().is_empty() {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO subjects (name, created_at) VALUES (?1, ?2)",
+                params![subject_name.trim(), unix_now()],
+            );
+        }
+    }
+
+    let ended_at = payload.started_at + (payload.duration_secs as i64);
+
+    let study_session_id = if let Some(sid) = payload.study_session_id {
+        let exists: bool = conn.query_row(
+            "SELECT 1 FROM study_sessions WHERE id = ?1 AND deleted_at IS NULL",
+            params![sid],
+            |_| Ok(true),
+        ).unwrap_or(false);
+
+        if exists {
+            sid
+        } else {
+            let study_session_uuid = uuid::Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT INTO study_sessions (
+                    uuid, started_at, ended_at, goal_rounds, subject, subject_topic, study_type, notes, created_at, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9
+                )",
+                params![
+                    study_session_uuid,
+                    payload.started_at,
+                    ended_at,
+                    payload.subject,
+                    payload.subject_topic,
+                    payload.study_type,
+                    payload.notes,
+                    unix_now(),
+                    unix_now()
+                ],
+            )?;
+            conn.last_insert_rowid()
+        }
+    } else {
+        let study_session_uuid = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO study_sessions (
+                uuid, started_at, ended_at, goal_rounds, subject, subject_topic, study_type, notes, created_at, updated_at
+            ) VALUES (
+                ?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9
+            )",
+            params![
+                study_session_uuid,
+                payload.started_at,
+                ended_at,
+                payload.subject,
+                payload.subject_topic,
+                payload.study_type,
+                payload.notes,
+                unix_now(),
+                unix_now()
+            ],
+        )?;
+        conn.last_insert_rowid()
+    };
+
     let uuid = uuid::Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO rounds (
             uuid, started_at, ended_at, round_type, duration_secs, completed,
             subject, subject_topic, study_type, notes, updated_at, is_half_session, exclude_from_stats, study_session_id
         ) VALUES (
-            ?1, ?2, ?3, 'work', ?4, 1,
-            ?5, ?6, ?7, ?8, ?9, 0, 0, ?10
+            ?1, ?2, ?3, ?4, ?5, ?6,
+            ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
         )",
         params![
             uuid,
             payload.started_at,
             ended_at,
+            payload.round_type,
             payload.duration_secs,
+            if payload.completed { 1 } else { 0 },
             payload.subject,
             payload.subject_topic,
             payload.study_type,
             payload.notes,
             unix_now(),
+            if payload.is_half_session { 1 } else { 0 },
+            if payload.exclude_from_stats.unwrap_or(false) { 1 } else { 0 },
             study_session_id
         ],
     )?;
-    
+
     let id = conn.last_insert_rowid();
-    log::debug!("[db] manual session inserted: id={id} duration={}", payload.duration_secs);
+
+    // Update parent study_session bounds
+    conn.execute(
+        "UPDATE study_sessions
+         SET started_at = (SELECT MIN(started_at) FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL),
+             ended_at = (SELECT MAX(ended_at) FROM rounds WHERE study_session_id = ?1 AND deleted_at IS NULL),
+             updated_at = ?2
+         WHERE id = ?1",
+        params![study_session_id, unix_now()],
+    )?;
+
+    log::debug!("[db] manual round inserted: id={id} type={} duration={}", payload.round_type, payload.duration_secs);
     Ok(id)
 }
 
@@ -1221,6 +1413,120 @@ mod tests {
         assert_eq!(stats.total_work_sessions, 0.0);
         assert_eq!(stats.completed_work_sessions, 0.0);
         assert_eq!(stats.total_work_secs, 0);
+    }
+
+    #[test]
+    fn test_insert_manual_session_single_and_multi() {
+        let conn = setup();
+        
+        // Single round
+        let session_id = insert_manual_session(&conn, CreateManualSessionPayload {
+            started_at: 1000,
+            duration_secs: 1500,
+            subject: Some("Math".to_string()),
+            subject_topic: Some("Calculus".to_string()),
+            study_type: Some("Exercises".to_string()),
+            notes: Some("Session notes".to_string()),
+            goal_rounds: Some(1),
+            rounds_count: Some(1),
+            break_duration_secs: None,
+        }).unwrap();
+
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM rounds WHERE study_session_id = ?1", [session_id], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
+
+        // Multi-round (2 work rounds + 1 short break)
+        let multi_id = insert_manual_session(&conn, CreateManualSessionPayload {
+            started_at: 5000,
+            duration_secs: 1500,
+            subject: Some("Physics".to_string()),
+            subject_topic: None,
+            study_type: None,
+            notes: None,
+            goal_rounds: Some(2),
+            rounds_count: Some(2),
+            break_duration_secs: Some(300),
+        }).unwrap();
+
+        let multi_count: i64 = conn.query_row("SELECT COUNT(*) FROM rounds WHERE study_session_id = ?1", [multi_id], |r| r.get(0)).unwrap();
+        assert_eq!(multi_count, 3); // 2 work + 1 break
+
+        let work_count: i64 = conn.query_row("SELECT COUNT(*) FROM rounds WHERE study_session_id = ?1 AND round_type = 'work'", [multi_id], |r| r.get(0)).unwrap();
+        let break_count: i64 = conn.query_row("SELECT COUNT(*) FROM rounds WHERE study_session_id = ?1 AND round_type = 'short-break'", [multi_id], |r| r.get(0)).unwrap();
+        assert_eq!(work_count, 2);
+        assert_eq!(break_count, 1);
+    }
+
+    #[test]
+    fn test_insert_manual_round_and_status_update() {
+        let conn = setup();
+
+        // 1. Create a round manually
+        let round_id = insert_manual_round(&conn, CreateManualRoundPayload {
+            study_session_id: None,
+            started_at: 2000,
+            duration_secs: 1200,
+            round_type: "work".to_string(),
+            completed: true,
+            is_half_session: false,
+            exclude_from_stats: Some(false),
+            subject: Some("Chemistry".to_string()),
+            subject_topic: Some("Organic".to_string()),
+            study_type: None,
+            notes: None,
+        }).unwrap();
+
+        let (completed, is_half): (i64, i64) = conn.query_row(
+            "SELECT completed, is_half_session FROM rounds WHERE id = ?1",
+            [round_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap();
+        assert_eq!(completed, 1);
+        assert_eq!(is_half, 0);
+
+        // 2. Update round status to Incomplete via update_session
+        update_session(&conn, round_id, UpdateSessionPayload {
+            subject: None,
+            subject_topic: None,
+            study_type: None,
+            notes: None,
+            duration_secs: None,
+            exclude_from_stats: None,
+            started_at: None,
+            completed: Some(false),
+            is_half_session: Some(false),
+            round_type: None,
+        }).unwrap();
+
+        let (completed_after, is_half_after): (i64, i64) = conn.query_row(
+            "SELECT completed, is_half_session FROM rounds WHERE id = ?1",
+            [round_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap();
+        assert_eq!(completed_after, 0);
+        assert_eq!(is_half_after, 0);
+
+        // 3. Update round status to Half Completed and round_type to short-break
+        update_session(&conn, round_id, UpdateSessionPayload {
+            subject: None,
+            subject_topic: None,
+            study_type: None,
+            notes: None,
+            duration_secs: None,
+            exclude_from_stats: None,
+            started_at: None,
+            completed: Some(false),
+            is_half_session: Some(true),
+            round_type: Some("short-break".to_string()),
+        }).unwrap();
+
+        let (rt, is_half_2): (String, i64) = conn.query_row(
+            "SELECT round_type, is_half_session FROM rounds WHERE id = ?1",
+            [round_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap();
+        assert_eq!(rt, "short-break");
+        assert_eq!(is_half_2, 1);
     }
 
     #[test]
@@ -2092,3 +2398,4 @@ pub fn get_google_synced_calendar(conn: &Connection) -> Result<Option<GoogleCale
         Ok(None)
     }
 }
+

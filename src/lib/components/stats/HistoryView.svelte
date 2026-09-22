@@ -6,7 +6,17 @@
   import * as m from '$paraglide/messages.js';
   import { settings } from '$lib/stores/settings';
 
-  let { onEditSession, onEditStudySession }: { onEditSession: (id: number) => void, onEditStudySession: (id: number) => void } = $props();
+  let { 
+    onEditSession, 
+    onEditStudySession,
+    onAddManualEntry,
+    onAddRoundToSession,
+  }: { 
+    onEditSession: (id: number) => void; 
+    onEditStudySession: (id: number) => void;
+    onAddManualEntry?: () => void;
+    onAddRoundToSession?: (studySessionId: number) => void;
+  } = $props();
 
   let limit = 50;
   let offset = $state(0);
@@ -193,6 +203,15 @@
       <DropdownSelect bind:value={filterSubject} options={subjects} placeholder="All Subjects" />
       <DropdownSelect bind:value={filterTopic} options={topics} placeholder="All Topics" />
       <DropdownSelect bind:value={filterStudyType} options={studyTypes} placeholder="All Types" />
+      {#if onAddManualEntry}
+        <button class="btn btn-add-entry" onclick={onAddManualEntry} title="Add Manual Session or Round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14"/>
+            <path d="M12 5v14"/>
+          </svg>
+          <span>Add Entry</span>
+        </button>
+      {/if}
     </div>
 
     <div class="filter-row date-controls">
@@ -261,7 +280,18 @@
                 </div>
                 <div class="font-bold">{session.subject_topic || '-'}</div>
                 <div class="font-bold">{session.study_type || '-'}</div>
-                <div class="font-bold">{formatUnix(session.started_at)}</div>
+                <div class="font-bold flex items-center justify-between pr-2">
+                  <span>{formatUnix(session.started_at)}</span>
+                  {#if onAddRoundToSession}
+                    <button 
+                      class="btn-add-round-pill" 
+                      onclick={(e) => { e.stopPropagation(); onAddRoundToSession(session.id); }}
+                      title="Add round to this study session"
+                    >
+                      + Round
+                    </button>
+                  {/if}
+                </div>
               </div>
               
               <div class="rounds-container">
@@ -345,6 +375,47 @@
     gap: 8px;
     align-items: center;
     flex-wrap: wrap;
+  }
+
+  .btn-add-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-focus-round, var(--color-accent));
+    color: var(--color-background);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: filter 0.15s ease;
+    margin-left: auto;
+  }
+
+  .btn-add-entry:hover {
+    filter: brightness(1.1);
+  }
+
+  .btn-add-round-pill {
+    display: inline-flex;
+    align-items: center;
+    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
+    color: var(--color-foreground);
+    border: 1px solid color-mix(in oklch, var(--color-foreground) 15%, transparent);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-add-round-pill:hover {
+    background: var(--color-focus-round);
+    color: var(--color-background);
+    border-color: var(--color-focus-round);
   }
 
   .date-input {
@@ -617,7 +688,6 @@
   .text-sm { font-size: 0.8rem; }
   .flex { display: flex; }
   .items-center { align-items: center; }
-  .gap-2 { gap: 8px; }
   .font-bold { font-weight: 600; }
   .text-center { text-align: center; }
   

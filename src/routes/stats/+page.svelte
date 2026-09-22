@@ -41,6 +41,8 @@
   let heatmap = $state<HeatmapStats | null>(null);
   let heatmapLoaded = $state(false);
   let showManualEntry = $state(false);
+  let manualEntryMode = $state<'session' | 'round'>('session');
+  let manualTargetSessionId = $state<number | null>(null);
   let editingSessionId = $state<number | null>(null);
   let editingStudySessionId = $state<number | null>(null);
   let refreshTrigger = $state(0);
@@ -204,7 +206,11 @@
         >Insights</button
       >
     </div>
-    <button class="btn-manual" onclick={() => showManualEntry = true} title="Manual Entry" aria-label="Manual Entry">
+    <button class="btn-manual" onclick={() => {
+      manualEntryMode = 'session';
+      manualTargetSessionId = null;
+      showManualEntry = true;
+    }} title="Manual Entry" aria-label="Manual Entry">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M5 12h14"/>
         <path d="M12 5v14"/>
@@ -227,6 +233,16 @@
         <HistoryView 
           onEditSession={(id) => editingSessionId = id} 
           onEditStudySession={(id) => editingStudySessionId = id} 
+          onAddManualEntry={() => {
+            manualEntryMode = 'session';
+            manualTargetSessionId = null;
+            showManualEntry = true;
+          }}
+          onAddRoundToSession={(sid) => {
+            manualEntryMode = 'round';
+            manualTargetSessionId = sid;
+            showManualEntry = true;
+          }}
         />
       {:else if activeTab === 'insights'}
         <InsightsView />
@@ -240,11 +256,15 @@
 </div>
 
 {#if showManualEntry}
-  <ManualEntryModal onclose={() => {
-    showManualEntry = false;
-    refreshTrigger++;
-    loadData();
-  }} />
+  <ManualEntryModal 
+    initialMode={manualEntryMode}
+    targetStudySessionId={manualTargetSessionId}
+    onclose={() => {
+      showManualEntry = false;
+      refreshTrigger++;
+      loadData();
+    }} 
+  />
 {/if}
 
 {#if listModalTimeRange !== null}

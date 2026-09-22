@@ -16,6 +16,7 @@ import type {
   UpdateSessionPayload,
   UpdateStudySessionPayload,
   CreateManualSessionPayload,
+  CreateManualRoundPayload,
   SessionFilter,
   SessionHistoryPage,
   StudySessionRow,
@@ -113,6 +114,7 @@ export const studySessionUpdate = (id: number, payload: UpdateStudySessionPayloa
 export const sessionDelete = (id: number) => invoke<void>('session_delete', { id });
 export const studySessionDelete = (id: number) => invoke<void>('study_session_delete', { id });
 export const createManualSession = (payload: CreateManualSessionPayload) => invoke<number>('session_create_manual', { payload });
+export const createManualRound = (payload: CreateManualRoundPayload) => invoke<number>('round_create_manual', { payload });
 export const getSessionSubjects = () => invoke<string[]>('session_get_subjects');
 export const subjectsGetAll = () => invoke<SubjectStats[]>('subjects_get_all');
 export const subjectCreate = (name: string) => invoke<number>('subject_create', { name });
