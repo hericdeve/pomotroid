@@ -33,9 +33,7 @@
   let calendars = $state<GoogleCalendarItem[]>([]);
   let overlayEvents = $state<GoogleOverlayEvent[]>([]);
   let syncedCalendar = $derived(calendars.find(c => c.is_synced) || null);
-  let showSyncedCalendar = $derived(
-    syncedCalendar ? syncedCalendar.is_visible : calendars.some(c => c.is_visible)
-  );
+  let showSyncedCalendar = $derived(syncedCalendar ? syncedCalendar.is_visible : false);
 
   let weekOffset = $state(0);
   let isSyncing = $state(false);
@@ -59,7 +57,7 @@
     const handleFocus = async () => {
       try {
         const [localVis, gStatus] = await Promise.all([
-          calendarGetLocalVisible().catch(() => true),
+          calendarGetLocalVisible().catch(() => showLocalCalendar),
           googleCalendarGetStatus().catch(() => authStatus),
         ]);
         if (!mounted) return;
@@ -88,7 +86,7 @@
         const [subjectsData, blocksData, localVis, gStatus] = await Promise.all([
           subjectsGetAll(),
           scheduleGetAll(),
-          calendarGetLocalVisible().catch(() => true),
+          calendarGetLocalVisible().catch(() => showLocalCalendar),
           googleCalendarGetStatus().catch(() => ({
             is_signed_in: false,
             email: null,
@@ -166,13 +164,15 @@
       let calType: 'google' | 'local' = 'local';
       let targetGCal = syncedCalendar;
 
-      if (!showLocalCalendar) {
+      if (targetGCal && targetGCal.is_visible) {
         calType = 'google';
-        if (!targetGCal) {
-          targetGCal = calendars.find(c => c.is_visible) || calendars[0] || null;
-        }
-      } else if (targetGCal && targetGCal.is_visible) {
+      } else if (showLocalCalendar) {
+        calType = 'local';
+      } else if (targetGCal) {
         calType = 'google';
+      } else {
+        alert('Please enable the Local calendar or select a synced Google calendar in Settings to add blocks.');
+        return;
       }
 
       const id = await scheduleAddBlock(

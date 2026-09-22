@@ -1331,6 +1331,69 @@ mod tests {
         assert_eq!(stats.completed_work_sessions, 1.0);
         assert_eq!(stats.total_work_secs, 1500);
     }
+
+    #[test]
+    fn google_calendars_no_synced_by_default() {
+        let conn = setup();
+        let cals = vec![
+            GoogleCalendarRow {
+                id: "primary-1".into(),
+                summary: "Primary Cal".into(),
+                description: None,
+                primary_cal: true,
+                background_color: None,
+                foreground_color: None,
+                is_visible: false,
+                is_synced: false,
+            },
+            GoogleCalendarRow {
+                id: "secondary-2".into(),
+                summary: "Secondary Cal".into(),
+                description: None,
+                primary_cal: false,
+                background_color: None,
+                foreground_color: None,
+                is_visible: false,
+                is_synced: false,
+            },
+        ];
+        save_google_calendars(&conn, &cals).unwrap();
+
+        let synced = get_google_synced_calendar(&conn).unwrap();
+        assert!(synced.is_none(), "No calendar should be auto-synced by default");
+
+        let fetched = get_google_calendars(&conn).unwrap();
+        assert!(!fetched[0].is_synced);
+        assert!(!fetched[0].is_visible);
+    }
+
+    #[test]
+    fn google_calendars_explicit_sync_and_desync() {
+        let conn = setup();
+        let cals = vec![
+            GoogleCalendarRow {
+                id: "cal-1".into(),
+                summary: "My Cal".into(),
+                description: None,
+                primary_cal: true,
+                background_color: None,
+                foreground_color: None,
+                is_visible: false,
+                is_synced: false,
+            },
+        ];
+        save_google_calendars(&conn, &cals).unwrap();
+
+        // Select cal-1
+        set_google_synced_calendar(&conn, Some("cal-1")).unwrap();
+        let synced = get_google_synced_calendar(&conn).unwrap();
+        assert_eq!(synced.unwrap().id, "cal-1");
+
+        // Deselect cal-1
+        set_google_synced_calendar(&conn, None).unwrap();
+        let synced = get_google_synced_calendar(&conn).unwrap();
+        assert!(synced.is_none(), "Deselected calendar must not auto-re-enable");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2026,32 +2089,6 @@ pub fn get_google_synced_calendar(conn: &Connection) -> Result<Option<GoogleCale
             is_synced: true,
         }))
     } else {
-        // Fallback: if no calendar is explicitly marked synced, auto-select primary or first calendar
-        let mut fb_stmt = conn.prepare(
-            "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced
-             FROM google_calendars
-             ORDER BY primary_cal DESC, is_visible DESC, id ASC
-             LIMIT 1"
-        )?;
-        let mut fb_rows = fb_stmt.query([])?;
-        if let Some(row) = fb_rows.next()? {
-            let cal_id: String = row.get(0)?;
-            let _ = conn.execute(
-                "UPDATE google_calendars SET is_synced = 1, is_visible = 1 WHERE id = ?1",
-                params![cal_id],
-            );
-            Ok(Some(GoogleCalendarRow {
-                id: cal_id,
-                summary: row.get(1)?,
-                description: row.get(2)?,
-                primary_cal: row.get::<_, i32>(3)? != 0,
-                background_color: row.get(4)?,
-                foreground_color: row.get(5)?,
-                is_visible: true,
-                is_synced: true,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(None)
     }
 }

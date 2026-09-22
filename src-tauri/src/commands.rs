@@ -1456,7 +1456,7 @@ pub async fn google_calendar_get_calendars(db: State<'_, DbState>) -> Result<Vec
                             primary_cal: c.primary,
                             background_color: Some(c.background_color),
                             foreground_color: Some(c.foreground_color),
-                            is_visible: true,
+                            is_visible: false,
                             is_synced: false,
                         })
                         .collect();
@@ -1470,7 +1470,6 @@ pub async fn google_calendar_get_calendars(db: State<'_, DbState>) -> Result<Vec
     }
 
     let conn = db.lock().map_err(|e| e.to_string())?;
-    let _ = queries::get_google_synced_calendar(&conn);
     let rows = queries::get_google_calendars(&conn).map_err(|e| e.to_string())?;
     Ok(rows
         .into_iter()
@@ -1685,6 +1684,21 @@ mod tests {
         let conn = setup();
         let n = conn.execute("DELETE FROM rounds", []).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn calendar_local_enabled_default_and_toggle() {
+        let conn = setup();
+        let val: Option<String> = conn
+            .query_row("SELECT value FROM settings WHERE key = 'calendar_local_enabled'", [], |r| r.get(0))
+            .ok();
+        assert_eq!(val, Some("true".to_string()));
+
+        crate::settings::save_setting(&conn, "calendar_local_enabled", "false").unwrap();
+        let val: String = conn
+            .query_row("SELECT value FROM settings WHERE key = 'calendar_local_enabled'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(val, "false");
     }
 }
 

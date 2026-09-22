@@ -90,7 +90,7 @@ pub async fn fetch_calendars(access_token: &str) -> Result<Vec<GoogleCalendarIte
                 primary: item.primary.unwrap_or(false),
                 background_color: item.background_color.unwrap_or_else(|| "#4285F4".into()),
                 foreground_color: item.foreground_color.unwrap_or_else(|| "#FFFFFF".into()),
-                is_visible: true,
+                is_visible: false,
                 is_synced: false,
             }
         })

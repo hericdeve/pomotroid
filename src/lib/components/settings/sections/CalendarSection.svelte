@@ -58,7 +58,7 @@
     try {
       const [status, localVis] = await Promise.all([
         googleCalendarGetStatus(),
-        calendarGetLocalVisible().catch(() => true),
+        calendarGetLocalVisible().catch(() => localVisible),
       ]);
       authStatus = status;
       localVisible = localVis;
