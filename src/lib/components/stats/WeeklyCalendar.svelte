@@ -10,6 +10,7 @@
     overlayEvents?: GoogleOverlayEvent[];
     showLocalCalendar?: boolean;
     showSyncedCalendar?: boolean;
+    syncedCalendarId?: string | null;
     syncedCalendarSummary?: string | null;
     weekOffset?: number;
     isSyncing?: boolean;
@@ -26,6 +27,7 @@
     overlayEvents = [],
     showLocalCalendar = true,
     showSyncedCalendar = true,
+    syncedCalendarId = null,
     syncedCalendarSummary = null,
     weekOffset = 0,
     isSyncing = false,
@@ -408,7 +410,13 @@
   function getSegmentsForDay(dayIdx: number) {
     const segments = [];
     const visibleBlocks = blocks.filter(b => {
-      if (b.calendar_type === 'google') return showSyncedCalendar;
+      if (b.calendar_type === 'google') {
+        if (!showSyncedCalendar) return false;
+        if (syncedCalendarId && b.google_calendar_id && b.google_calendar_id !== syncedCalendarId) {
+          return false;
+        }
+        return true;
+      }
       return showLocalCalendar;
     });
 

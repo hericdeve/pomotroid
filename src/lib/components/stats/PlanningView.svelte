@@ -242,7 +242,13 @@
   function calculateAllocatedRounds(subjectName: string): number {
     const subjectBlocks = blocks.filter(b => {
       if (b.subject !== subjectName) return false;
-      if (b.calendar_type === 'google') return true;
+      if (b.calendar_type === 'google') {
+        if (!showSyncedCalendar) return false;
+        if (syncedCalendar && b.google_calendar_id && b.google_calendar_id !== syncedCalendar.id) {
+          return false;
+        }
+        return true;
+      }
       return showLocalCalendar;
     });
     if (subjectBlocks.length === 0) return 0;
@@ -378,6 +384,7 @@
       {overlayEvents}
       {showLocalCalendar}
       {showSyncedCalendar}
+      syncedCalendarId={syncedCalendar?.id || null}
       syncedCalendarSummary={syncedCalendar?.summary || null}
       {weekOffset}
       {isSyncing}
