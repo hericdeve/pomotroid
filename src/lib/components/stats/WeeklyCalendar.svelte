@@ -81,7 +81,7 @@
     if (totalMinutes <= 0) return '0m';
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
-    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0 && m > 0) return `${h}h${m.toString().padStart(2, '0')}`;
     if (h > 0) return `${h}h`;
     return `${m}m`;
   }
@@ -929,7 +929,7 @@
                       <span class="block-subject">{seg.block.subject}</span>
                       <span class="block-metric-badge compact">
                         <span class="rounds-dot"></span>
-                        <span class="metric-highlight">{timing.rounds}</span> {timing.rounds === 1 ? 'rd' : 'rds'}{#if !isNarrow && hasStudyTime}<span class="metric-sep">·</span><span>{timing.formattedStudyTime}</span>{/if}
+                        <span class="metric-highlight">{timing.rounds}</span>{#if !isNarrow && hasStudyTime}<span class="metric-sep">·</span><span>{timing.formattedStudyTime}</span>{/if}
                       </span>
                       <span class="block-time">
                         {#if !seg.isPrimary}
@@ -949,23 +949,20 @@
                       {/if}
                     </div>
                   {:else}
+                    <!-- Line 1: Subject -->
                     <div class="block-header-line">
                       <span class="block-subject">{seg.block.subject}</span>
                     </div>
 
-                    <!-- Dynamic cohesive metrics badge (Rounds, Study Time, Total Session Duration) -->
+                    <!-- Line 2: Rounds & Study time (Dynamic - appears if height >= 52) -->
                     {#if height >= 52}
                       <div class="block-metrics-row">
                         <span class="block-metric-badge">
                           <span class="rounds-dot"></span>
-                          <span class="metric-highlight">{timing.rounds}</span> {timing.rounds === 1 ? (isNarrow ? 'rd' : 'round') : (isNarrow ? 'rds' : 'rounds')}
+                          <span class="metric-highlight">{timing.rounds}</span>
                           {#if hasStudyTime}
                             <span class="metric-sep">·</span>
-                            <span>{timing.formattedStudyTime} study</span>
-                          {/if}
-                          {#if hasSessionTime && (height >= 85 || !isNarrow)}
-                            <span class="metric-sep">·</span>
-                            <span class="session-total-text">{timing.formattedSessionTime} total</span>
+                            <span>{timing.formattedStudyTime}</span>
                           {/if}
                         </span>
                       </div>
@@ -980,6 +977,7 @@
                       </div>
                     {/if}
 
+                    <!-- Line 3: Time range & Estimated session duration -->
                     <div class="block-footer-line">
                       <span class="block-time">
                         {#if !seg.isPrimary}
@@ -990,11 +988,15 @@
                       {#if height < 52}
                         <span class="block-metric-badge compact">
                           <span class="rounds-dot"></span>
-                          <span class="metric-highlight">{timing.rounds}</span> {timing.rounds === 1 ? 'rd' : 'rds'}
+                          <span class="metric-highlight">{timing.rounds}</span>
                           {#if !isNarrow && hasStudyTime}
                             <span class="metric-sep">·</span>
                             <span>{timing.formattedStudyTime}</span>
                           {/if}
+                        </span>
+                      {:else if hasSessionTime && !isNarrow}
+                        <span class="block-session-tag" title="Estimated session time with breaks">
+                          ~{timing.formattedSessionTime}
                         </span>
                       {/if}
                       {#if isGoogleSynced && seg.isPrimary}
@@ -1635,8 +1637,13 @@
     margin: 0 1px;
   }
 
-  .session-total-text {
-    opacity: 0.85;
+  .block-session-tag {
+    font-size: 0.63rem;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0.78;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .rounds-dot {

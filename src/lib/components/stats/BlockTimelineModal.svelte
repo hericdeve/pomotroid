@@ -20,7 +20,7 @@
     if (totalMinutes <= 0) return '0m';
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
-    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0 && m > 0) return `${h}h${m.toString().padStart(2, '0')}`;
     if (h > 0) return `${h}h`;
     return `${m}m`;
   }
@@ -150,11 +150,11 @@
           <span class="meta-time">{formatTime(block.start_minute)} – {formatTime(block.end_minute)}</span>
           <span class="meta-badge rounds">
             <span class="rounds-dot"></span>
-            {workRounds} {workRounds === 1 ? 'round' : 'rounds'}
+            {workRounds}
           </span>
-          <span class="meta-badge study">{formatMinsDuration(studyMins)} study</span>
+          <span class="meta-badge study">{formatMinsDuration(studyMins)}</span>
           {#if totalBlockMins > studyMins}
-            <span class="meta-badge session">{formatMinsDuration(totalBlockMins)} total</span>
+            <span class="meta-badge session">~{formatMinsDuration(totalBlockMins)}</span>
           {/if}
         </div>
       </div>
