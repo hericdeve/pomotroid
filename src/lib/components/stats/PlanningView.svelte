@@ -21,6 +21,7 @@
   let subjects = $state<SubjectStats[]>([]);
   let blocks = $state<ScheduledBlock[]>([]);
   let loading = $state(true);
+  let showSidebar = $state(false);
 
   // Calendar states (configured in Settings)
   let showLocalCalendar = $state(true);
@@ -316,14 +317,25 @@
   }
 </script>
 
-<div class="planning-view">
-  <!-- Left Sidebar: Subjects -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <span class="section-title">Subjects</span>
-    </div>
+<div class="planning-view" class:sidebar-open={showSidebar}>
+  <!-- Left Sidebar: Subjects (toggled by user) -->
+  {#if showSidebar}
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="section-title">Subjects</span>
+        <button
+          class="btn-sidebar-collapse"
+          onclick={() => showSidebar = false}
+          title="Collapse sidebar"
+          aria-label="Collapse sidebar"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
 
-    <div class="subjects-list">
+      <div class="subjects-list">
         {#if loading}
           <div class="empty">Loading...</div>
         {:else if subjects.length === 0}
@@ -374,8 +386,9 @@
             </div>
           {/each}
         {/if}
-    </div>
-  </aside>
+      </div>
+    </aside>
+  {/if}
 
   <!-- Right Main Area: Weekly Calendar -->
   <main class="calendar-area">
@@ -388,6 +401,8 @@
       syncedCalendarSummary={syncedCalendar?.summary || null}
       {weekOffset}
       {isSyncing}
+      {showSidebar}
+      onToggleSidebar={() => showSidebar = !showSidebar}
       onBlockAdd={handleBlockAdd}
       onBlockDelete={handleBlockDelete}
       onBlockUpdate={handleBlockUpdate}
@@ -410,6 +425,8 @@
   /* ── Sidebar ───────────────────────────────────── */
   .sidebar {
     width: 270px;
+    min-width: 270px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     background: transparent;
@@ -423,6 +440,24 @@
     align-items: center;
     padding: 6px 12px;
     border-bottom: 1px solid var(--color-separator);
+  }
+
+  .btn-sidebar-collapse {
+    background: none;
+    border: none;
+    color: var(--color-foreground-darker, #a1a1aa);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .btn-sidebar-collapse:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text);
   }
 
   .section-title {

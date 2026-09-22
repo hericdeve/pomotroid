@@ -14,6 +14,8 @@
     syncedCalendarSummary?: string | null;
     weekOffset?: number;
     isSyncing?: boolean;
+    showSidebar?: boolean;
+    onToggleSidebar?: () => void;
     onBlockAdd: (day: number, startMin: number, endMin: number, subject: string) => void;
     onBlockDelete: (id: number) => void;
     onBlockUpdate: (id: number, day: number, startMin: number, endMin: number) => void;
@@ -31,6 +33,8 @@
     syncedCalendarSummary = null,
     weekOffset = 0,
     isSyncing = false,
+    showSidebar = false,
+    onToggleSidebar,
     onBlockAdd,
     onBlockDelete,
     onBlockUpdate,
@@ -43,7 +47,7 @@
   const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
   // Snap resolution in minutes
-  const SNAP_MINUTES = 30;
+  const SNAP_MINUTES = 15;
   // Visual height representing 1 hour (60px)
   const PIXELS_PER_HOUR = 60;
   const PIXELS_PER_MINUTE = PIXELS_PER_HOUR / 60;
@@ -219,14 +223,15 @@
           const payload = JSON.parse(payloadStr);
 
           if (payload.type === 'subject') {
-            let offsetMinutes = 0;
             const target = e.currentTarget as HTMLElement;
             const rect = target.getBoundingClientRect();
             const y = e.clientY - rect.top;
 
-            const minutes = Math.floor(y / PIXELS_PER_MINUTE);
-            offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
-            const startMin = hour * 60 + offsetMinutes;
+            const rawMinutes = hour * 60 + Math.floor(y / PIXELS_PER_MINUTE);
+            const startMin = Math.min(
+              24 * 60 - SNAP_MINUTES,
+              Math.max(0, Math.round(rawMinutes / SNAP_MINUTES) * SNAP_MINUTES)
+            );
 
             const defaultDuration = 120;
             const endMin = startMin + defaultDuration;
@@ -236,13 +241,14 @@
       } catch {
         const subject = e.dataTransfer.getData('text/plain');
         if (subject) {
-          let offsetMinutes = 0;
           const target = e.currentTarget as HTMLElement;
           const rect = target.getBoundingClientRect();
           const y = e.clientY - rect.top;
-          const minutes = Math.floor(y / PIXELS_PER_MINUTE);
-          offsetMinutes = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
-          const startMin = hour * 60 + offsetMinutes;
+          const rawMinutes = hour * 60 + Math.floor(y / PIXELS_PER_MINUTE);
+          const startMin = Math.min(
+            24 * 60 - SNAP_MINUTES,
+            Math.max(0, Math.round(rawMinutes / SNAP_MINUTES) * SNAP_MINUTES)
+          );
           const defaultDuration = 120;
           const endMin = startMin + defaultDuration;
           onBlockAdd(day, startMin, endMin, subject);
@@ -477,6 +483,22 @@
   <!-- Week Navigation Toolbar -->
   <div class="calendar-toolbar">
     <div class="toolbar-nav-group">
+      {#if onToggleSidebar}
+        <button
+          class="btn-toggle-sidebar"
+          class:is-active={showSidebar}
+          onclick={onToggleSidebar}
+          title={showSidebar ? "Hide Subjects Sidebar" : "Show Subjects Sidebar"}
+          aria-label="Toggle Subjects Sidebar"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+            <line x1="9" x2="9" y1="3" y2="21"/>
+          </svg>
+          <span class="sidebar-toggle-text">Subjects</span>
+        </button>
+      {/if}
+
       <div class="nav-buttons">
         <button
           class="btn-nav"
@@ -651,12 +673,14 @@
               {@const isGoogleSynced = seg.block.calendar_type === 'google' || !!seg.block.google_event_id}
 
               <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
                 class="scheduled-block"
                 class:resizing={seg.isResizing}
                 class:dragging={seg.isDragging}
                 class:is-overflow={!seg.isPrimary}
                 class:is-google-synced={isGoogleSynced}
+                class:is-short={height < 30}
                 onmousedown={(e) => handleBlockMouseDown(e, seg.block, seg.isPrimary)}
                 onclick={(e) => handleBlockClick(e, seg.block)}
                 style="top: {top}px; height: {height}px;"
@@ -664,29 +688,54 @@
               >
                 <!-- Resize top handle -->
                 {#if seg.isPrimary}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div class="resize-handle top" onmousedown={(e) => handleResizeStart2(e, seg.block, 'top')}></div>
                 {/if}
 
                 <div class="block-content">
-                  <div class="block-header-line">
-                    {#if isGoogleSynced && seg.isPrimary}
-                      <span class="gcal-sync-badge" title="Synced with Google Calendar">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="m17 2 4 4-4 4"/>
-                          <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
-                          <path d="m7 22-4-4 4-4"/>
-                          <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
-                        </svg>
+                  {#if height < 30}
+                    <div class="block-compact-line">
+                      <span class="block-subject">{seg.block.subject}</span>
+                      <span class="block-time">
+                        {#if !seg.isPrimary}
+                          (Cont.)
+                        {/if}
+                        {formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}
                       </span>
-                    {/if}
-                    <span class="block-subject">{seg.block.subject}</span>
-                  </div>
-                  <span class="block-time">
-                    {#if !seg.isPrimary}
-                      (Cont.)
-                    {/if}
-                    {formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}
-                  </span>
+                      {#if isGoogleSynced && seg.isPrimary}
+                        <span class="gcal-sync-badge" title="Synced with Google Calendar">
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m17 2 4 4-4 4"/>
+                            <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+                            <path d="m7 22-4-4 4-4"/>
+                            <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+                          </svg>
+                        </span>
+                      {/if}
+                    </div>
+                  {:else}
+                    <div class="block-header-line">
+                      <span class="block-subject">{seg.block.subject}</span>
+                    </div>
+                    <div class="block-footer-line">
+                      <span class="block-time">
+                        {#if !seg.isPrimary}
+                          (Cont.)
+                        {/if}
+                        {formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}
+                      </span>
+                      {#if isGoogleSynced && seg.isPrimary}
+                        <span class="gcal-sync-badge" title="Synced with Google Calendar">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m17 2 4 4-4 4"/>
+                            <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+                            <path d="m7 22-4-4 4-4"/>
+                            <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+                          </svg>
+                        </span>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
 
                 {#if seg.isPrimary}
@@ -704,6 +753,7 @@
 
                 <!-- Resize bottom handle -->
                 {#if !seg.isPrimary || (seg.isPrimary && seg.originalEnd <= 24 * 60)}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div class="resize-handle bottom" onmousedown={(e) => handleResizeStart2(e, seg.block, 'bottom')}></div>
                 {/if}
               </div>
@@ -758,6 +808,36 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+
+  .btn-toggle-sidebar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-foreground-darkest, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--color-separator);
+    border-radius: 6px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .btn-toggle-sidebar:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-toggle-sidebar.is-active {
+    background: var(--color-focus-round, #4285f4);
+    color: var(--color-background);
+    border-color: var(--color-focus-round, #4285f4);
+  }
+
+  .sidebar-toggle-text {
+    font-size: 0.8rem;
+    font-weight: 500;
   }
 
   .nav-buttons {
@@ -1148,7 +1228,7 @@
     background: var(--color-focus-round);
     color: var(--color-background);
     border-radius: 4px;
-    padding: 6px;
+    padding: 4px 6px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1157,6 +1237,11 @@
     cursor: grab;
     border: 1px solid var(--color-background);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .scheduled-block.is-short {
+    padding: 1px 4px;
+    border-radius: 3px;
   }
 
   .scheduled-block.is-google-synced {
@@ -1192,6 +1277,10 @@
     z-index: 15;
   }
 
+  .scheduled-block.is-short .resize-handle {
+    height: 4px;
+  }
+
   .resize-handle.top {
     top: 0;
   }
@@ -1214,12 +1303,64 @@
     pointer-events: none;
   }
 
+  .scheduled-block.is-short .block-content {
+    padding-right: 16px;
+    justify-content: center;
+  }
+
   .block-header-line {
     display: flex;
     align-items: center;
     gap: 4px;
     overflow: hidden;
     min-width: 0;
+  }
+
+  .block-footer-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-top: auto;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .block-compact-line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    min-width: 0;
+    line-height: 1.1;
+  }
+
+  .block-compact-line .block-subject {
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .block-compact-line .block-time {
+    font-size: 0.62rem;
+    opacity: 0.85;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .block-compact-line .gcal-sync-badge {
+    width: 11px;
+    height: 11px;
+    padding: 1px;
+    flex-shrink: 0;
+  }
+
+  .block-compact-line .gcal-sync-badge svg {
+    width: 7px;
+    height: 7px;
   }
 
   .block-subject {
@@ -1265,6 +1406,19 @@
     opacity: 0;
     z-index: 20;
     transition: opacity 0.2s, background 0.2s;
+  }
+
+  .scheduled-block.is-short .btn-delete-block {
+    top: 1px;
+    right: 2px;
+    width: 13px;
+    height: 13px;
+    border-radius: 2px;
+  }
+
+  .scheduled-block.is-short .btn-delete-block svg {
+    width: 8px;
+    height: 8px;
   }
 
   .scheduled-block:hover .btn-delete-block {
