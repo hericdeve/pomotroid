@@ -1,15 +1,19 @@
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { isMac } from './platform';
 
-export async function openSettingsWindow() {
+export async function openSettingsWindow(section?: string) {
   const existing = await WebviewWindow.getByLabel('settings');
   if (existing) {
     await existing.show();
     await existing.setFocus();
+    if (section) {
+      await existing.emit('settings:navigate', section);
+    }
     return;
   }
+  const url = section ? `/settings?section=${encodeURIComponent(section)}` : '/settings';
   new WebviewWindow('settings', {
-    url: '/settings',
+    url,
     title: 'Pomotroid — Settings',
     width: 720,
     height: 520,

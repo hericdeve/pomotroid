@@ -18,16 +18,18 @@
   import ShortcutsSection from '$lib/components/settings/sections/ShortcutsSection.svelte';
   import SystemSection from '$lib/components/settings/sections/SystemSection.svelte';
   import AboutSection from '$lib/components/settings/sections/AboutSection.svelte';
+  import CalendarSection from '$lib/components/settings/sections/CalendarSection.svelte';
 
   import * as m from '$paraglide/messages.js';
 
-  type Section = 'timer' | 'appearance' | 'notifications' | 'shortcuts' | 'system' | 'about';
+  type Section = 'timer' | 'appearance' | 'notifications' | 'shortcuts' | 'calendar' | 'system' | 'about';
 
   const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'timer', label: m.nav_timer },
     { id: 'appearance', label: m.nav_appearance },
     { id: 'notifications', label: m.nav_notifications },
     { id: 'shortcuts', label: m.nav_shortcuts },
+    { id: 'calendar', label: m.nav_calendar },
     { id: 'system', label: m.nav_system },
     { id: 'about', label: m.nav_about },
   ];
@@ -41,6 +43,12 @@
 
   onMount(() => {
     const cleanups: UnlistenFn[] = [];
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const initialSection = searchParams.get('section') as Section | null;
+    if (initialSection && SECTIONS.some((s) => s.id === initialSection)) {
+      active = initialSection;
+    }
 
     // Mount local keyboard shortcut handler.
     const shortcutHandler = createLocalShortcutHandler({
@@ -122,6 +130,12 @@
           const current =
             updated.find((t) => t.name === resolveThemeName($settings, dark)) ?? updated[0];
           if (current) applyTheme(current);
+        }),
+        await getCurrentWebviewWindow().listen<string>('settings:navigate', (event) => {
+          const target = event.payload as Section;
+          if (SECTIONS.some((s) => s.id === target)) {
+            active = target;
+          }
         })
       );
     })();
@@ -163,6 +177,8 @@
         <NotificationsSection />
       {:else if active === 'shortcuts'}
         <ShortcutsSection />
+      {:else if active === 'calendar'}
+        <CalendarSection />
       {:else if active === 'system'}
         <SystemSection />
       {:else if active === 'about'}

@@ -21,7 +21,7 @@
   import { error as logError } from '@tauri-apps/plugin-log';
   import { settings } from '$lib/stores/settings';
   import WeeklyCalendar from './WeeklyCalendar.svelte';
-  import GoogleCredentialsModal from './GoogleCredentialsModal.svelte';
+  import { openSettingsWindow } from '$lib/utils/windows';
 
   let subjects = $state<SubjectStats[]>([]);
   let blocks = $state<ScheduledBlock[]>([]);
@@ -43,7 +43,6 @@
   );
 
   let weekOffset = $state(0);
-  let showCredentialsModal = $state(false);
   let isSigningIn = $state(false);
   let isSyncing = $state(false);
   let loadingCals = $state(false);
@@ -62,39 +61,76 @@
 
   let currentMondayYmd = $derived(getMondayYmd(weekOffset));
 
-  onMount(async () => {
-    try {
-      const [subjectsData, blocksData, localVis, gStatus] = await Promise.all([
-        subjectsGetAll(),
-        scheduleGetAll(),
-        calendarGetLocalVisible().catch(() => true),
-        googleCalendarGetStatus().catch(() => ({
-          is_signed_in: false,
-          email: null,
-          client_id: null,
-          has_client_secret: false,
-        })),
-      ]);
+  onMount(() => {
+    let mounted = true;
 
-      subjects = subjectsData.sort((a, b) => {
-        const aHasGoal = a.weekly_goal != null;
-        const bHasGoal = b.weekly_goal != null;
-        if (aHasGoal && !bHasGoal) return -1;
-        if (!aHasGoal && bHasGoal) return 1;
-        return a.name.localeCompare(b.name);
-      });
-      blocks = blocksData;
-      showLocalCalendar = localVis;
-      authStatus = gStatus;
-
-      if (gStatus.is_signed_in) {
-        await loadGoogleData();
+    const handleFocus = async () => {
+      try {
+        const [localVis, gStatus] = await Promise.all([
+          calendarGetLocalVisible().catch(() => true),
+          googleCalendarGetStatus().catch(() => authStatus),
+        ]);
+        if (!mounted) return;
+        showLocalCalendar = localVis;
+        const wasSignedIn = authStatus.is_signed_in;
+        authStatus = gStatus;
+        if (gStatus.is_signed_in) {
+          await loadGoogleData();
+          if (syncedCalendar) {
+            blocks = await googleCalendarSyncNow(currentMondayYmd);
+          }
+        } else if (wasSignedIn && !gStatus.is_signed_in) {
+          calendars = [];
+          overlayEvents = [];
+          blocks = await scheduleGetAll();
+        }
+      } catch (e) {
+        logError(`Failed to refresh on window focus: ${e}`);
       }
-    } catch (e) {
-      logError(`Failed to load planning data: ${e}`);
-    } finally {
-      loading = false;
-    }
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    (async () => {
+      try {
+        const [subjectsData, blocksData, localVis, gStatus] = await Promise.all([
+          subjectsGetAll(),
+          scheduleGetAll(),
+          calendarGetLocalVisible().catch(() => true),
+          googleCalendarGetStatus().catch(() => ({
+            is_signed_in: false,
+            email: null,
+            client_id: null,
+            has_client_secret: false,
+          })),
+        ]);
+        if (!mounted) return;
+
+        subjects = subjectsData.sort((a, b) => {
+          const aHasGoal = a.weekly_goal != null;
+          const bHasGoal = b.weekly_goal != null;
+          if (aHasGoal && !bHasGoal) return -1;
+          if (!aHasGoal && bHasGoal) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        blocks = blocksData;
+        showLocalCalendar = localVis;
+        authStatus = gStatus;
+
+        if (gStatus.is_signed_in) {
+          await loadGoogleData();
+        }
+      } catch (e) {
+        logError(`Failed to load planning data: ${e}`);
+      } finally {
+        if (mounted) loading = false;
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('focus', handleFocus);
+    };
   });
 
   async function loadGoogleData() {
@@ -140,7 +176,7 @@
 
   async function handleSignInGoogle() {
     if (!authStatus.client_id) {
-      showCredentialsModal = true;
+      await openSettingsWindow('calendar');
       return;
     }
     isSigningIn = true;
@@ -408,9 +444,9 @@
         <span class="section-title">Calendars</span>
         <button
           class="btn-icon"
-          onclick={() => showCredentialsModal = true}
-          title="Configure Google Calendar credentials"
-          aria-label="Configure Google Calendar"
+          onclick={() => openSettingsWindow('calendar')}
+          title="Configure Calendar in Settings"
+          aria-label="Configure Calendar in Settings"
         >
           ⚙️
         </button>
@@ -447,6 +483,13 @@
               disabled={isSigningIn}
             >
               {#if isSigningIn}Connecting...{:else}Sign in with Google{/if}
+            </button>
+            <button
+              class="btn-settings-link"
+              onclick={() => openSettingsWindow('calendar')}
+              type="button"
+            >
+              Configure in Settings
             </button>
           </div>
         {:else}
@@ -624,20 +667,6 @@
     />
   </main>
 </div>
-
-{#if showCredentialsModal}
-  <GoogleCredentialsModal
-    initialClientId={authStatus.client_id}
-    onClose={() => showCredentialsModal = false}
-    onSaved={async () => {
-      showCredentialsModal = false;
-      authStatus = await googleCalendarGetStatus();
-      if (!authStatus.is_signed_in) {
-        handleSignInGoogle();
-      }
-    }}
-  />
-{/if}
 
 <style>
   .planning-view {
@@ -827,6 +856,25 @@
   .btn-google-signin:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .btn-settings-link {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--color-separator, rgba(255, 255, 255, 0.15));
+    color: var(--color-foreground-darker, #a1a1aa);
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .btn-settings-link:hover {
+    color: var(--color-foreground, #fff);
+    border-color: var(--color-foreground-darker, #a1a1aa);
   }
 
   .google-account-header {
