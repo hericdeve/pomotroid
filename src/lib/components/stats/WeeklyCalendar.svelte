@@ -477,6 +477,117 @@
     }
     return segments;
   }
+
+  function getDayLayout(dayIdx: number) {
+    const rawSegments = getSegmentsForDay(dayIdx);
+    const overlayList = timedOverlayEvents.filter(e => e.day_of_week === dayIdx);
+
+    type LayoutItem = {
+      kind: 'overlay' | 'block';
+      startMin: number;
+      endMin: number;
+      col: number;
+      totalCols: number;
+      overlayEvent?: GoogleOverlayEvent;
+      segment?: any;
+    };
+
+    const items: LayoutItem[] = [
+      ...overlayList.map(ev => ({
+        kind: 'overlay' as const,
+        startMin: ev.start_minute,
+        endMin: Math.max(ev.start_minute + 15, ev.end_minute),
+        col: 0,
+        totalCols: 1,
+        overlayEvent: ev,
+      })),
+      ...rawSegments.map(seg => ({
+        kind: 'block' as const,
+        startMin: seg.startMin,
+        endMin: Math.max(seg.startMin + 15, seg.endMin),
+        col: 0,
+        totalCols: 1,
+        segment: seg,
+      })),
+    ];
+
+    if (items.length === 0) {
+      return { overlays: [], segments: [] };
+    }
+
+    // Sort: startMin asc, then duration desc
+    items.sort((a, b) => {
+      if (a.startMin !== b.startMin) return a.startMin - b.startMin;
+      return (b.endMin - b.startMin) - (a.endMin - a.startMin);
+    });
+
+    // Group into overlapping clusters
+    const clusters: LayoutItem[][] = [];
+    let currentCluster: LayoutItem[] = [];
+    let clusterEnd = -1;
+
+    for (const item of items) {
+      if (currentCluster.length === 0) {
+        currentCluster.push(item);
+        clusterEnd = item.endMin;
+      } else {
+        if (item.startMin < clusterEnd) {
+          currentCluster.push(item);
+          clusterEnd = Math.max(clusterEnd, item.endMin);
+        } else {
+          clusters.push(currentCluster);
+          currentCluster = [item];
+          clusterEnd = item.endMin;
+        }
+      }
+    }
+    if (currentCluster.length > 0) {
+      clusters.push(currentCluster);
+    }
+
+    // Assign columns within each cluster using greedy coloring
+    for (const cluster of clusters) {
+      const colEnds: number[] = [];
+      for (const item of cluster) {
+        let placed = false;
+        for (let c = 0; c < colEnds.length; c++) {
+          if (colEnds[c] <= item.startMin) {
+            colEnds[c] = item.endMin;
+            item.col = c;
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          item.col = colEnds.length;
+          colEnds.push(item.endMin);
+        }
+      }
+
+      const totalCols = colEnds.length;
+      for (const item of cluster) {
+        item.totalCols = totalCols;
+      }
+    }
+
+    const overlays = items
+      .filter(i => i.kind === 'overlay')
+      .map(i => ({
+        ev: i.overlayEvent!,
+        col: i.col,
+        totalCols: i.totalCols,
+      }));
+
+    const segments = items
+      .filter(i => i.kind === 'block')
+      .map(i => ({
+        ...i.segment!,
+        col: i.col,
+        totalCols: i.totalCols,
+      }));
+
+    return { overlays, segments };
+  }
 </script>
 
 <div class="calendar-container">
@@ -500,12 +611,14 @@
 
       <div class="nav-buttons">
         <button
-          class="btn-nav"
+          class="btn-nav btn-prev"
           onclick={handlePrevWeek}
           title="Previous week"
           aria-label="Previous week"
         >
-          ‹
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
         </button>
         <button
           class="btn-nav btn-today"
@@ -515,12 +628,14 @@
           Today
         </button>
         <button
-          class="btn-nav"
+          class="btn-nav btn-next"
           onclick={handleNextWeek}
           title="Next week"
           aria-label="Next week"
         >
-          ›
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
         </button>
       </div>
       <span class="week-date-range">{formattedWeekRange}</span>
@@ -566,7 +681,10 @@
           title="Configure Calendars in Settings"
           aria-label="Configure Calendars in Settings"
         >
-          ⚙️
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
         </button>
       {/if}
     </div>
@@ -621,6 +739,7 @@
       <!-- Days Columns -->
       <div class="days-columns">
         {#each weekDays as day, dayIdx}
+          {@const dayLayout = getDayLayout(dayIdx)}
           <div class="day-column" class:is-today={day.isToday}>
             <!-- Current Time Marker (only on today) -->
             {#if day.isToday}
@@ -643,12 +762,15 @@
             {/each}
 
             <!-- Overlay Events (Read-only from Google Calendar) -->
-            {#each getOverlayEventsForDay(dayIdx) as ev (ev.id + '-' + ev.day_of_week)}
+            {#each dayLayout.overlays as item (item.ev.id + '-' + item.ev.day_of_week)}
+              {@const ev = item.ev}
               {@const top = ev.start_minute * PIXELS_PER_MINUTE}
               {@const height = Math.max(20, (ev.end_minute - ev.start_minute) * PIXELS_PER_MINUTE)}
+              {@const leftPct = (item.col / item.totalCols) * 100}
+              {@const widthPct = (1 / item.totalCols) * 100}
               <button
                 class="overlay-block"
-                style="top: {top}px; height: {height}px; border-left-color: {ev.calendar_color};"
+                style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px); border-left-color: {ev.calendar_color};"
                 onclick={(e) => {
                   e.stopPropagation();
                   selectedOverlayEvent = ev;
@@ -666,10 +788,12 @@
             {/each}
 
             <!-- Pomotroid Scheduled Blocks -->
-            {#each getSegmentsForDay(dayIdx) as seg (seg.idKey)}
+            {#each dayLayout.segments as seg (seg.idKey)}
               {@const top = seg.startMin * PIXELS_PER_MINUTE}
               {@const height = (seg.endMin - seg.startMin) * PIXELS_PER_MINUTE}
               {@const isGoogleSynced = seg.block.calendar_type === 'google' || !!seg.block.google_event_id}
+              {@const leftPct = (seg.col / seg.totalCols) * 100}
+              {@const widthPct = (1 / seg.totalCols) * 100}
 
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -682,7 +806,7 @@
                 class:is-short={height < 30}
                 onmousedown={(e) => handleBlockMouseDown(e, seg.block, seg.isPrimary)}
                 onclick={(e) => handleBlockClick(e, seg.block)}
-                style="top: {top}px; height: {height}px;"
+                style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px);"
                 title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}){isGoogleSynced ? ' • Synced with Google' : ''}"
               >
                 <!-- Resize top handle -->
@@ -716,6 +840,13 @@
                     <div class="block-header-line">
                       <span class="block-subject">{seg.block.subject}</span>
                     </div>
+                    {#if height >= 80 && (seg.block.subject_topic || seg.block.study_type)}
+                      <div class="block-topic-line">
+                        <span class="block-topic">
+                          {seg.block.subject_topic || ''}{seg.block.subject_topic && seg.block.study_type ? ' • ' : ''}{seg.block.study_type || ''}
+                        </span>
+                      </div>
+                    {/if}
                     <div class="block-footer-line">
                       <span class="block-time">
                         {#if !seg.isPrimary}
@@ -932,23 +1063,22 @@
   }
 
   .btn-calendar-settings {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--color-separator);
+    background: transparent;
+    border: none;
     border-radius: 6px;
-    padding: 0.3rem 0.6rem;
+    padding: 0.35rem;
     font-size: 0.85rem;
     cursor: pointer;
     color: var(--color-foreground-darker, #a1a1aa);
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s;
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
 
   .btn-calendar-settings:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: var(--color-subtext, rgba(255, 255, 255, 0.3));
-    color: var(--color-foreground, #fff);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text);
   }
 
   .sync-icon.spinning {
@@ -1105,12 +1235,14 @@
 
   .time-label {
     display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 4px;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
     color: var(--color-foreground-darker);
-    font-size: 0.75rem;
-    border-bottom: 1px solid transparent;
+    font-size: 0.72rem;
+    transform: translateY(-50%);
+    user-select: none;
+    line-height: 1;
   }
 
   .days-columns {
@@ -1130,7 +1262,19 @@
 
   .hour-cell {
     border-bottom: 1px solid var(--color-separator);
+    position: relative;
     transition: background-color 0.1s;
+  }
+
+  .hour-cell::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    border-bottom: 1px dashed var(--color-separator);
+    opacity: 0.25;
+    pointer-events: none;
   }
 
   .time-marker {
@@ -1162,9 +1306,8 @@
   /* ── Overlay Events (Google Calendar) ─────────────────────── */
   .overlay-block {
     position: absolute;
-    left: 3px;
-    right: 3px;
-    border-radius: 4px;
+    box-sizing: border-box;
+    border-radius: 6px;
     padding: 3px 6px;
     overflow: hidden;
     display: flex;
@@ -1172,7 +1315,7 @@
     gap: 5px;
     cursor: pointer;
     z-index: 5;
-    background: rgba(30, 30, 45, 0.82);
+    background: rgba(30, 30, 45, 0.88);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-left: 3px solid;
     text-align: left;
@@ -1204,10 +1347,15 @@
   .overlay-title {
     font-weight: 600;
     font-size: 0.75rem;
+    line-height: 1.25;
     color: var(--color-text);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
   }
 
   .overlay-time {
@@ -1219,11 +1367,10 @@
   /* ── Pomotroid Scheduled Blocks ───────────────────────────── */
   .scheduled-block {
     position: absolute;
-    left: 2px;
-    right: 2px;
+    box-sizing: border-box;
     background: var(--color-focus-round);
     color: var(--color-background);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 4px 6px;
     overflow: hidden;
     display: flex;
@@ -1231,8 +1378,8 @@
     z-index: 10;
     transition: opacity 0.2s, box-shadow 0.2s;
     cursor: grab;
-    border: 1px solid var(--color-background);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   }
 
   .scheduled-block.is-short {
@@ -1241,7 +1388,7 @@
   }
 
   .scheduled-block.is-google-synced {
-    border-left: 3px solid #4285f4;
+    border-left: 3px solid rgba(66, 133, 244, 0.85);
   }
 
   .scheduled-block:active {
@@ -1251,13 +1398,13 @@
   .scheduled-block.resizing,
   .scheduled-block.dragging {
     transition: none;
-    z-index: 12;
+    z-index: 30;
     opacity: 0.9;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--color-background);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--color-background);
   }
 
   .scheduled-block.dragging {
-    opacity: 0.7;
+    opacity: 0.75;
   }
 
   .scheduled-block:hover {
@@ -1312,6 +1459,21 @@
     min-width: 0;
   }
 
+  .block-topic-line {
+    overflow: hidden;
+    min-width: 0;
+    margin-top: 1px;
+  }
+
+  .block-topic {
+    font-size: 0.65rem;
+    opacity: 0.82;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
   .block-footer-line {
     display: flex;
     align-items: center;
@@ -1348,10 +1510,14 @@
   }
 
   .block-compact-line .gcal-sync-badge {
+    color: currentColor;
+    background: rgba(0, 0, 0, 0.14);
+    border-radius: 3px;
     width: 11px;
     height: 11px;
     padding: 1px;
     flex-shrink: 0;
+    opacity: 0.85;
   }
 
   .block-compact-line .gcal-sync-badge svg {
@@ -1361,9 +1527,15 @@
 
   .block-subject {
     font-weight: 600;
-    white-space: nowrap;
+    font-size: 0.78rem;
+    line-height: 1.25;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
     min-width: 0;
   }
 
@@ -1371,13 +1543,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #4285f4;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 50%;
+    color: currentColor;
+    background: rgba(0, 0, 0, 0.14);
+    border-radius: 4px;
     padding: 2px;
     flex-shrink: 0;
     width: 14px;
     height: 14px;
+    opacity: 0.85;
   }
 
   .block-time {
