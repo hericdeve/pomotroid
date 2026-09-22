@@ -18,6 +18,13 @@ pub fn calculate_week_bounds(monday_ymd: &str) -> Result<(String, String, NaiveD
     Ok((time_min, time_max, monday))
 }
 
+pub fn current_monday_ymd() -> String {
+    let today = Local::now().date_naive();
+    let days_from_monday = today.weekday().num_days_from_monday();
+    let monday = today - Duration::days(days_from_monday as i64);
+    monday.format("%Y-%m-%d").to_string()
+}
+
 pub fn block_slot_to_rfc3339(
     monday: NaiveDate,
     day_of_week: i32,
@@ -62,8 +69,29 @@ pub async fn sync_calendar_two_way(
             .collect::<Vec<_>>()
     };
 
+    // 1b. Push any unlinked local blocks to Google Calendar
+    for local_block in &local_synced_blocks {
+        if local_block.google_event_id.is_none() {
+            log::info!("[gcal] Pushing unlinked local block #{} ('{}') to Google Calendar", local_block.id, local_block.subject);
+            if let Err(e) = push_block_create_to_google(db, access_token, calendar_id, local_block.id, monday_ymd).await {
+                log::error!("[gcal] Failed to push existing unlinked block #{} to Google Calendar: {e}", local_block.id);
+            }
+        }
+    }
+
+    // Re-fetch local synced blocks after syncing any unlinked blocks
+    let local_synced_blocks = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let all_blocks = queries::schedule_get_all(&conn).map_err(|e| format!("DB query error: {e}"))?;
+        all_blocks
+            .into_iter()
+            .filter(|b| b.calendar_type == "google" && b.google_calendar_id.as_deref() == Some(calendar_id))
+            .collect::<Vec<_>>()
+    };
+
     // 2. Fetch events from Google Calendar (no lock held!)
     let google_events = api::fetch_events(access_token, calendar_id, &time_min, &time_max).await?;
+
 
     let mut seen_google_event_ids = std::collections::HashSet::new();
 
@@ -190,7 +218,7 @@ pub async fn push_block_create_to_google(
         block.end_minute,
     );
 
-    let event_id = api::create_event(access_token, calendar_id, &block.subject, &start_iso, &end_iso).await?;
+    let event_id = api::create_event(access_token, calendar_id, &block.subject, &start_iso, &end_iso, None).await?;
 
     {
         let conn = db.lock().map_err(|e| e.to_string())?;
@@ -214,16 +242,20 @@ pub async fn push_block_update_to_google(
             .ok_or_else(|| format!("Block #{block_id} not found"))?
     };
 
-    if let (Some(ref cal_id), Some(ref event_id)) = (&block.google_calendar_id, &block.google_event_id) {
-        let (_, _, monday) = calculate_week_bounds(monday_ymd)?;
-        let (start_iso, end_iso) = block_slot_to_rfc3339(
-            monday,
-            block.day_of_week,
-            block.start_minute,
-            block.end_minute,
-        );
+    if let Some(ref cal_id) = block.google_calendar_id {
+        if let Some(ref event_id) = block.google_event_id {
+            let (_, _, monday) = calculate_week_bounds(monday_ymd)?;
+            let (start_iso, end_iso) = block_slot_to_rfc3339(
+                monday,
+                block.day_of_week,
+                block.start_minute,
+                block.end_minute,
+            );
 
-        api::update_event(access_token, cal_id, event_id, &block.subject, &start_iso, &end_iso).await?;
+            api::update_event(access_token, cal_id, event_id, &block.subject, &start_iso, &end_iso, None).await?;
+        } else {
+            push_block_create_to_google(db, access_token, cal_id, block_id, monday_ymd).await?;
+        }
     }
 
     Ok(())
@@ -236,3 +268,38 @@ pub async fn push_block_delete_to_google(
 ) -> Result<(), String> {
     api::delete_event(access_token, calendar_id, google_event_id).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_current_monday_ymd_is_monday() {
+        let ymd = current_monday_ymd();
+        let date = NaiveDate::parse_from_str(&ymd, "%Y-%m-%d").expect("valid date format");
+        assert_eq!(date.weekday(), chrono::Weekday::Mon);
+    }
+
+    #[test]
+    fn test_calculate_week_bounds() {
+        let (time_min, time_max, monday) = calculate_week_bounds("2026-09-21").expect("bounds");
+        assert_eq!(monday.weekday(), chrono::Weekday::Mon);
+        assert!(time_min.contains("2026-09-21"));
+        assert!(time_max.contains("2026-09-27"));
+    }
+
+    #[test]
+    fn test_block_slot_to_rfc3339() {
+        let monday = NaiveDate::from_ymd_opt(2026, 9, 21).unwrap();
+        let (start, end) = block_slot_to_rfc3339(monday, 1, 600, 720); // Tuesday 10:00 to 12:00
+        assert!(start.contains("2026-09-22T10:00:00"));
+        assert!(end.contains("2026-09-22T12:00:00"));
+    }
+
+    #[test]
+    fn test_local_timezone_is_valid() {
+        let tz = api::get_local_timezone();
+        assert!(!tz.is_empty());
+    }
+}
+

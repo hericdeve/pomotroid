@@ -137,7 +137,7 @@ export const scheduleAddBlock = (
   roundTags: string | null = null,
   calendarType: string | null = null,
   mondayYmd: string | null = null,
-) => invoke<number>('schedule_add_block', {
+) => invoke<ScheduledBlock>('schedule_add_block', {
   subject, 
   dayOfWeek, 
   startMinute, 

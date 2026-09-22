@@ -1204,7 +1204,7 @@ pub async fn schedule_add_block(
     calendar_type: Option<String>,
     monday_ymd: Option<String>,
     db: State<'_, DbState>,
-) -> Result<i64, String> {
+) -> Result<queries::ScheduledBlock, String> {
     let cal_type = calendar_type.unwrap_or_else(|| "local".to_string());
 
     let (google_cal_id, block_id) = {
@@ -1235,13 +1235,24 @@ pub async fn schedule_add_block(
         (target_google_cal_id, id)
     };
 
-    if let (Some(cal_id), Some(ymd)) = (google_cal_id, monday_ymd) {
-        if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
-            let _ = google_calendar::sync::push_block_create_to_google(&db, &token, &cal_id, block_id, &ymd).await;
+    let ymd = monday_ymd.unwrap_or_else(google_calendar::sync::current_monday_ymd);
+    if let Some(cal_id) = google_cal_id {
+        match google_calendar::auth::ensure_valid_token(&db).await {
+            Ok(token) => {
+                if let Err(e) = google_calendar::sync::push_block_create_to_google(&db, &token, &cal_id, block_id, &ymd).await {
+                    log::error!("[gcal] failed to push newly created block #{block_id} to Google Calendar: {e}");
+                }
+            }
+            Err(e) => {
+                log::error!("[gcal] failed to get valid token to sync block #{block_id}: {e}");
+            }
         }
     }
 
-    Ok(block_id)
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::schedule_get_by_id(&conn, block_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Block #{block_id} could not be retrieved"))
 }
 
 #[tauri::command]
@@ -1253,8 +1264,15 @@ pub async fn schedule_delete_block(id: i64, db: State<'_, DbState>) -> Result<()
 
     if let Some(b) = block {
         if let (Some(ref cal_id), Some(ref event_id)) = (&b.google_calendar_id, &b.google_event_id) {
-            if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
-                let _ = google_calendar::sync::push_block_delete_to_google(&token, cal_id, event_id).await;
+            match google_calendar::auth::ensure_valid_token(&db).await {
+                Ok(token) => {
+                    if let Err(e) = google_calendar::sync::push_block_delete_to_google(&token, cal_id, event_id).await {
+                        log::error!("[gcal] failed to delete Google event {event_id}: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("[gcal] failed to get token to delete Google event: {e}");
+                }
             }
         }
     }
@@ -1292,10 +1310,18 @@ pub async fn schedule_update_block(
         queries::schedule_get_by_id(&conn, id).map_err(|e| e.to_string())?
     };
 
-    if let (Some(b), Some(ymd)) = (block, monday_ymd) {
+    let ymd = monday_ymd.unwrap_or_else(google_calendar::sync::current_monday_ymd);
+    if let Some(b) = block {
         if b.calendar_type == "google" {
-            if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
-                let _ = google_calendar::sync::push_block_update_to_google(&db, &token, id, &ymd).await;
+            match google_calendar::auth::ensure_valid_token(&db).await {
+                Ok(token) => {
+                    if let Err(e) = google_calendar::sync::push_block_update_to_google(&db, &token, id, &ymd).await {
+                        log::error!("[gcal] failed to update Google event for block #{id}: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("[gcal] failed to get token to update Google event: {e}");
+                }
             }
         }
     }

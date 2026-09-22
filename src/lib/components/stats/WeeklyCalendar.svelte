@@ -148,7 +148,8 @@
         updatedBlock.end_minute,
         updatedBlock.subject_topic,
         updatedBlock.study_type,
-        updatedBlock.round_tags
+        updatedBlock.round_tags,
+        getMondayYmd(weekOffset)
       );
 
       const idx = blocks.findIndex(b => b.id === updatedBlock.id);

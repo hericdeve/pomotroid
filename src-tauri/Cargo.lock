@@ -3432,6 +3432,7 @@ dependencies = [
  "futures-util",
  "gtk",
  "gtk-layer-shell",
+ "iana-time-zone",
  "log",
  "notify",
  "objc2",

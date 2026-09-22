@@ -142,21 +142,37 @@ pub async fn fetch_events(
     Ok(active_events)
 }
 
+pub fn get_local_timezone() -> String {
+    iana_time_zone::get_timezone().unwrap_or_else(|_| "UTC".to_string())
+}
+
 pub async fn create_event(
     access_token: &str,
     calendar_id: &str,
     summary: &str,
     start_iso: &str,
     end_iso: &str,
+    time_zone: Option<&str>,
 ) -> Result<String, String> {
     let client = Client::new();
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let url = format!("{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events");
 
+    let tz = time_zone
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(get_local_timezone);
+
     let payload = json!({
         "summary": summary,
-        "start": { "dateTime": start_iso },
-        "end": { "dateTime": end_iso },
+        "start": {
+            "dateTime": start_iso,
+            "timeZone": tz
+        },
+        "end": {
+            "dateTime": end_iso,
+            "timeZone": tz
+        },
         "recurrence": [
             "RRULE:FREQ=WEEKLY"
         ]
@@ -170,9 +186,11 @@ pub async fn create_event(
         .await
         .map_err(|e| format!("Create event request failed: {e}"))?;
 
-    if !res.status().is_success() {
+    let status = res.status();
+    if !status.is_success() {
         let body = res.text().await.unwrap_or_default();
-        return Err(format!("Failed to create event in Google Calendar: {body}"));
+        log::error!("[gcal] create_event failed (HTTP {status}): {body}");
+        return Err(format!("Failed to create event in Google Calendar (HTTP {status}): {body}"));
     }
 
     let created: GoogleEventItem = res
@@ -190,16 +208,28 @@ pub async fn update_event(
     summary: &str,
     start_iso: &str,
     end_iso: &str,
+    time_zone: Option<&str>,
 ) -> Result<(), String> {
     let client = Client::new();
     let encoded_cal_id = urlencoding::encode(calendar_id);
     let encoded_event_id = urlencoding::encode(event_id);
     let url = format!("{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events/{encoded_event_id}");
 
+    let tz = time_zone
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(get_local_timezone);
+
     let payload = json!({
         "summary": summary,
-        "start": { "dateTime": start_iso },
-        "end": { "dateTime": end_iso }
+        "start": {
+            "dateTime": start_iso,
+            "timeZone": tz
+        },
+        "end": {
+            "dateTime": end_iso,
+            "timeZone": tz
+        }
     });
 
     let res = client
@@ -210,13 +240,16 @@ pub async fn update_event(
         .await
         .map_err(|e| format!("Update event request failed: {e}"))?;
 
-    if !res.status().is_success() {
+    let status = res.status();
+    if !status.is_success() {
         let body = res.text().await.unwrap_or_default();
-        return Err(format!("Failed to update event in Google Calendar: {body}"));
+        log::error!("[gcal] update_event failed (HTTP {status}): {body}");
+        return Err(format!("Failed to update event in Google Calendar (HTTP {status}): {body}"));
     }
 
     Ok(())
 }
+
 
 pub async fn delete_event(
     access_token: &str,

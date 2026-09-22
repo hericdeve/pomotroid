@@ -112,6 +112,13 @@
 
         if (gStatus.is_signed_in) {
           await loadGoogleData();
+          if (syncedCalendar) {
+            try {
+              blocks = await googleCalendarSyncNow(currentMondayYmd);
+            } catch (e) {
+              logError(`Initial sync failed: ${e}`);
+            }
+          }
         }
       } catch (e) {
         logError(`Failed to load planning data: ${e}`);
@@ -178,7 +185,7 @@
         return;
       }
 
-      const id = await scheduleAddBlock(
+      const newBlock = await scheduleAddBlock(
         subject,
         day,
         startMin,
@@ -190,19 +197,7 @@
         currentMondayYmd
       );
 
-      blocks = [...blocks, { 
-        id, 
-        subject, 
-        day_of_week: day, 
-        start_minute: startMin, 
-        end_minute: endMin,
-        subject_topic: null,
-        study_type: null,
-        round_tags: null,
-        calendar_type: calType,
-        google_calendar_id: calType === 'google' ? (targetGCal?.id || null) : null,
-        google_event_id: null,
-      }];
+      blocks = [...blocks, newBlock];
     } catch (e) {
       logError(`Failed to add block: ${e}`);
       alert(`Failed to add block: ${e}`);
