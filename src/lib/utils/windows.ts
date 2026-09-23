@@ -17,13 +17,15 @@ export async function openSettingsWindow(section?: string) {
     title: 'Pomotroid — Settings',
     width: 720,
     height: 520,
+    minWidth: 600,
+    minHeight: 400,
     // On macOS: native decorations + overlay titlebar for rounded corners and
     // traffic light buttons. On other platforms: custom decorations-free window.
     decorations: isMac,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     titleBarStyle: isMac ? ('Overlay' as any) : undefined,
     hiddenTitle: isMac ? true : undefined,
-    resizable: false,
+    resizable: true,
     visible: false,
   });
 }
