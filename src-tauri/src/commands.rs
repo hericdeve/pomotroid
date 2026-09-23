@@ -1464,6 +1464,7 @@ pub async fn google_calendar_auth_start(db: State<'_, DbState>) -> Result<String
                         foreground_color: Some(c.foreground_color),
                         is_visible: true,
                         is_synced: false,
+                        is_events_synced: false,
                     })
                     .collect();
                 let _ = queries::save_google_calendars(&conn, &rows);
@@ -1501,6 +1502,7 @@ pub async fn google_calendar_get_calendars(db: State<'_, DbState>) -> Result<Vec
                             foreground_color: Some(c.foreground_color),
                             is_visible: false,
                             is_synced: false,
+                            is_events_synced: false,
                         })
                         .collect();
                     let _ = queries::save_google_calendars(&conn, &rows);
@@ -1525,6 +1527,7 @@ pub async fn google_calendar_get_calendars(db: State<'_, DbState>) -> Result<Vec
             foreground_color: r.foreground_color.unwrap_or_else(|| "#FFFFFF".into()),
             is_visible: r.is_visible,
             is_synced: r.is_synced,
+            is_events_synced: r.is_events_synced,
         })
         .collect())
 }
@@ -1549,15 +1552,75 @@ pub fn google_calendar_set_synced_calendar(
 }
 
 #[tauri::command]
+pub fn google_calendar_set_events_calendar(
+    calendar_id: Option<String>,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::set_google_events_calendar(&conn, calendar_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn google_calendar_get_events_calendar(
+    db: State<'_, DbState>,
+) -> Result<Option<GoogleCalendarItem>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    let row = queries::get_google_events_calendar(&conn).map_err(|e| e.to_string())?;
+    Ok(row.map(|r| GoogleCalendarItem {
+        id: r.id,
+        summary: r.summary,
+        description: r.description,
+        primary: r.primary_cal,
+        background_color: r.background_color.unwrap_or_else(|| "#4285F4".into()),
+        foreground_color: r.foreground_color.unwrap_or_else(|| "#FFFFFF".into()),
+        is_visible: r.is_visible,
+        is_synced: r.is_synced,
+        is_events_synced: true,
+    }))
+}
+
+#[tauri::command]
+pub async fn subject_events_sync(
+    db: State<'_, DbState>,
+) -> Result<Vec<queries::SubjectEvent>, String> {
+    let token = match google_calendar::auth::ensure_valid_token(&db).await {
+        Ok(tok) => tok,
+        Err(_) => {
+            let conn = db.lock().map_err(|e| e.to_string())?;
+            return queries::subject_events_get_all(&conn).map_err(|e| e.to_string());
+        }
+    };
+
+    let events_cal = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::get_google_events_calendar(&conn).map_err(|e| e.to_string())?
+    };
+
+    if let Some(cal) = events_cal {
+        google_calendar::sync::sync_subject_events(&db, &token, &cal.id).await
+    } else {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::subject_events_get_all(&conn).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
 pub async fn google_calendar_sync_now(
     monday_ymd: String,
     db: State<'_, DbState>,
 ) -> Result<Vec<queries::ScheduledBlock>, String> {
     let token = google_calendar::auth::ensure_valid_token(&db).await?;
-    let synced_cal = {
+    let (synced_cal, events_cal) = {
         let conn = db.lock().map_err(|e| e.to_string())?;
-        queries::get_google_synced_calendar(&conn).map_err(|e| e.to_string())?
+        (
+            queries::get_google_synced_calendar(&conn).map_err(|e| e.to_string())?,
+            queries::get_google_events_calendar(&conn).map_err(|e| e.to_string())?,
+        )
     };
+
+    if let Some(cal) = events_cal {
+        let _ = google_calendar::sync::sync_subject_events(&db, &token, &cal.id).await;
+    }
 
     if let Some(cal) = synced_cal {
         google_calendar::sync::sync_calendar_two_way(&db, &token, &cal.id, &monday_ymd).await
@@ -1598,6 +1661,12 @@ pub async fn google_calendar_get_overlay_events(
                 let color = cal.background_color.clone().unwrap_or_else(|| "#4285f4".into());
                 let fg_color = cal.foreground_color.clone().unwrap_or_else(|| "#ffffff".into());
                 let title = ev.summary.unwrap_or_else(|| "Event".into());
+
+                // If this calendar is the events calendar and the title matches subject event pattern,
+                // do not duplicate it as an overlay event since it's already rendered as a subject event
+                if cal.is_events_synced && google_calendar::sync::parse_event_title(&title).is_some() {
+                    continue;
+                }
 
                 if let Some(ref start) = ev.start {
                     if let Some(ref dt_str) = start.date_time {
@@ -1699,9 +1768,23 @@ pub fn calendar_set_local_visible(visible: bool, db: State<'_, DbState>) -> Resu
 
 #[tauri::command]
 pub async fn subject_event_create(
-    payload: queries::CreateSubjectEventPayload,
+    mut payload: queries::CreateSubjectEventPayload,
     db: State<'_, DbState>,
 ) -> Result<queries::SubjectEvent, String> {
+    // Automatically assign to configured Google events calendar if present
+    let events_cal = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::get_google_events_calendar(&conn).map_err(|e| e.to_string())?
+    };
+
+    if let Some(ref cal) = events_cal {
+        payload.calendar_type = Some("google".to_string());
+        payload.google_calendar_id = Some(cal.id.clone());
+    } else {
+        payload.calendar_type = Some("local".to_string());
+        payload.google_calendar_id = None;
+    }
+
     let mut event = {
         let conn = db.lock().map_err(|e| e.to_string())?;
         queries::subject_event_create(&conn, payload).map_err(|e| e.to_string())?
@@ -1719,6 +1802,8 @@ pub async fn subject_event_create(
                         event.notes.as_deref(),
                         &event.event_date,
                         event.event_time.as_deref(),
+                        event.end_date.as_deref(),
+                        event.end_time.as_deref(),
                         event.is_all_day,
                         None,
                     ).await;
@@ -1727,17 +1812,8 @@ pub async fn subject_event_create(
                         Ok(g_event_id) => {
                             let conn = db.lock().map_err(|e| e.to_string())?;
                             event = queries::subject_event_update(&conn, event.id, queries::UpdateSubjectEventPayload {
-                                subject: None,
-                                name: None,
-                                event_type: None,
-                                event_date: None,
-                                event_time: None,
-                                is_all_day: None,
-                                calendar_type: None,
-                                google_calendar_id: None,
                                 google_event_id: Some(g_event_id),
-                                is_completed: None,
-                                notes: None,
+                                ..Default::default()
                             }).map_err(|e| e.to_string())?;
                         }
                         Err(e) => {
@@ -1779,6 +1855,8 @@ pub async fn subject_event_update(
                         event.notes.as_deref(),
                         &event.event_date,
                         event.event_time.as_deref(),
+                        event.end_date.as_deref(),
+                        event.end_time.as_deref(),
                         event.is_all_day,
                         None,
                     ).await {

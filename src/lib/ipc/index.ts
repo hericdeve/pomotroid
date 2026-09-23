@@ -191,6 +191,12 @@ export const googleCalendarGetOverlayEvents = (mondayYmd: string) =>
   invoke<GoogleOverlayEvent[]>('google_calendar_get_overlay_events', { mondayYmd });
 export const calendarGetLocalVisible = () => invoke<boolean>('calendar_get_local_visible');
 export const calendarSetLocalVisible = (visible: boolean) => invoke<void>('calendar_set_local_visible', { visible });
+export const googleCalendarSetEventsCalendar = (calendarId: string | null) =>
+  invoke<void>('google_calendar_set_events_calendar', { calendarId });
+export const googleCalendarGetEventsCalendar = () =>
+  invoke<GoogleCalendarItem | null>('google_calendar_get_events_calendar');
+export const subjectEventsSync = () =>
+  invoke<SubjectEvent[]>('subject_events_sync');
 
 // --- Academic / Subject Events commands ---
 export const subjectEventsGetAll = () => invoke<SubjectEvent[]>('subject_events_get_all');

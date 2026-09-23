@@ -94,6 +94,7 @@ pub async fn fetch_calendars(access_token: &str) -> Result<Vec<GoogleCalendarIte
                 foreground_color: item.foreground_color.unwrap_or_else(|| "#FFFFFF".into()),
                 is_visible: false,
                 is_synced: false,
+                is_events_synced: false,
             }
         })
         .collect();
@@ -284,6 +285,8 @@ pub async fn create_single_event(
     description: Option<&str>,
     event_date: &str,
     event_time: Option<&str>,
+    end_date: Option<&str>,
+    end_time: Option<&str>,
     is_all_day: bool,
     time_zone: Option<&str>,
 ) -> Result<String, String> {
@@ -297,16 +300,20 @@ pub async fn create_single_event(
         .unwrap_or_else(get_local_timezone);
 
     let (start_obj, end_obj) = if is_all_day || event_time.is_none() {
-        let next_day = if let Ok(d) = chrono::NaiveDate::parse_from_str(event_date, "%Y-%m-%d") {
+        let base_end_date = end_date.unwrap_or(event_date);
+        let next_day = if let Ok(d) = chrono::NaiveDate::parse_from_str(base_end_date, "%Y-%m-%d") {
             (d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
         } else {
-            event_date.to_string()
+            base_end_date.to_string()
         };
         (json!({ "date": event_date }), json!({ "date": next_day }))
     } else {
         let time_str = event_time.unwrap();
         let start_iso = format!("{}T{}:00", event_date, time_str);
-        let end_iso = if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&start_iso, "%Y-%m-%dT%H:%M:%S") {
+        let target_end_date = end_date.unwrap_or(event_date);
+        let end_iso = if let Some(e_time) = end_time {
+            format!("{}T{}:00", target_end_date, e_time)
+        } else if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&start_iso, "%Y-%m-%dT%H:%M:%S") {
             (dt + chrono::Duration::hours(1)).format("%Y-%m-%dT%H:%M:%S").to_string()
         } else {
             start_iso.clone()
@@ -360,6 +367,8 @@ pub async fn update_single_event(
     description: Option<&str>,
     event_date: &str,
     event_time: Option<&str>,
+    end_date: Option<&str>,
+    end_time: Option<&str>,
     is_all_day: bool,
     time_zone: Option<&str>,
 ) -> Result<(), String> {
@@ -374,16 +383,20 @@ pub async fn update_single_event(
         .unwrap_or_else(get_local_timezone);
 
     let (start_obj, end_obj) = if is_all_day || event_time.is_none() {
-        let next_day = if let Ok(d) = chrono::NaiveDate::parse_from_str(event_date, "%Y-%m-%d") {
+        let base_end_date = end_date.unwrap_or(event_date);
+        let next_day = if let Ok(d) = chrono::NaiveDate::parse_from_str(base_end_date, "%Y-%m-%d") {
             (d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
         } else {
-            event_date.to_string()
+            base_end_date.to_string()
         };
         (json!({ "date": event_date }), json!({ "date": next_day }))
     } else {
         let time_str = event_time.unwrap();
         let start_iso = format!("{}T{}:00", event_date, time_str);
-        let end_iso = if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&start_iso, "%Y-%m-%dT%H:%M:%S") {
+        let target_end_date = end_date.unwrap_or(event_date);
+        let end_iso = if let Some(e_time) = end_time {
+            format!("{}T{}:00", target_end_date, e_time)
+        } else if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&start_iso, "%Y-%m-%dT%H:%M:%S") {
             (dt + chrono::Duration::hours(1)).format("%Y-%m-%dT%H:%M:%S").to_string()
         } else {
             start_iso.clone()

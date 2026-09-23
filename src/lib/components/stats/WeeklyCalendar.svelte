@@ -955,24 +955,26 @@
             <!-- Academic / Subject Event Timed Markers -->
             {#each getTimedSubjectEventsForDay(dayIdx) as ev (ev.id)}
               {@const startMin = parseTimeToMinute(ev.event_time!)}
+              {@const endMin = ev.end_time ? parseTimeToMinute(ev.end_time) : startMin + 30}
               {@const top = startMin * PIXELS_PER_MINUTE}
+              {@const height = Math.max(20, (endMin - startMin) * PIXELS_PER_MINUTE)}
               {@const evBg = getSubjectColor(ev.subject)}
               {@const evFg = getContrastColor(evBg)}
               {@const typeIcon = getTypeIcon(ev.event_type)}
               <button
                 class="subject-milestone-marker"
                 class:is-completed={ev.is_completed}
-                style="top: {top}px; background-color: {evBg}; color: {evFg}; border-color: color-mix(in srgb, {evBg} 70%, #000000);"
+                style="top: {top}px; height: {height}px; background-color: {evBg}; color: {evFg}; border-color: color-mix(in srgb, {evBg} 70%, #000000);"
                 onclick={(e) => {
                   e.stopPropagation();
                   handleSubjectEventClick(ev);
                 }}
-                title="{typeIcon} {ev.subject}: {ev.name} ({ev.event_time}){ev.is_completed ? ' • Completed' : ''}"
+                title="{typeIcon} {ev.subject}: {ev.name} ({ev.event_time}{ev.end_time ? ' – ' + ev.end_time : ''}){ev.is_completed ? ' • Completed' : ''}"
               >
                 <div class="milestone-content">
                   <span class="milestone-icon">{typeIcon}</span>
                   <span class="milestone-title">{ev.name}</span>
-                  <span class="milestone-time">{ev.event_time}</span>
+                  <span class="milestone-time">{ev.event_time}{ev.end_time ? ' – ' + ev.end_time : ''}</span>
                 </div>
               </button>
             {/each}

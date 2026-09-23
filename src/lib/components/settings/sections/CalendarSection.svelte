@@ -12,6 +12,8 @@
     googleCalendarSyncNow,
     calendarGetLocalVisible,
     calendarSetLocalVisible,
+    googleCalendarSetEventsCalendar,
+    googleCalendarGetEventsCalendar,
   } from '$lib/ipc';
   import SettingsToggle from '$lib/components/settings/SettingsToggle.svelte';
   import type { GoogleAuthStatus, GoogleCalendarItem } from '$lib/types';
@@ -42,6 +44,7 @@
   let authErrorMsg = $state<string | null>(null);
 
   let syncedCalendar = $derived(calendars.find((c) => c.is_synced) || null);
+  let eventsCalendar = $derived(calendars.find((c) => c.is_events_synced) || null);
 
   function getMondayYmd(): string {
     const d = new Date();
@@ -191,6 +194,22 @@
     }
   }
 
+  async function handleSelectEventsCalendar(calId: string) {
+    const isCurrentlySelected = calendars.find((c) => c.id === calId)?.is_events_synced;
+    const targetId = isCurrentlySelected ? null : calId;
+
+    calendars = calendars.map((c) => ({
+      ...c,
+      is_events_synced: targetId === c.id,
+    }));
+
+    try {
+      await googleCalendarSetEventsCalendar(targetId);
+    } catch (e) {
+      await logError(`[calendar_settings] Failed to set events calendar: ${e}`);
+    }
+  }
+
   function openGoogleConsole() {
     openUrl('https://console.cloud.google.com/apis/credentials');
   }
@@ -288,7 +307,45 @@
     </div>
   {/if}
 
-  <!-- 3. Calendar Visibility & Overlays -->
+  <!-- 3. Academic Events Calendar -->
+  {#if authStatus.is_signed_in && calendars.length > 0}
+    <div class="group-heading">Academic Events Calendar</div>
+    <div class="desc-text">
+      Select a Google Calendar to sync academic events (exams, assignments, projects).
+      Events on this calendar with titles matching <strong>Subject:Event</strong> or <strong>Subject - Event</strong> will be automatically imported.
+    </div>
+
+    <div class="cals-list">
+      {#each calendars as cal (cal.id)}
+        <div class="cal-row" class:is-synced={cal.is_events_synced}>
+          <div class="cal-left">
+            <span class="cal-dot" style="background-color: {cal.background_color};"></span>
+            <div class="cal-meta">
+              <span class="cal-name">{cal.summary}</span>
+              {#if cal.primary}
+                <span class="primary-pill">Primary</span>
+              {/if}
+            </div>
+          </div>
+
+          <button
+            class="btn-sync-select"
+            class:active={cal.is_events_synced}
+            onclick={() => handleSelectEventsCalendar(cal.id)}
+            title={cal.is_events_synced ? 'Click to deselect' : 'Set as Events Calendar'}
+          >
+            {#if cal.is_events_synced}
+              <span class="active-badge">✓ Events Calendar</span>
+            {:else}
+              <span class="select-badge">Set as Events Calendar</span>
+            {/if}
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- 4. Calendar Visibility & Overlays -->
   <div class="group-heading">Calendar Visibility</div>
   <div class="desc-text">
     Choose which calendars appear in the Planning timetable grid.

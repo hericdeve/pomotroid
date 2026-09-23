@@ -2,8 +2,6 @@
   import { onMount } from 'svelte';
   import {
     subjectsGetAll,
-    googleCalendarGetStatus,
-    googleCalendarGetCalendars,
     subjectEventCreate,
     subjectEventUpdate,
     subjectEventDelete,
@@ -12,8 +10,6 @@
     SubjectEvent,
     SubjectEventType,
     SubjectStats,
-    GoogleCalendarItem,
-    GoogleAuthStatus,
     CreateSubjectEventPayload,
     UpdateSubjectEventPayload,
   } from '$lib/types';
@@ -41,17 +37,14 @@
   const isEditMode = $derived(!!event);
 
   let subjects = $state<SubjectStats[]>([]);
-  let calendars = $state<GoogleCalendarItem[]>([]);
-  let isGoogleSignedIn = $state(false);
-
   let name = $state('');
   let subject = $state('');
   let eventType = $state<SubjectEventType>('exam');
   let eventDate = $state('');
   let isAllDay = $state(false);
   let eventTime = $state('09:00');
-  let calendarType = $state<'local' | 'google'>('local');
-  let googleCalendarId = $state<string | null>(null);
+  let endDate = $state('');
+  let endTime = $state('');
   let notes = $state('');
   let isCompleted = $state(false);
 
@@ -75,21 +68,17 @@
     return `${y}-${m}-${day}`;
   }
 
+  function addOneHour(timeStr: string): string {
+    const [h, m] = timeStr.split(':').map(Number);
+    const newH = ((h || 0) + 1) % 24;
+    return `${String(newH).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+  }
+
   onMount(async () => {
     try {
-      const [subjs, gStatus] = await Promise.all([
-        subjectsGetAll().catch(() => []),
-        googleCalendarGetStatus().catch(() => ({ is_signed_in: false })),
-      ]);
-      subjects = subjs;
-      isGoogleSignedIn = (gStatus as GoogleAuthStatus).is_signed_in;
-
-      if (isGoogleSignedIn) {
-        const cals = await googleCalendarGetCalendars().catch(() => []);
-        calendars = cals;
-      }
+      subjects = await subjectsGetAll().catch(() => []);
     } catch (e) {
-      logError(`Failed to load data for EventModal: ${e}`);
+      logError(`Failed to load subjects for EventModal: ${e}`);
     }
 
     if (event) {
@@ -99,19 +88,20 @@
       eventDate = event.event_date;
       isAllDay = event.is_all_day;
       eventTime = event.event_time || '09:00';
-      calendarType = event.calendar_type === 'google' ? 'google' : 'local';
-      googleCalendarId = event.google_calendar_id;
+      endDate = event.end_date || event.event_date;
+      endTime = event.end_time || (event.event_time ? addOneHour(event.event_time) : '10:00');
       notes = event.notes || '';
       isCompleted = event.is_completed;
     } else {
       name = '';
       subject = initialSubject || (subjects.length > 0 ? subjects[0].name : '');
       eventType = 'assignment';
-      eventDate = initialDate || getTodayYmd();
+      const today = initialDate || getTodayYmd();
+      eventDate = today;
       isAllDay = false;
       eventTime = '09:00';
-      calendarType = 'local';
-      googleCalendarId = calendars.find(c => c.primary)?.id || calendars[0]?.id || null;
+      endDate = today;
+      endTime = '10:00';
       notes = '';
       isCompleted = false;
     }
@@ -145,8 +135,8 @@
           event_date: eventDate,
           is_all_day: isAllDay,
           event_time: isAllDay ? null : eventTime,
-          calendar_type: calendarType,
-          google_calendar_id: calendarType === 'google' ? googleCalendarId : null,
+          end_date: isAllDay ? null : (endDate || null),
+          end_time: isAllDay ? null : (endTime || null),
           notes: notes.trim() || null,
           is_completed: isCompleted,
         };
@@ -160,8 +150,8 @@
           event_date: eventDate,
           is_all_day: isAllDay,
           event_time: isAllDay ? null : eventTime,
-          calendar_type: calendarType,
-          google_calendar_id: calendarType === 'google' ? googleCalendarId : null,
+          end_date: isAllDay ? null : (endDate || null),
+          end_time: isAllDay ? null : (endTime || null),
           notes: notes.trim() || null,
         };
         const created = await subjectEventCreate(payload);
@@ -287,7 +277,7 @@
       <!-- Date & Time Row -->
       <div class="form-grid-2">
         <div class="form-row">
-          <label for="event-date-input">Due Date *</label>
+          <label for="event-date-input">Start Date *</label>
           <input
             id="event-date-input"
             type="date"
@@ -298,7 +288,7 @@
 
         <div class="form-row">
           <div class="time-header-row">
-            <label for="event-time-input">Time</label>
+            <label for="event-time-input">Start Time</label>
             <label class="all-day-checkbox-label">
               <input
                 type="checkbox"
@@ -320,60 +310,30 @@
         </div>
       </div>
 
-      <!-- Calendar Sync Destination -->
-      <div class="form-row">
-        <!-- svelte-ignore a11y_label_has_associated_control -->
-        <label>Calendar Destination</label>
-        <div class="calendar-choice-box">
-          <div class="toggle-group">
-            <button
-              type="button"
-              class:active={calendarType === 'local'}
-              onclick={() => {
-                calendarType = 'local';
-                googleCalendarId = null;
-              }}
-            >
-              <span>📅 Local Calendar</span>
-            </button>
-            <button
-              type="button"
-              class:active={calendarType === 'google'}
-              disabled={!isGoogleSignedIn}
-              onclick={() => {
-                calendarType = 'google';
-                if (!googleCalendarId && calendars.length > 0) {
-                  googleCalendarId = calendars.find(c => c.primary)?.id || calendars[0].id;
-                }
-              }}
-              title={!isGoogleSignedIn ? 'Sign in to Google in Settings to sync' : 'Sync to Google Calendar'}
-            >
-              <span>Google Calendar</span>
-            </button>
+      <!-- End Date & Time Row (only for non-all-day events) -->
+      {#if !isAllDay}
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label for="event-end-date-input">End Date</label>
+            <input
+              id="event-end-date-input"
+              type="date"
+              bind:value={endDate}
+              class="custom-input"
+              min={eventDate}
+            />
           </div>
-
-          {#if calendarType === 'google'}
-            <div class="google-calendar-select-wrapper">
-              {#if calendars.length > 0}
-                <label for="google-cal-picker" class="sublabel">Target Google Calendar:</label>
-                <select
-                  id="google-cal-picker"
-                  bind:value={googleCalendarId}
-                  class="custom-select"
-                >
-                  {#each calendars as cal}
-                    <option value={cal.id}>
-                      {cal.summary} {cal.primary ? '(Primary)' : ''}
-                    </option>
-                  {/each}
-                </select>
-              {:else}
-                <span class="hint-muted">No Google Calendars found.</span>
-              {/if}
-            </div>
-          {/if}
+          <div class="form-row">
+            <label for="event-end-time-input">End Time</label>
+            <input
+              id="event-end-time-input"
+              type="time"
+              bind:value={endTime}
+              class="custom-input"
+            />
+          </div>
         </div>
-      </div>
+      {/if}
 
       <!-- Notes Field -->
       <div class="form-row">
@@ -530,14 +490,7 @@
     font-weight: 500;
   }
 
-  .sublabel {
-    font-size: 0.76rem;
-    margin-top: 6px;
-    display: block;
-  }
-
   .custom-input,
-  .custom-select,
   .custom-textarea {
     width: 100%;
     padding: 8px 12px;
@@ -553,15 +506,9 @@
   }
 
   .custom-input:focus,
-  .custom-select:focus,
   .custom-textarea:focus {
     border-color: var(--color-focus-round);
     background: color-mix(in oklch, var(--color-foreground) 15%, transparent);
-  }
-
-  .custom-select option {
-    background: var(--color-background);
-    color: var(--color-foreground);
   }
 
   .subject-input-wrapper {
@@ -634,63 +581,6 @@
     background: color-mix(in oklch, var(--color-foreground) 4%, transparent);
     border-radius: 4px;
     border: 1px dashed var(--color-separator);
-  }
-
-  /* Calendar Toggle Box */
-  .calendar-choice-box {
-    background: color-mix(in oklch, var(--color-foreground) 4%, transparent);
-    border: 1px solid var(--color-separator);
-    border-radius: 4px;
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .toggle-group {
-    display: flex;
-    gap: 6px;
-  }
-
-  .toggle-group button {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
-    border: 1px solid transparent;
-    color: var(--color-foreground);
-    padding: 7px;
-    border-radius: 4px;
-    font-size: 0.82rem;
-    cursor: pointer;
-    transition: var(--transition-default);
-  }
-
-  .toggle-group button:hover:not(.active):not(:disabled) {
-    background: color-mix(in oklch, var(--color-foreground) 15%, transparent);
-  }
-
-  .toggle-group button.active {
-    background: var(--color-focus-round);
-    color: var(--color-background);
-    font-weight: 600;
-  }
-
-  .toggle-group button:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  .google-calendar-select-wrapper {
-    margin-top: 2px;
-  }
-
-  .hint-muted {
-    font-size: 0.78rem;
-    color: var(--color-foreground-darker);
-    font-style: italic;
   }
 
   /* Completion Toggle */

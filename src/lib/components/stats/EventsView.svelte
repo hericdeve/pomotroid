@@ -5,6 +5,7 @@
     subjectEventToggleCompleted,
     subjectEventDelete,
     subjectsGetAll,
+    subjectEventsSync,
     googleCalendarGetCalendars,
   } from '$lib/ipc';
   import type {
@@ -48,6 +49,8 @@
   async function loadData() {
     try {
       loading = true;
+      // Trigger Google Calendar event sync first, then load all data
+      await subjectEventsSync().catch(() => {});
       const [evs, subjs, cals] = await Promise.all([
         subjectEventsGetAll().catch(() => []),
         subjectsGetAll().catch(() => []),
@@ -287,12 +290,20 @@
     });
   }
 
-  function formatTimeFriendly(timeStr: string | null, isAllDay: boolean): string {
+  function formatTimeFriendly(timeStr: string | null, isAllDay: boolean, endTimeStr?: string | null): string {
     if (isAllDay || !timeStr) return 'All day';
     const [hh, mm] = timeStr.split(':').map(Number);
     const d = new Date();
     d.setHours(hh, mm, 0, 0);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const startFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (endTimeStr) {
+      const [eh, em] = endTimeStr.split(':').map(Number);
+      const e = new Date();
+      e.setHours(eh, em, 0, 0);
+      const endFormatted = e.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `${startFormatted} – ${endFormatted}`;
+    }
+    return startFormatted;
   }
 
   function getCalendarName(ev: SubjectEvent): string {
@@ -494,7 +505,7 @@
               <td class="col-due">
                 <div class="due-cell">
                   <span class="due-date">{formatDateFriendly(ev.event_date)}</span>
-                  <span class="due-time">{formatTimeFriendly(ev.event_time, ev.is_all_day)}</span>
+                  <span class="due-time">{formatTimeFriendly(ev.event_time, ev.is_all_day, ev.end_time)}</span>
                 </div>
               </td>
 

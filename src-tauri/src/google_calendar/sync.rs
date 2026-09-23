@@ -269,6 +269,240 @@ pub async fn push_block_delete_to_google(
     api::delete_event(access_token, calendar_id, google_event_id).await
 }
 
+/// Parses an event title according to patterns:
+/// 1. `{subject name}:{event name}`
+/// 2. `{subject name} - {event name}`
+/// Returns Some((subject, event_name)) if matching, trimmed and non-empty.
+pub fn parse_event_title(title: &str) -> Option<(String, String)> {
+    let title = title.trim();
+    if let Some((subj, ev)) = title.split_once(':') {
+        let subj = subj.trim();
+        let ev = ev.trim();
+        if !subj.is_empty() && !ev.is_empty() {
+            return Some((subj.to_string(), ev.to_string()));
+        }
+    }
+    if let Some((subj, ev)) = title.split_once(" - ") {
+        let subj = subj.trim();
+        let ev = ev.trim();
+        if !subj.is_empty() && !ev.is_empty() {
+            return Some((subj.to_string(), ev.to_string()));
+        }
+    }
+    None
+}
+
+pub fn infer_event_type(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.contains("exam") || lower.contains("midterm") || lower.contains("final") || lower.contains("test") {
+        "exam".to_string()
+    } else if lower.contains("quiz") {
+        "quiz".to_string()
+    } else if lower.contains("project") {
+        "project".to_string()
+    } else if lower.contains("assignment") || lower.contains("homework") || lower.contains("hw") || lower.contains("essay") || lower.contains("paper") || lower.contains("lab") {
+        "assignment".to_string()
+    } else {
+        "assignment".to_string()
+    }
+}
+
+pub async fn sync_subject_events(
+    db: &DbState,
+    access_token: &str,
+    calendar_id: &str,
+) -> Result<Vec<queries::SubjectEvent>, String> {
+    // 1. Fetch local subject events belonging to this calendar
+    let local_synced_events = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let all = queries::subject_events_get_all(&conn).map_err(|e| format!("DB query error: {e}"))?;
+        all.into_iter()
+            .filter(|e| e.calendar_type == "google" && e.google_calendar_id.as_deref() == Some(calendar_id))
+            .collect::<Vec<_>>()
+    };
+
+    // 2. Push any unlinked local events to Google Calendar
+    for local_ev in &local_synced_events {
+        if local_ev.google_event_id.is_none() {
+            let summary = format!("{}: {}", local_ev.subject, local_ev.name);
+            match api::create_single_event(
+                access_token,
+                calendar_id,
+                &summary,
+                local_ev.notes.as_deref(),
+                &local_ev.event_date,
+                local_ev.event_time.as_deref(),
+                local_ev.end_date.as_deref(),
+                local_ev.end_time.as_deref(),
+                local_ev.is_all_day,
+                None,
+            ).await {
+                Ok(gid) => {
+                    let conn = db.lock().map_err(|e| e.to_string())?;
+                    let _ = queries::subject_event_update(
+                        &conn,
+                        local_ev.id,
+                        queries::UpdateSubjectEventPayload {
+                            google_event_id: Some(gid),
+                            ..Default::default()
+                        },
+                    );
+                }
+                Err(e) => {
+                    log::error!("[gcal] failed to push unlinked subject event #{} to Google Calendar: {e}", local_ev.id);
+                }
+            }
+        }
+    }
+
+    // Re-fetch local events
+    let local_synced_events = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let all = queries::subject_events_get_all(&conn).map_err(|e| format!("DB query error: {e}"))?;
+        all.into_iter()
+            .filter(|e| e.calendar_type == "google" && e.google_calendar_id.as_deref() == Some(calendar_id))
+            .collect::<Vec<_>>()
+    };
+
+    // 3. Fetch events from Google Calendar (-90 days past to +365 days future)
+    let now = chrono::Utc::now();
+    let time_min = (now - Duration::days(90)).to_rfc3339();
+    let time_max = (now + Duration::days(365)).to_rfc3339();
+    let google_events = api::fetch_events(access_token, calendar_id, &time_min, &time_max).await?;
+
+    let mut seen_google_event_ids = std::collections::HashSet::new();
+
+    // 4. Reconcile Google events into local SQLite database
+    {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+
+        for event in &google_events {
+            let effective_event_id = event
+                .recurring_event_id
+                .as_deref()
+                .unwrap_or(&event.id);
+            seen_google_event_ids.insert(effective_event_id.to_string());
+            seen_google_event_ids.insert(event.id.clone());
+
+            let summary = event.summary.as_deref().unwrap_or("").trim();
+            let Some((subject, event_name)) = parse_event_title(summary) else {
+                continue;
+            };
+
+            // Extract dates and times
+            let (event_date, event_time, end_date, end_time, is_all_day) = if let Some(ref start) = event.start {
+                if let Some(ref dt_str) = start.date_time {
+                    if let Ok(s_dt) = DateTime::parse_from_rfc3339(dt_str) {
+                        let s_local = s_dt.with_timezone(&Local);
+                        let e_info = if let Some(ref end) = event.end {
+                            if let Some(ref edt_str) = end.date_time {
+                                if let Ok(e_dt) = DateTime::parse_from_rfc3339(edt_str) {
+                                    let e_local = e_dt.with_timezone(&Local);
+                                    (Some(e_local.format("%Y-%m-%d").to_string()), Some(e_local.format("%H:%M").to_string()))
+                                } else {
+                                    (Some(s_local.format("%Y-%m-%d").to_string()), None)
+                                }
+                            } else {
+                                (Some(s_local.format("%Y-%m-%d").to_string()), None)
+                            }
+                        } else {
+                            (Some(s_local.format("%Y-%m-%d").to_string()), None)
+                        };
+
+                        (
+                            s_local.format("%Y-%m-%d").to_string(),
+                            Some(s_local.format("%H:%M").to_string()),
+                            e_info.0,
+                            e_info.1,
+                            false,
+                        )
+                    } else {
+                        continue;
+                    }
+                } else if let Some(ref d_str) = start.date {
+                    let end_d = event.end.as_ref().and_then(|e| e.date.clone());
+                    (
+                        d_str.clone(),
+                        None,
+                        end_d,
+                        None,
+                        true,
+                    )
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            };
+
+            // Check if block already exists
+            let existing = local_synced_events.iter().find(|e| {
+                e.google_event_id.as_deref() == Some(effective_event_id)
+                    || e.google_event_id.as_deref() == Some(&event.id)
+            });
+
+            if let Some(ex) = existing {
+                let _ = queries::subject_event_update(
+                    &conn,
+                    ex.id,
+                    queries::UpdateSubjectEventPayload {
+                        subject: Some(subject),
+                        name: Some(event_name),
+                        event_date: Some(event_date),
+                        event_time,
+                        end_date,
+                        end_time,
+                        is_all_day: Some(is_all_day),
+                        notes: event.description.clone(),
+                        google_event_id: Some(effective_event_id.to_string()),
+                        ..Default::default()
+                    },
+                );
+            } else {
+                let event_type = infer_event_type(&event_name);
+                let created = queries::subject_event_create(
+                    &conn,
+                    queries::CreateSubjectEventPayload {
+                        subject,
+                        name: event_name,
+                        event_type,
+                        event_date,
+                        event_time,
+                        end_date,
+                        end_time,
+                        is_all_day,
+                        calendar_type: Some("google".to_string()),
+                        google_calendar_id: Some(calendar_id.to_string()),
+                        notes: event.description.clone(),
+                    },
+                );
+                if let Ok(c) = created {
+                    let _ = queries::subject_event_update(
+                        &conn,
+                        c.id,
+                        queries::UpdateSubjectEventPayload {
+                            google_event_id: Some(effective_event_id.to_string()),
+                            ..Default::default()
+                        },
+                    );
+                }
+            }
+        }
+
+        // Clean up local events removed from Google Calendar
+        for local_ev in local_synced_events {
+            if let Some(ref gid) = local_ev.google_event_id {
+                if !seen_google_event_ids.contains(gid) {
+                    let _ = queries::subject_event_delete(&conn, local_ev.id);
+                }
+            }
+        }
+    }
+
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::subject_events_get_all(&conn).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,6 +534,46 @@ mod tests {
     fn test_local_timezone_is_valid() {
         let tz = api::get_local_timezone();
         assert!(!tz.is_empty());
+    }
+
+    #[test]
+    fn test_parse_event_title_patterns() {
+        // Pattern 1: {subject}:{event}
+        assert_eq!(
+            parse_event_title("Biology: Midterm Exam"),
+            Some(("Biology".to_string(), "Midterm Exam".to_string()))
+        );
+        assert_eq!(
+            parse_event_title("Math : Final Exam"),
+            Some(("Math".to_string(), "Final Exam".to_string()))
+        );
+        assert_eq!(
+            parse_event_title("Physics:Final"),
+            Some(("Physics".to_string(), "Final".to_string()))
+        );
+
+        // Pattern 2: {subject} - {event}
+        assert_eq!(
+            parse_event_title("Calculus - Midterm 2"),
+            Some(("Calculus".to_string(), "Midterm 2".to_string()))
+        );
+        assert_eq!(
+            parse_event_title("Pre-Calculus - Final Exam"),
+            Some(("Pre-Calculus".to_string(), "Final Exam".to_string()))
+        );
+        assert_eq!(
+            parse_event_title("CS 101 - Project Milestone 1 - Alpha"),
+            Some(("CS 101".to_string(), "Project Milestone 1 - Alpha".to_string()))
+        );
+
+        // Non-matching
+        assert_eq!(parse_event_title("Algorithms"), None);
+        assert_eq!(parse_event_title("Dentist Appointment"), None);
+        assert_eq!(parse_event_title("Team Meeting 2pm"), None);
+        assert_eq!(parse_event_title(":"), None);
+        assert_eq!(parse_event_title(" - "), None);
+        assert_eq!(parse_event_title("Math:"), None);
+        assert_eq!(parse_event_title(":Exam"), None);
     }
 }
 

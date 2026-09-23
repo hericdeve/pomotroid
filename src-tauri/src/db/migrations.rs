@@ -354,6 +354,14 @@ const MIGRATION_19: &str = "
     INSERT INTO schema_version VALUES (19);
 ";
 
+const MIGRATION_20: &str = "
+    ALTER TABLE subject_events ADD COLUMN end_date TEXT;
+    ALTER TABLE subject_events ADD COLUMN end_time TEXT;
+    ALTER TABLE google_calendars ADD COLUMN is_events_synced INTEGER NOT NULL DEFAULT 0;
+
+    INSERT INTO schema_version VALUES (20);
+";
+
 
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
@@ -557,6 +565,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_19 complete");
     }
 
+    if version < 20 {
+        log::info!("[db/migrations] applying MIGRATION_20: subject events end times and events calendar sync flag");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_20} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_20 complete");
+    }
+
     Ok(())
 }
 
@@ -592,7 +606,7 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 19);
+        assert_eq!(v, 20);
     }
 
     #[test]

@@ -194,6 +194,7 @@ export interface GoogleCalendarItem {
   foreground_color: string;
   is_visible: boolean;
   is_synced: boolean;
+  is_events_synced: boolean;
 }
 
 export interface GoogleOverlayEvent {
@@ -342,6 +343,8 @@ export interface SubjectEvent {
   event_type: SubjectEventType | string;
   event_date: string; // YYYY-MM-DD
   event_time: string | null; // HH:MM
+  end_date: string | null; // YYYY-MM-DD
+  end_time: string | null; // HH:MM
   is_all_day: boolean;
   calendar_type: 'local' | 'google' | string;
   google_calendar_id: string | null;
@@ -358,6 +361,8 @@ export interface CreateSubjectEventPayload {
   event_type: SubjectEventType | string;
   event_date: string;
   event_time?: string | null;
+  end_date?: string | null;
+  end_time?: string | null;
   is_all_day?: boolean;
   calendar_type?: 'local' | 'google';
   google_calendar_id?: string | null;
@@ -370,6 +375,8 @@ export interface UpdateSubjectEventPayload {
   event_type?: SubjectEventType | string;
   event_date?: string;
   event_time?: string | null;
+  end_date?: string | null;
+  end_time?: string | null;
   is_all_day?: boolean;
   calendar_type?: 'local' | 'google';
   google_calendar_id?: string | null;

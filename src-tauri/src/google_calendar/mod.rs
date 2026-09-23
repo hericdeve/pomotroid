@@ -22,6 +22,7 @@ pub struct GoogleCalendarItem {
     pub foreground_color: String,
     pub is_visible: bool,
     pub is_synced: bool,
+    pub is_events_synced: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -1651,6 +1651,7 @@ mod tests {
                 foreground_color: None,
                 is_visible: false,
                 is_synced: false,
+                is_events_synced: false,
             },
             GoogleCalendarRow {
                 id: "secondary-2".into(),
@@ -1661,6 +1662,7 @@ mod tests {
                 foreground_color: None,
                 is_visible: false,
                 is_synced: false,
+                is_events_synced: false,
             },
         ];
         save_google_calendars(&conn, &cals).unwrap();
@@ -1686,6 +1688,7 @@ mod tests {
                 foreground_color: None,
                 is_visible: false,
                 is_synced: false,
+                is_events_synced: false,
             },
         ];
         save_google_calendars(&conn, &cals).unwrap();
@@ -1705,13 +1708,15 @@ mod tests {
     fn test_subject_event_crud() {
         let conn = setup();
 
-        // 1. Create event
+        // 1. Create event with end time and end date
         let created = subject_event_create(&conn, CreateSubjectEventPayload {
             subject: "Algorithms".to_string(),
             name: "Midterm Exam 1".to_string(),
             event_type: "exam".to_string(),
             event_date: "2026-10-15".to_string(),
             event_time: Some("14:30".to_string()),
+            end_date: Some("2026-10-15".to_string()),
+            end_time: Some("16:00".to_string()),
             is_all_day: false,
             calendar_type: Some("local".to_string()),
             google_calendar_id: None,
@@ -1723,6 +1728,8 @@ mod tests {
         assert_eq!(created.event_type, "exam");
         assert_eq!(created.event_date, "2026-10-15");
         assert_eq!(created.event_time, Some("14:30".to_string()));
+        assert_eq!(created.end_date, Some("2026-10-15".to_string()));
+        assert_eq!(created.end_time, Some("16:00".to_string()));
         assert!(!created.is_all_day);
         assert!(!created.is_completed);
 
@@ -1738,6 +1745,7 @@ mod tests {
         let all = subject_events_get_all(&conn).unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, created.id);
+        assert_eq!(all[0].end_time, Some("16:00".to_string()));
 
         // 3. Fetch by date range
         let range = subject_events_get_by_date_range(&conn, "2026-10-01", "2026-10-31").unwrap();
@@ -1753,6 +1761,8 @@ mod tests {
             event_type: None,
             event_date: Some("2026-10-16".to_string()),
             event_time: Some("15:00".to_string()),
+            end_date: Some("2026-10-16".to_string()),
+            end_time: Some("17:00".to_string()),
             is_all_day: None,
             calendar_type: None,
             google_calendar_id: None,
@@ -1764,6 +1774,8 @@ mod tests {
         assert_eq!(updated.name, "Midterm Exam 1 (Rescheduled)");
         assert_eq!(updated.event_date, "2026-10-16");
         assert_eq!(updated.event_time, Some("15:00".to_string()));
+        assert_eq!(updated.end_date, Some("2026-10-16".to_string()));
+        assert_eq!(updated.end_time, Some("17:00".to_string()));
         assert_eq!(updated.google_event_id, Some("g_ev_123".to_string()));
         assert!(updated.is_completed);
 
@@ -1776,6 +1788,35 @@ mod tests {
         subject_event_delete(&conn, created.id).unwrap();
         let after_delete = subject_event_get_by_id(&conn, created.id).unwrap();
         assert!(after_delete.is_none());
+    }
+
+    #[test]
+    fn google_calendars_events_sync_setting() {
+        let conn = setup();
+        let cals = vec![
+            GoogleCalendarRow {
+                id: "cal-academic".into(),
+                summary: "University".into(),
+                description: None,
+                primary_cal: false,
+                background_color: None,
+                foreground_color: None,
+                is_visible: false,
+                is_synced: false,
+                is_events_synced: false,
+            },
+        ];
+        save_google_calendars(&conn, &cals).unwrap();
+
+        set_google_events_calendar(&conn, Some("cal-academic")).unwrap();
+        let events_cal = get_google_events_calendar(&conn).unwrap();
+        assert!(events_cal.is_some());
+        assert_eq!(events_cal.unwrap().id, "cal-academic");
+
+        // Deselect
+        set_google_events_calendar(&conn, None).unwrap();
+        let events_cal = get_google_events_calendar(&conn).unwrap();
+        assert!(events_cal.is_none());
     }
 }
 
@@ -2288,6 +2329,7 @@ pub struct GoogleCalendarRow {
     pub foreground_color: Option<String>,
     pub is_visible: bool,
     pub is_synced: bool,
+    pub is_events_synced: bool,
 }
 
 pub fn get_google_auth(conn: &Connection) -> Result<Option<GoogleAuthRow>> {
@@ -2378,7 +2420,7 @@ pub fn clear_google_auth(conn: &Connection) -> Result<()> {
 
 pub fn get_google_calendars(conn: &Connection) -> Result<Vec<GoogleCalendarRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced
+        "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced, is_events_synced
          FROM google_calendars
          ORDER BY primary_cal DESC, summary ASC"
     )?;
@@ -2393,6 +2435,7 @@ pub fn get_google_calendars(conn: &Connection) -> Result<Vec<GoogleCalendarRow>>
             foreground_color: row.get(5)?,
             is_visible: row.get::<_, i32>(6)? != 0,
             is_synced: row.get::<_, i32>(7)? != 0,
+            is_events_synced: row.get::<_, i32>(8)? != 0,
         })
     })?;
 
@@ -2407,8 +2450,8 @@ pub fn save_google_calendars(conn: &Connection, calendars: &[GoogleCalendarRow])
     let now = unix_now();
     for cal in calendars {
         conn.execute(
-            "INSERT INTO google_calendars (id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "INSERT INTO google_calendars (id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced, is_events_synced, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(id) DO UPDATE SET
                 summary = excluded.summary,
                 description = excluded.description,
@@ -2425,6 +2468,7 @@ pub fn save_google_calendars(conn: &Connection, calendars: &[GoogleCalendarRow])
                 cal.foreground_color,
                 cal.is_visible as i32,
                 cal.is_synced as i32,
+                cal.is_events_synced as i32,
                 now,
             ],
         )?;
@@ -2453,7 +2497,7 @@ pub fn set_google_synced_calendar(conn: &Connection, calendar_id: Option<&str>) 
 
 pub fn get_google_synced_calendar(conn: &Connection) -> Result<Option<GoogleCalendarRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced
+        "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced, is_events_synced
          FROM google_calendars
          WHERE is_synced = 1
          LIMIT 1"
@@ -2470,6 +2514,47 @@ pub fn get_google_synced_calendar(conn: &Connection) -> Result<Option<GoogleCale
             foreground_color: row.get(5)?,
             is_visible: row.get::<_, i32>(6)? != 0,
             is_synced: true,
+            is_events_synced: row.get::<_, i32>(8)? != 0,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn set_google_events_calendar(conn: &Connection, calendar_id: Option<&str>) -> Result<()> {
+    conn.execute("UPDATE google_calendars SET is_events_synced = 0, updated_at = ?1", params![unix_now()])?;
+    if let Some(id) = calendar_id {
+        conn.execute(
+            "UPDATE google_calendars SET is_events_synced = 1, is_visible = 1, updated_at = ?1 WHERE id = ?2",
+            params![unix_now(), id],
+        )?;
+        let _ = crate::settings::save_setting(conn, "google_calendar_events_id", id);
+    } else {
+        let _ = crate::settings::save_setting(conn, "google_calendar_events_id", "");
+    }
+    Ok(())
+}
+
+pub fn get_google_events_calendar(conn: &Connection) -> Result<Option<GoogleCalendarRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, summary, description, primary_cal, background_color, foreground_color, is_visible, is_synced, is_events_synced
+         FROM google_calendars
+         WHERE is_events_synced = 1
+         LIMIT 1"
+    )?;
+
+    let mut rows = stmt.query([])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(GoogleCalendarRow {
+            id: row.get(0)?,
+            summary: row.get(1)?,
+            description: row.get(2)?,
+            primary_cal: row.get::<_, i32>(3)? != 0,
+            background_color: row.get(4)?,
+            foreground_color: row.get(5)?,
+            is_visible: row.get::<_, i32>(6)? != 0,
+            is_synced: row.get::<_, i32>(7)? != 0,
+            is_events_synced: true,
         }))
     } else {
         Ok(None)
@@ -2488,6 +2573,8 @@ pub struct SubjectEvent {
     pub event_type: String, // "exam" | "assignment" | "project" | "quiz" | "other"
     pub event_date: String, // "YYYY-MM-DD"
     pub event_time: Option<String>, // "HH:MM"
+    pub end_date: Option<String>, // "YYYY-MM-DD"
+    pub end_time: Option<String>, // "HH:MM"
     pub is_all_day: bool,
     pub calendar_type: String, // "local" | "google"
     pub google_calendar_id: Option<String>,
@@ -2505,19 +2592,23 @@ pub struct CreateSubjectEventPayload {
     pub event_type: String,
     pub event_date: String,
     pub event_time: Option<String>,
+    pub end_date: Option<String>,
+    pub end_time: Option<String>,
     pub is_all_day: bool,
     pub calendar_type: Option<String>,
     pub google_calendar_id: Option<String>,
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateSubjectEventPayload {
     pub subject: Option<String>,
     pub name: Option<String>,
     pub event_type: Option<String>,
     pub event_date: Option<String>,
     pub event_time: Option<String>,
+    pub end_date: Option<String>,
+    pub end_time: Option<String>,
     pub is_all_day: Option<bool>,
     pub calendar_type: Option<String>,
     pub google_calendar_id: Option<String>,
@@ -2528,7 +2619,7 @@ pub struct UpdateSubjectEventPayload {
 
 pub fn subject_events_get_all(conn: &Connection) -> Result<Vec<SubjectEvent>> {
     let mut stmt = conn.prepare(
-        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+        "SELECT id, subject, name, event_type, event_date, event_time, end_date, end_time, is_all_day,
                 calendar_type, google_calendar_id, google_event_id, is_completed,
                 notes, created_at, updated_at
          FROM subject_events
@@ -2543,14 +2634,16 @@ pub fn subject_events_get_all(conn: &Connection) -> Result<Vec<SubjectEvent>> {
             event_type: r.get(3)?,
             event_date: r.get(4)?,
             event_time: r.get(5)?,
-            is_all_day: r.get::<_, i32>(6)? != 0,
-            calendar_type: r.get(7)?,
-            google_calendar_id: r.get(8)?,
-            google_event_id: r.get(9)?,
-            is_completed: r.get::<_, i32>(10)? != 0,
-            notes: r.get(11)?,
-            created_at: r.get(12)?,
-            updated_at: r.get(13)?,
+            end_date: r.get(6)?,
+            end_time: r.get(7)?,
+            is_all_day: r.get::<_, i32>(8)? != 0,
+            calendar_type: r.get(9)?,
+            google_calendar_id: r.get(10)?,
+            google_event_id: r.get(11)?,
+            is_completed: r.get::<_, i32>(12)? != 0,
+            notes: r.get(13)?,
+            created_at: r.get(14)?,
+            updated_at: r.get(15)?,
         })
     })?;
 
@@ -2563,7 +2656,7 @@ pub fn subject_events_get_all(conn: &Connection) -> Result<Vec<SubjectEvent>> {
 
 pub fn subject_events_get_by_date_range(conn: &Connection, start_date: &str, end_date: &str) -> Result<Vec<SubjectEvent>> {
     let mut stmt = conn.prepare(
-        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+        "SELECT id, subject, name, event_type, event_date, event_time, end_date, end_time, is_all_day,
                 calendar_type, google_calendar_id, google_event_id, is_completed,
                 notes, created_at, updated_at
          FROM subject_events
@@ -2579,14 +2672,16 @@ pub fn subject_events_get_by_date_range(conn: &Connection, start_date: &str, end
             event_type: r.get(3)?,
             event_date: r.get(4)?,
             event_time: r.get(5)?,
-            is_all_day: r.get::<_, i32>(6)? != 0,
-            calendar_type: r.get(7)?,
-            google_calendar_id: r.get(8)?,
-            google_event_id: r.get(9)?,
-            is_completed: r.get::<_, i32>(10)? != 0,
-            notes: r.get(11)?,
-            created_at: r.get(12)?,
-            updated_at: r.get(13)?,
+            end_date: r.get(6)?,
+            end_time: r.get(7)?,
+            is_all_day: r.get::<_, i32>(8)? != 0,
+            calendar_type: r.get(9)?,
+            google_calendar_id: r.get(10)?,
+            google_event_id: r.get(11)?,
+            is_completed: r.get::<_, i32>(12)? != 0,
+            notes: r.get(13)?,
+            created_at: r.get(14)?,
+            updated_at: r.get(15)?,
         })
     })?;
 
@@ -2609,15 +2704,17 @@ pub fn subject_event_create(conn: &Connection, payload: CreateSubjectEventPayloa
 
     conn.execute(
         "INSERT INTO subject_events (
-            subject, name, event_type, event_date, event_time, is_all_day,
+            subject, name, event_type, event_date, event_time, end_date, end_time, is_all_day,
             calendar_type, google_calendar_id, is_completed, notes, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, ?10, ?10)",
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11, ?12, ?12)",
         params![
             payload.subject.trim(),
             payload.name.trim(),
             payload.event_type.trim(),
             payload.event_date.trim(),
             payload.event_time.as_deref().map(|s| s.trim()),
+            payload.end_date.as_deref().map(|s| s.trim()),
+            payload.end_time.as_deref().map(|s| s.trim()),
             payload.is_all_day as i32,
             cal_type,
             payload.google_calendar_id,
@@ -2635,6 +2732,8 @@ pub fn subject_event_create(conn: &Connection, payload: CreateSubjectEventPayloa
         event_type: payload.event_type.trim().to_string(),
         event_date: payload.event_date.trim().to_string(),
         event_time: payload.event_time.map(|s| s.trim().to_string()),
+        end_date: payload.end_date.map(|s| s.trim().to_string()),
+        end_time: payload.end_time.map(|s| s.trim().to_string()),
         is_all_day: payload.is_all_day,
         calendar_type: cal_type,
         google_calendar_id: payload.google_calendar_id,
@@ -2651,7 +2750,7 @@ pub fn subject_event_update(conn: &Connection, id: i64, payload: UpdateSubjectEv
 
     // Fetch existing
     let mut existing = conn.query_row(
-        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+        "SELECT id, subject, name, event_type, event_date, event_time, end_date, end_time, is_all_day,
                 calendar_type, google_calendar_id, google_event_id, is_completed,
                 notes, created_at, updated_at
          FROM subject_events WHERE id = ?1",
@@ -2664,14 +2763,16 @@ pub fn subject_event_update(conn: &Connection, id: i64, payload: UpdateSubjectEv
                 event_type: r.get(3)?,
                 event_date: r.get(4)?,
                 event_time: r.get(5)?,
-                is_all_day: r.get::<_, i32>(6)? != 0,
-                calendar_type: r.get(7)?,
-                google_calendar_id: r.get(8)?,
-                google_event_id: r.get(9)?,
-                is_completed: r.get::<_, i32>(10)? != 0,
-                notes: r.get(11)?,
-                created_at: r.get(12)?,
-                updated_at: r.get(13)?,
+                end_date: r.get(6)?,
+                end_time: r.get(7)?,
+                is_all_day: r.get::<_, i32>(8)? != 0,
+                calendar_type: r.get(9)?,
+                google_calendar_id: r.get(10)?,
+                google_event_id: r.get(11)?,
+                is_completed: r.get::<_, i32>(12)? != 0,
+                notes: r.get(13)?,
+                created_at: r.get(14)?,
+                updated_at: r.get(15)?,
             })
         },
     )?;
@@ -2696,6 +2797,12 @@ pub fn subject_event_update(conn: &Connection, id: i64, payload: UpdateSubjectEv
     if let Some(time) = payload.event_time {
         existing.event_time = if time.trim().is_empty() { None } else { Some(time.trim().to_string()) };
     }
+    if let Some(edate) = payload.end_date {
+        existing.end_date = if edate.trim().is_empty() { None } else { Some(edate.trim().to_string()) };
+    }
+    if let Some(etime) = payload.end_time {
+        existing.end_time = if etime.trim().is_empty() { None } else { Some(etime.trim().to_string()) };
+    }
     if let Some(all_day) = payload.is_all_day {
         existing.is_all_day = all_day;
     }
@@ -2719,15 +2826,18 @@ pub fn subject_event_update(conn: &Connection, id: i64, payload: UpdateSubjectEv
     conn.execute(
         "UPDATE subject_events SET
             subject = ?1, name = ?2, event_type = ?3, event_date = ?4, event_time = ?5,
-            is_all_day = ?6, calendar_type = ?7, google_calendar_id = ?8, google_event_id = ?9,
-            is_completed = ?10, notes = ?11, updated_at = ?12
-         WHERE id = ?13",
+            end_date = ?6, end_time = ?7, is_all_day = ?8, calendar_type = ?9,
+            google_calendar_id = ?10, google_event_id = ?11, is_completed = ?12,
+            notes = ?13, updated_at = ?14
+         WHERE id = ?15",
         params![
             existing.subject,
             existing.name,
             existing.event_type,
             existing.event_date,
             existing.event_time,
+            existing.end_date,
+            existing.end_time,
             existing.is_all_day as i32,
             existing.calendar_type,
             existing.google_calendar_id,
@@ -2749,7 +2859,7 @@ pub fn subject_event_delete(conn: &Connection, id: i64) -> Result<()> {
 
 pub fn subject_event_get_by_id(conn: &Connection, id: i64) -> Result<Option<SubjectEvent>> {
     let mut stmt = conn.prepare(
-        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+        "SELECT id, subject, name, event_type, event_date, event_time, end_date, end_time, is_all_day,
                 calendar_type, google_calendar_id, google_event_id, is_completed,
                 notes, created_at, updated_at
          FROM subject_events WHERE id = ?1",
@@ -2763,14 +2873,16 @@ pub fn subject_event_get_by_id(conn: &Connection, id: i64) -> Result<Option<Subj
             event_type: r.get(3)?,
             event_date: r.get(4)?,
             event_time: r.get(5)?,
-            is_all_day: r.get::<_, i32>(6)? != 0,
-            calendar_type: r.get(7)?,
-            google_calendar_id: r.get(8)?,
-            google_event_id: r.get(9)?,
-            is_completed: r.get::<_, i32>(10)? != 0,
-            notes: r.get(11)?,
-            created_at: r.get(12)?,
-            updated_at: r.get(13)?,
+            end_date: r.get(6)?,
+            end_time: r.get(7)?,
+            is_all_day: r.get::<_, i32>(8)? != 0,
+            calendar_type: r.get(9)?,
+            google_calendar_id: r.get(10)?,
+            google_event_id: r.get(11)?,
+            is_completed: r.get::<_, i32>(12)? != 0,
+            notes: r.get(13)?,
+            created_at: r.get(14)?,
+            updated_at: r.get(15)?,
         }))
     } else {
         Ok(None)
