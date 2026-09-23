@@ -364,10 +364,11 @@ pub fn themes_list(app: AppHandle) -> Result<Vec<Theme>, String> {
 pub fn sessions_clear(db: State<'_, DbState>, app: AppHandle) -> Result<(), String> {
     log::info!("[sessions] clearing all session history");
     let conn = db.lock().map_err(|e| e.to_string())?;
-    let n = conn.execute("DELETE FROM sessions", []).map_err(|e| {
+    let n = conn.execute("DELETE FROM rounds", []).map_err(|e| {
         log::error!("[sessions] failed to clear history: {e}");
         e.to_string()
     })?;
+    let _ = conn.execute("DELETE FROM study_sessions", []);
     log::info!("[sessions] cleared {n} rows");
     app.emit("sessions:cleared", ()).ok();
     Ok(())
@@ -1104,9 +1105,9 @@ pub fn subject_create(name: String, db: State<'_, DbState>) -> Result<i64, Strin
 pub fn subject_delete(name: String, db: State<'_, DbState>) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     
-    // Check if there are any pomodoros
+    // Check if there are any active pomodoros
     let count: u32 = conn.query_row(
-        "SELECT COUNT(id) FROM sessions WHERE subject = ?1 AND round_type = 'work' AND deleted_at IS NULL",
+        "SELECT COUNT(id) FROM rounds WHERE subject = ?1 AND round_type = 'work' AND deleted_at IS NULL",
         rusqlite::params![name],
         |r| r.get(0),
     ).map_err(|e| e.to_string())?;
@@ -1968,6 +1969,59 @@ mod tests {
             .query_row("SELECT value FROM settings WHERE key = 'calendar_local_enabled'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(val, "false");
+    }
+
+    #[test]
+    fn test_subject_delete_logic() {
+        let conn = setup();
+        // Insert test subjects
+        conn.execute("INSERT INTO subjects (name, created_at) VALUES ('Math', 1), ('Physics', 2), ('Chemistry', 3)", []).unwrap();
+
+        // Chemistry has an active work round
+        conn.execute(
+            "INSERT INTO rounds (started_at, round_type, duration_secs, uuid, subject, deleted_at) VALUES (1, 'work', 1500, 'u-chem', 'Chemistry', NULL)",
+            [],
+        ).unwrap();
+
+        // Physics has a soft-deleted work round
+        conn.execute(
+            "INSERT INTO rounds (started_at, round_type, duration_secs, uuid, subject, deleted_at) VALUES (2, 'work', 1500, 'u-phys', 'Physics', 12345)",
+            [],
+        ).unwrap();
+
+        // Math has no rounds at all.
+
+        // Helper simulation of subject_delete logic
+        let try_delete = |name: &str| -> Result<(), String> {
+            let count: u32 = conn.query_row(
+                "SELECT COUNT(id) FROM rounds WHERE subject = ?1 AND round_type = 'work' AND deleted_at IS NULL",
+                rusqlite::params![name],
+                |r| r.get(0),
+            ).map_err(|e| e.to_string())?;
+
+            if count > 0 {
+                return Err("Cannot delete subject with existing pomodoros".to_string());
+            }
+
+            conn.execute("DELETE FROM subjects WHERE name = ?1", rusqlite::params![name])
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        };
+
+        // Math can be deleted
+        assert!(try_delete("Math").is_ok());
+        let count_math: i64 = conn.query_row("SELECT COUNT(*) FROM subjects WHERE name = 'Math'", [], |r| r.get(0)).unwrap();
+        assert_eq!(count_math, 0);
+
+        // Physics has only soft-deleted rounds, so it CAN be deleted
+        assert!(try_delete("Physics").is_ok());
+        let count_phys: i64 = conn.query_row("SELECT COUNT(*) FROM subjects WHERE name = 'Physics'", [], |r| r.get(0)).unwrap();
+        assert_eq!(count_phys, 0);
+
+        // Chemistry has an active work round, so deletion FAILS
+        assert!(try_delete("Chemistry").is_err());
+        let count_chem: i64 = conn.query_row("SELECT COUNT(*) FROM subjects WHERE name = 'Chemistry'", [], |r| r.get(0)).unwrap();
+        assert_eq!(count_chem, 1);
     }
 }
 
