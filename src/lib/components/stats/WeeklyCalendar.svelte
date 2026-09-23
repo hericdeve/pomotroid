@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { settings } from '$lib/stores/settings';
-  import type { ScheduledBlock, GoogleOverlayEvent, GoogleCalendarItem } from '$lib/types';
+  import type { ScheduledBlock, GoogleOverlayEvent, GoogleCalendarItem, SubjectEvent } from '$lib/types';
   import BlockTimelineModal from './BlockTimelineModal.svelte';
   import GoogleEventDetailModal from './GoogleEventDetailModal.svelte';
+  import EventModal from './EventModal.svelte';
+  import { getSubjectColor, getContrastColor } from '$lib/utils/subjectColors';
   import { scheduleUpdateBlock } from '$lib/ipc';
 
   interface Props {
@@ -15,6 +17,7 @@
     showSyncedCalendar?: boolean;
     syncedCalendarId?: string | null;
     syncedCalendarSummary?: string | null;
+    subjectEvents?: SubjectEvent[];
     weekOffset?: number;
     isSyncing?: boolean;
     showSidebar?: boolean;
@@ -25,6 +28,8 @@
     onWeekChange?: (mondayYmd: string, offset: number) => void;
     onSyncClick?: () => void;
     onSettingsClick?: () => void;
+    onSubjectEventClick?: (event: SubjectEvent) => void;
+    onSubjectEventChanged?: () => void;
   }
 
   let {
@@ -36,6 +41,7 @@
     showSyncedCalendar = true,
     syncedCalendarId = null,
     syncedCalendarSummary = null,
+    subjectEvents = [],
     weekOffset = 0,
     isSyncing = false,
     showSidebar = false,
@@ -46,6 +52,8 @@
     onWeekChange,
     onSyncClick,
     onSettingsClick,
+    onSubjectEventClick,
+    onSubjectEventChanged,
   }: Props = $props();
 
   function getContrastTextColor(hexBg: string | undefined | null, fallbackFg?: string | null): string {
@@ -215,6 +223,68 @@
   function getOverlayEventsForDay(dayIdx: number) {
     return timedOverlayEvents.filter(e => e.day_of_week === dayIdx);
   }
+
+  function formatYmd(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function parseTimeToMinute(timeStr: string): number {
+    const [hh, mm] = timeStr.split(':').map(Number);
+    return (hh || 0) * 60 + (mm || 0);
+  }
+
+  function getTypeIcon(type: string): string {
+    switch (type) {
+      case 'exam': return '📝';
+      case 'assignment': return '📋';
+      case 'project': return '🚀';
+      case 'quiz': return '💡';
+      default: return '📌';
+    }
+  }
+
+  function isSubjectEventVisible(ev: SubjectEvent): boolean {
+    if (ev.calendar_type === 'google') {
+      if (!showSyncedCalendar) return false;
+      if (ev.google_calendar_id && calendars.length > 0) {
+        const cal = calendars.find(c => c.id === ev.google_calendar_id);
+        if (cal && !cal.is_visible) return false;
+      }
+      return true;
+    }
+    return showLocalCalendar;
+  }
+
+  function getSubjectEventsForDay(dayIdx: number): SubjectEvent[] {
+    if (!subjectEvents || subjectEvents.length === 0) return [];
+    const day = weekDays[dayIdx];
+    if (!day) return [];
+    const ymd = formatYmd(day.date);
+    return subjectEvents.filter(ev => ev.event_date === ymd && isSubjectEventVisible(ev));
+  }
+
+  function getTimedSubjectEventsForDay(dayIdx: number): SubjectEvent[] {
+    return getSubjectEventsForDay(dayIdx).filter(ev => !ev.is_all_day && !!ev.event_time);
+  }
+
+  let selectedSubjectEventForEdit = $state<SubjectEvent | null>(null);
+
+  function handleSubjectEventClick(ev: SubjectEvent) {
+    if (onSubjectEventClick) {
+      onSubjectEventClick(ev);
+    } else {
+      selectedSubjectEventForEdit = ev;
+    }
+  }
+
+  let currentWeekSubjectEvents = $derived(
+    weekDays.flatMap((_, idx) => getSubjectEventsForDay(idx))
+  );
+
+  let hasEventsOrAllDay = $derived(allDayEvents.length > 0 || currentWeekSubjectEvents.length > 0);
 
   function handlePrevWeek() {
     const newOffset = weekOffset - 1;
@@ -800,13 +870,34 @@
       {/each}
     </div>
 
-    <!-- All-Day Events Row (if any exist for current week) -->
-    {#if allDayEvents.length > 0}
+    <!-- All-Day Events & Academic Events Row -->
+    {#if hasEventsOrAllDay}
       <div class="all-day-row">
-        <div class="time-column-header all-day-label">all-day</div>
+        <div class="time-column-header all-day-label">events</div>
         <div class="days-columns all-day-days">
           {#each weekDays as _, dayIdx}
             <div class="day-column all-day-cell">
+              <!-- Academic / Subject Events -->
+              {#each getSubjectEventsForDay(dayIdx) as ev (ev.id)}
+                {@const evBg = getSubjectColor(ev.subject)}
+                {@const evFg = getContrastColor(evBg)}
+                {@const typeIcon = getTypeIcon(ev.event_type)}
+                <button
+                  class="subject-event-badge"
+                  class:is-completed={ev.is_completed}
+                  style="background-color: {evBg}; color: {evFg};"
+                  onclick={() => handleSubjectEventClick(ev)}
+                  title="{ev.subject}: {ev.name}{ev.event_time ? ' (' + ev.event_time + ')' : ''}{ev.is_completed ? ' • Completed' : ''}"
+                >
+                  <span class="event-icon">{typeIcon}</span>
+                  {#if ev.event_time}
+                    <span class="event-time-tag">{ev.event_time}</span>
+                  {/if}
+                  <span class="overlay-badge-text">{ev.name}</span>
+                </button>
+              {/each}
+
+              <!-- Google Calendar Overlay All-Day Events -->
               {#each getAllDayEventsForDay(dayIdx) as ev (ev.id)}
                 {@const allDayBg = ev.calendar_color}
                 {@const allDayFg = getContrastTextColor(allDayBg, ev.calendar_foreground_color)}
@@ -859,6 +950,31 @@
                 ondragleave={handleDragLeave}
                 ondrop={(e) => handleDrop(e, dayIdx, hour)}
               ></div>
+            {/each}
+
+            <!-- Academic / Subject Event Timed Markers -->
+            {#each getTimedSubjectEventsForDay(dayIdx) as ev (ev.id)}
+              {@const startMin = parseTimeToMinute(ev.event_time!)}
+              {@const top = startMin * PIXELS_PER_MINUTE}
+              {@const evBg = getSubjectColor(ev.subject)}
+              {@const evFg = getContrastColor(evBg)}
+              {@const typeIcon = getTypeIcon(ev.event_type)}
+              <button
+                class="subject-milestone-marker"
+                class:is-completed={ev.is_completed}
+                style="top: {top}px; background-color: {evBg}; color: {evFg}; border-color: color-mix(in srgb, {evBg} 70%, #000000);"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  handleSubjectEventClick(ev);
+                }}
+                title="{typeIcon} {ev.subject}: {ev.name} ({ev.event_time}){ev.is_completed ? ' • Completed' : ''}"
+              >
+                <div class="milestone-content">
+                  <span class="milestone-icon">{typeIcon}</span>
+                  <span class="milestone-title">{ev.name}</span>
+                  <span class="milestone-time">{ev.event_time}</span>
+                </div>
+              </button>
             {/each}
 
             <!-- Overlay Events (Read-only from Google Calendar) -->
@@ -1052,6 +1168,21 @@
   <GoogleEventDetailModal
     event={selectedOverlayEvent}
     onClose={() => selectedOverlayEvent = null}
+  />
+{/if}
+
+{#if selectedSubjectEventForEdit}
+  <EventModal
+    event={selectedSubjectEventForEdit}
+    onClose={() => selectedSubjectEventForEdit = null}
+    onSaved={() => {
+      selectedSubjectEventForEdit = null;
+      onSubjectEventChanged?.();
+    }}
+    onDeleted={() => {
+      selectedSubjectEventForEdit = null;
+      onSubjectEventChanged?.();
+    }}
   />
 {/if}
 
@@ -1356,6 +1487,103 @@
   .overlay-all-day-badge:hover {
     opacity: 1;
     transform: translateY(-1px);
+  }
+
+  .subject-event-badge {
+    border: none;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: filter 0.15s, transform 0.1s, opacity 0.15s;
+  }
+
+  .subject-event-badge:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  .subject-event-badge.is-completed {
+    opacity: 0.6;
+    text-decoration: line-through;
+  }
+
+  .subject-event-badge .event-icon {
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .subject-event-badge .event-time-tag {
+    font-size: 0.65rem;
+    opacity: 0.85;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0 4px;
+    border-radius: 2px;
+  }
+
+  .subject-milestone-marker {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    height: 22px;
+    border: 1px solid;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    z-index: 8;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    transition: filter 0.15s, transform 0.1s;
+  }
+
+  .subject-milestone-marker:hover {
+    filter: brightness(1.1);
+    z-index: 12;
+  }
+
+  .subject-milestone-marker.is-completed {
+    opacity: 0.6;
+    text-decoration: line-through;
+  }
+
+  .milestone-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .milestone-icon {
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .milestone-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  .milestone-time {
+    font-size: 0.65rem;
+    opacity: 0.85;
+    font-family: monospace;
+    flex-shrink: 0;
   }
 
   /* ── Calendar Body & Grid ─────────────────────────────────── */

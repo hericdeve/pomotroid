@@ -276,3 +276,149 @@ pub async fn delete_event(
 
     Ok(())
 }
+
+pub async fn create_single_event(
+    access_token: &str,
+    calendar_id: &str,
+    summary: &str,
+    description: Option<&str>,
+    event_date: &str,
+    event_time: Option<&str>,
+    is_all_day: bool,
+    time_zone: Option<&str>,
+) -> Result<String, String> {
+    let client = Client::new();
+    let encoded_cal_id = urlencoding::encode(calendar_id);
+    let url = format!("{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events");
+
+    let tz = time_zone
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(get_local_timezone);
+
+    let (start_obj, end_obj) = if is_all_day || event_time.is_none() {
+        let next_day = if let Ok(d) = chrono::NaiveDate::parse_from_str(event_date, "%Y-%m-%d") {
+            (d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
+        } else {
+            event_date.to_string()
+        };
+        (json!({ "date": event_date }), json!({ "date": next_day }))
+    } else {
+        let time_str = event_time.unwrap();
+        let start_iso = format!("{}T{}:00", event_date, time_str);
+        let end_iso = if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&start_iso, "%Y-%m-%dT%H:%M:%S") {
+            (dt + chrono::Duration::hours(1)).format("%Y-%m-%dT%H:%M:%S").to_string()
+        } else {
+            start_iso.clone()
+        };
+        (
+            json!({ "dateTime": start_iso, "timeZone": tz }),
+            json!({ "dateTime": end_iso, "timeZone": tz }),
+        )
+    };
+
+    let mut payload = json!({
+        "summary": summary,
+        "start": start_obj,
+        "end": end_obj,
+    });
+
+    if let Some(desc) = description {
+        if !desc.trim().is_empty() {
+            payload["description"] = json!(desc);
+        }
+    }
+
+    let res = client
+        .post(&url)
+        .bearer_auth(access_token)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Create single event request failed: {e}"))?;
+
+    let status = res.status();
+    if !status.is_success() {
+        let body = res.text().await.unwrap_or_default();
+        log::error!("[gcal] create_single_event failed (HTTP {status}): {body}");
+        return Err(format!("Failed to create event in Google Calendar (HTTP {status}): {body}"));
+    }
+
+    let created: GoogleEventItem = res
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse created single event: {e}"))?;
+
+    Ok(created.id)
+}
+
+pub async fn update_single_event(
+    access_token: &str,
+    calendar_id: &str,
+    event_id: &str,
+    summary: &str,
+    description: Option<&str>,
+    event_date: &str,
+    event_time: Option<&str>,
+    is_all_day: bool,
+    time_zone: Option<&str>,
+) -> Result<(), String> {
+    let client = Client::new();
+    let encoded_cal_id = urlencoding::encode(calendar_id);
+    let encoded_event_id = urlencoding::encode(event_id);
+    let url = format!("{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events/{encoded_event_id}");
+
+    let tz = time_zone
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(get_local_timezone);
+
+    let (start_obj, end_obj) = if is_all_day || event_time.is_none() {
+        let next_day = if let Ok(d) = chrono::NaiveDate::parse_from_str(event_date, "%Y-%m-%d") {
+            (d + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
+        } else {
+            event_date.to_string()
+        };
+        (json!({ "date": event_date }), json!({ "date": next_day }))
+    } else {
+        let time_str = event_time.unwrap();
+        let start_iso = format!("{}T{}:00", event_date, time_str);
+        let end_iso = if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&start_iso, "%Y-%m-%dT%H:%M:%S") {
+            (dt + chrono::Duration::hours(1)).format("%Y-%m-%dT%H:%M:%S").to_string()
+        } else {
+            start_iso.clone()
+        };
+        (
+            json!({ "dateTime": start_iso, "timeZone": tz }),
+            json!({ "dateTime": end_iso, "timeZone": tz }),
+        )
+    };
+
+    let mut payload = json!({
+        "summary": summary,
+        "start": start_obj,
+        "end": end_obj,
+    });
+
+    if let Some(desc) = description {
+        payload["description"] = json!(desc);
+    }
+
+    let res = client
+        .patch(&url)
+        .bearer_auth(access_token)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Update single event request failed: {e}"))?;
+
+    let status = res.status();
+    if !status.is_success() {
+        let body = res.text().await.unwrap_or_default();
+        log::error!("[gcal] update_single_event failed (HTTP {status}): {body}");
+        return Err(format!("Failed to update single event in Google Calendar (HTTP {status}): {body}"));
+    }
+
+    Ok(())
+}
+

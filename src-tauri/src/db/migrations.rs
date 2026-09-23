@@ -329,6 +329,31 @@ const MIGRATION_18: &str = "
     INSERT INTO schema_version VALUES (18);
 ";
 
+const MIGRATION_19: &str = "
+    CREATE TABLE IF NOT EXISTS subject_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subject TEXT NOT NULL,
+        name TEXT NOT NULL,
+        event_type TEXT NOT NULL DEFAULT 'assignment',
+        event_date TEXT NOT NULL,
+        event_time TEXT,
+        is_all_day INTEGER NOT NULL DEFAULT 1,
+        calendar_type TEXT NOT NULL DEFAULT 'local',
+        google_calendar_id TEXT,
+        google_event_id TEXT,
+        is_completed INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_subject_events_date ON subject_events(event_date);
+    CREATE INDEX IF NOT EXISTS idx_subject_events_subject ON subject_events(subject);
+    CREATE INDEX IF NOT EXISTS idx_subject_events_gcal ON subject_events(google_event_id);
+
+    INSERT INTO schema_version VALUES (19);
+";
+
 
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
@@ -526,6 +551,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_18 complete");
     }
 
+    if version < 19 {
+        log::info!("[db/migrations] applying MIGRATION_19: subject events (assignments & exams)");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_19} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_19 complete");
+    }
+
     Ok(())
 }
 
@@ -561,14 +592,14 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 18);
+        assert_eq!(v, 19);
     }
 
     #[test]
     fn all_tables_created() {
         let conn = Connection::open_in_memory().unwrap();
         run(&conn).unwrap();
-        for table in &["settings", "rounds", "custom_themes", "schema_version", "subjects", "study_sessions", "google_auth", "google_calendars"] {
+        for table in &["settings", "rounds", "custom_themes", "schema_version", "subjects", "study_sessions", "google_auth", "google_calendars", "subject_events"] {
             let count: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",

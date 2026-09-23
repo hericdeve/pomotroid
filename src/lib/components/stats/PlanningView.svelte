@@ -13,8 +13,9 @@
     googleCalendarSyncNow,
     googleCalendarGetOverlayEvents,
     calendarGetLocalVisible,
+    subjectEventsGetAll,
   } from '$lib/ipc';
-  import type { SubjectStats, ScheduledBlock, GoogleAuthStatus, GoogleCalendarItem, GoogleOverlayEvent } from '$lib/types';
+  import type { SubjectStats, ScheduledBlock, GoogleAuthStatus, GoogleCalendarItem, GoogleOverlayEvent, SubjectEvent } from '$lib/types';
   import { error as logError } from '@tauri-apps/plugin-log';
   import { settings } from '$lib/stores/settings';
   import WeeklyCalendar from './WeeklyCalendar.svelte';
@@ -22,6 +23,7 @@
 
   let subjects = $state<SubjectStats[]>([]);
   let blocks = $state<ScheduledBlock[]>([]);
+  let subjectEvents = $state<SubjectEvent[]>([]);
   let loading = $state(true);
   let showSidebar = $state(false);
 
@@ -59,12 +61,14 @@
 
     const handleFocus = async () => {
       try {
-        const [localVis, gStatus] = await Promise.all([
+        const [localVis, gStatus, evs] = await Promise.all([
           calendarGetLocalVisible().catch(() => showLocalCalendar),
           googleCalendarGetStatus().catch(() => authStatus),
+          subjectEventsGetAll().catch(() => subjectEvents),
         ]);
         if (!mounted) return;
         showLocalCalendar = localVis;
+        subjectEvents = evs;
         const wasSignedIn = authStatus.is_signed_in;
         authStatus = gStatus;
         if (gStatus.is_signed_in) {
@@ -86,7 +90,7 @@
 
     (async () => {
       try {
-        const [subjectsData, blocksData, localVis, gStatus] = await Promise.all([
+        const [subjectsData, blocksData, localVis, gStatus, evs] = await Promise.all([
           subjectsGetAll(),
           scheduleGetAll(),
           calendarGetLocalVisible().catch(() => showLocalCalendar),
@@ -96,8 +100,11 @@
             client_id: null,
             has_client_secret: false,
           })),
+          subjectEventsGetAll().catch(() => []),
         ]);
         if (!mounted) return;
+
+        subjectEvents = evs;
 
         subjects = subjectsData.sort((a, b) => {
           const aHasGoal = a.weekly_goal != null;
@@ -403,6 +410,7 @@
       {showSyncedCalendar}
       syncedCalendarId={syncedCalendar?.id || null}
       syncedCalendarSummary={syncedCalendar?.summary || null}
+      {subjectEvents}
       {weekOffset}
       {isSyncing}
       {showSidebar}
@@ -413,6 +421,9 @@
       onWeekChange={handleWeekChange}
       onSyncClick={handleSyncNow}
       onSettingsClick={() => openSettingsWindow('calendar')}
+      onSubjectEventChanged={async () => {
+        subjectEvents = await subjectEventsGetAll().catch(() => []);
+      }}
     />
   </main>
 </div>

@@ -29,6 +29,9 @@ import type {
   GoogleAuthStatus,
   GoogleCalendarItem,
   GoogleOverlayEvent,
+  SubjectEvent,
+  CreateSubjectEventPayload,
+  UpdateSubjectEventPayload,
 } from '$lib/types';
 
 // --- Timer commands ---
@@ -189,6 +192,16 @@ export const googleCalendarGetOverlayEvents = (mondayYmd: string) =>
 export const calendarGetLocalVisible = () => invoke<boolean>('calendar_get_local_visible');
 export const calendarSetLocalVisible = (visible: boolean) => invoke<void>('calendar_set_local_visible', { visible });
 
+// --- Academic / Subject Events commands ---
+export const subjectEventsGetAll = () => invoke<SubjectEvent[]>('subject_events_get_all');
+export const subjectEventCreate = (payload: CreateSubjectEventPayload) =>
+  invoke<SubjectEvent>('subject_event_create', { payload });
+export const subjectEventUpdate = (id: number, payload: UpdateSubjectEventPayload) =>
+  invoke<SubjectEvent>('subject_event_update', { id, payload });
+export const subjectEventDelete = (id: number) =>
+  invoke<void>('subject_event_delete', { id });
+export const subjectEventToggleCompleted = (id: number, completed: boolean) =>
+  invoke<void>('subject_event_toggle_completed', { id, completed });
 
 // --- Stats commands ---
 

@@ -1693,6 +1693,151 @@ pub fn calendar_set_local_visible(visible: bool, db: State<'_, DbState>) -> Resu
         .map_err(|e| e.to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Subject Event Commands (Assignments & Exams)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn subject_event_create(
+    payload: queries::CreateSubjectEventPayload,
+    db: State<'_, DbState>,
+) -> Result<queries::SubjectEvent, String> {
+    let mut event = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::subject_event_create(&conn, payload).map_err(|e| e.to_string())?
+    };
+
+    if event.calendar_type == "google" {
+        if let Some(ref cal_id) = event.google_calendar_id {
+            match google_calendar::auth::ensure_valid_token(&db).await {
+                Ok(token) => {
+                    let summary = format!("{}: {}", event.subject, event.name);
+                    let res = google_calendar::api::create_single_event(
+                        &token,
+                        cal_id,
+                        &summary,
+                        event.notes.as_deref(),
+                        &event.event_date,
+                        event.event_time.as_deref(),
+                        event.is_all_day,
+                        None,
+                    ).await;
+
+                    match res {
+                        Ok(g_event_id) => {
+                            let conn = db.lock().map_err(|e| e.to_string())?;
+                            event = queries::subject_event_update(&conn, event.id, queries::UpdateSubjectEventPayload {
+                                subject: None,
+                                name: None,
+                                event_type: None,
+                                event_date: None,
+                                event_time: None,
+                                is_all_day: None,
+                                calendar_type: None,
+                                google_calendar_id: None,
+                                google_event_id: Some(g_event_id),
+                                is_completed: None,
+                                notes: None,
+                            }).map_err(|e| e.to_string())?;
+                        }
+                        Err(e) => {
+                            log::error!("[gcal] failed to push subject event to Google Calendar: {e}");
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("[gcal] failed to get token to sync subject event: {e}");
+                }
+            }
+        }
+    }
+
+    Ok(event)
+}
+
+#[tauri::command]
+pub async fn subject_event_update(
+    id: i64,
+    payload: queries::UpdateSubjectEventPayload,
+    db: State<'_, DbState>,
+) -> Result<queries::SubjectEvent, String> {
+    let event = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::subject_event_update(&conn, id, payload).map_err(|e| e.to_string())?
+    };
+
+    if event.calendar_type == "google" {
+        if let (Some(ref cal_id), Some(ref g_event_id)) = (&event.google_calendar_id, &event.google_event_id) {
+            match google_calendar::auth::ensure_valid_token(&db).await {
+                Ok(token) => {
+                    let summary = format!("{}: {}", event.subject, event.name);
+                    if let Err(e) = google_calendar::api::update_single_event(
+                        &token,
+                        cal_id,
+                        g_event_id,
+                        &summary,
+                        event.notes.as_deref(),
+                        &event.event_date,
+                        event.event_time.as_deref(),
+                        event.is_all_day,
+                        None,
+                    ).await {
+                        log::error!("[gcal] failed to update Google single event {g_event_id}: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("[gcal] token error on subject event update: {e}");
+                }
+            }
+        }
+    }
+
+    Ok(event)
+}
+
+#[tauri::command]
+pub async fn subject_event_delete(
+    id: i64,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let existing = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let ev = queries::subject_event_get_by_id(&conn, id).map_err(|e| e.to_string())?;
+        queries::subject_event_delete(&conn, id).map_err(|e| e.to_string())?;
+        ev
+    };
+
+    if let Some(ev) = existing {
+        if ev.calendar_type == "google" {
+            if let (Some(ref cal_id), Some(ref g_event_id)) = (&ev.google_calendar_id, &ev.google_event_id) {
+                if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                    let _ = google_calendar::api::delete_event(&token, cal_id, g_event_id).await;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn subject_events_get_all(
+    db: State<'_, DbState>,
+) -> Result<Vec<queries::SubjectEvent>, String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::subject_events_get_all(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn subject_event_toggle_completed(
+    id: i64,
+    completed: bool,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| e.to_string())?;
+    queries::subject_event_toggle_completed(&conn, id, completed).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;

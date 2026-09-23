@@ -1700,6 +1700,83 @@ mod tests {
         let synced = get_google_synced_calendar(&conn).unwrap();
         assert!(synced.is_none(), "Deselected calendar must not auto-re-enable");
     }
+
+    #[test]
+    fn test_subject_event_crud() {
+        let conn = setup();
+
+        // 1. Create event
+        let created = subject_event_create(&conn, CreateSubjectEventPayload {
+            subject: "Algorithms".to_string(),
+            name: "Midterm Exam 1".to_string(),
+            event_type: "exam".to_string(),
+            event_date: "2026-10-15".to_string(),
+            event_time: Some("14:30".to_string()),
+            is_all_day: false,
+            calendar_type: Some("local".to_string()),
+            google_calendar_id: None,
+            notes: Some("Chapters 1 to 5".to_string()),
+        }).unwrap();
+
+        assert_eq!(created.subject, "Algorithms");
+        assert_eq!(created.name, "Midterm Exam 1");
+        assert_eq!(created.event_type, "exam");
+        assert_eq!(created.event_date, "2026-10-15");
+        assert_eq!(created.event_time, Some("14:30".to_string()));
+        assert!(!created.is_all_day);
+        assert!(!created.is_completed);
+
+        // Verify subject was inserted into subjects table
+        let sub_exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM subjects WHERE name = 'Algorithms'",
+            [],
+            |r| r.get(0),
+        ).unwrap();
+        assert!(sub_exists);
+
+        // 2. Fetch all
+        let all = subject_events_get_all(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, created.id);
+
+        // 3. Fetch by date range
+        let range = subject_events_get_by_date_range(&conn, "2026-10-01", "2026-10-31").unwrap();
+        assert_eq!(range.len(), 1);
+
+        let empty_range = subject_events_get_by_date_range(&conn, "2026-11-01", "2026-11-30").unwrap();
+        assert_eq!(empty_range.len(), 0);
+
+        // 4. Update
+        let updated = subject_event_update(&conn, created.id, UpdateSubjectEventPayload {
+            subject: None,
+            name: Some("Midterm Exam 1 (Rescheduled)".to_string()),
+            event_type: None,
+            event_date: Some("2026-10-16".to_string()),
+            event_time: Some("15:00".to_string()),
+            is_all_day: None,
+            calendar_type: None,
+            google_calendar_id: None,
+            google_event_id: Some("g_ev_123".to_string()),
+            is_completed: Some(true),
+            notes: Some("Room 204".to_string()),
+        }).unwrap();
+
+        assert_eq!(updated.name, "Midterm Exam 1 (Rescheduled)");
+        assert_eq!(updated.event_date, "2026-10-16");
+        assert_eq!(updated.event_time, Some("15:00".to_string()));
+        assert_eq!(updated.google_event_id, Some("g_ev_123".to_string()));
+        assert!(updated.is_completed);
+
+        // 5. Toggle completed
+        subject_event_toggle_completed(&conn, created.id, false).unwrap();
+        let fetched = subject_event_get_by_id(&conn, created.id).unwrap().unwrap();
+        assert!(!fetched.is_completed);
+
+        // 6. Delete
+        subject_event_delete(&conn, created.id).unwrap();
+        let after_delete = subject_event_get_by_id(&conn, created.id).unwrap();
+        assert!(after_delete.is_none());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2398,4 +2475,314 @@ pub fn get_google_synced_calendar(conn: &Connection) -> Result<Option<GoogleCale
         Ok(None)
     }
 }
+
+// ---------------------------------------------------------------------------
+// Subject Events (Assignments, Exams, Deadlines)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubjectEvent {
+    pub id: i64,
+    pub subject: String,
+    pub name: String,
+    pub event_type: String, // "exam" | "assignment" | "project" | "quiz" | "other"
+    pub event_date: String, // "YYYY-MM-DD"
+    pub event_time: Option<String>, // "HH:MM"
+    pub is_all_day: bool,
+    pub calendar_type: String, // "local" | "google"
+    pub google_calendar_id: Option<String>,
+    pub google_event_id: Option<String>,
+    pub is_completed: bool,
+    pub notes: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateSubjectEventPayload {
+    pub subject: String,
+    pub name: String,
+    pub event_type: String,
+    pub event_date: String,
+    pub event_time: Option<String>,
+    pub is_all_day: bool,
+    pub calendar_type: Option<String>,
+    pub google_calendar_id: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateSubjectEventPayload {
+    pub subject: Option<String>,
+    pub name: Option<String>,
+    pub event_type: Option<String>,
+    pub event_date: Option<String>,
+    pub event_time: Option<String>,
+    pub is_all_day: Option<bool>,
+    pub calendar_type: Option<String>,
+    pub google_calendar_id: Option<String>,
+    pub google_event_id: Option<String>,
+    pub is_completed: Option<bool>,
+    pub notes: Option<String>,
+}
+
+pub fn subject_events_get_all(conn: &Connection) -> Result<Vec<SubjectEvent>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+                calendar_type, google_calendar_id, google_event_id, is_completed,
+                notes, created_at, updated_at
+         FROM subject_events
+         ORDER BY event_date ASC, event_time ASC, id ASC"
+    )?;
+
+    let rows = stmt.query_map([], |r| {
+        Ok(SubjectEvent {
+            id: r.get(0)?,
+            subject: r.get(1)?,
+            name: r.get(2)?,
+            event_type: r.get(3)?,
+            event_date: r.get(4)?,
+            event_time: r.get(5)?,
+            is_all_day: r.get::<_, i32>(6)? != 0,
+            calendar_type: r.get(7)?,
+            google_calendar_id: r.get(8)?,
+            google_event_id: r.get(9)?,
+            is_completed: r.get::<_, i32>(10)? != 0,
+            notes: r.get(11)?,
+            created_at: r.get(12)?,
+            updated_at: r.get(13)?,
+        })
+    })?;
+
+    let mut events = Vec::new();
+    for row in rows {
+        events.push(row?);
+    }
+    Ok(events)
+}
+
+pub fn subject_events_get_by_date_range(conn: &Connection, start_date: &str, end_date: &str) -> Result<Vec<SubjectEvent>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+                calendar_type, google_calendar_id, google_event_id, is_completed,
+                notes, created_at, updated_at
+         FROM subject_events
+         WHERE event_date >= ?1 AND event_date <= ?2
+         ORDER BY event_date ASC, event_time ASC, id ASC"
+    )?;
+
+    let rows = stmt.query_map(params![start_date, end_date], |r| {
+        Ok(SubjectEvent {
+            id: r.get(0)?,
+            subject: r.get(1)?,
+            name: r.get(2)?,
+            event_type: r.get(3)?,
+            event_date: r.get(4)?,
+            event_time: r.get(5)?,
+            is_all_day: r.get::<_, i32>(6)? != 0,
+            calendar_type: r.get(7)?,
+            google_calendar_id: r.get(8)?,
+            google_event_id: r.get(9)?,
+            is_completed: r.get::<_, i32>(10)? != 0,
+            notes: r.get(11)?,
+            created_at: r.get(12)?,
+            updated_at: r.get(13)?,
+        })
+    })?;
+
+    let mut events = Vec::new();
+    for row in rows {
+        events.push(row?);
+    }
+    Ok(events)
+}
+
+pub fn subject_event_create(conn: &Connection, payload: CreateSubjectEventPayload) -> Result<SubjectEvent> {
+    let now = unix_now();
+    let cal_type = payload.calendar_type.unwrap_or_else(|| "local".to_string());
+    
+    // Ensure subject exists in subjects table
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO subjects (name, created_at) VALUES (?1, ?2)",
+        params![payload.subject.trim(), now],
+    );
+
+    conn.execute(
+        "INSERT INTO subject_events (
+            subject, name, event_type, event_date, event_time, is_all_day,
+            calendar_type, google_calendar_id, is_completed, notes, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, ?10, ?10)",
+        params![
+            payload.subject.trim(),
+            payload.name.trim(),
+            payload.event_type.trim(),
+            payload.event_date.trim(),
+            payload.event_time.as_deref().map(|s| s.trim()),
+            payload.is_all_day as i32,
+            cal_type,
+            payload.google_calendar_id,
+            payload.notes,
+            now,
+        ],
+    )?;
+
+    let id = conn.last_insert_rowid();
+
+    Ok(SubjectEvent {
+        id,
+        subject: payload.subject.trim().to_string(),
+        name: payload.name.trim().to_string(),
+        event_type: payload.event_type.trim().to_string(),
+        event_date: payload.event_date.trim().to_string(),
+        event_time: payload.event_time.map(|s| s.trim().to_string()),
+        is_all_day: payload.is_all_day,
+        calendar_type: cal_type,
+        google_calendar_id: payload.google_calendar_id,
+        google_event_id: None,
+        is_completed: false,
+        notes: payload.notes,
+        created_at: now,
+        updated_at: now,
+    })
+}
+
+pub fn subject_event_update(conn: &Connection, id: i64, payload: UpdateSubjectEventPayload) -> Result<SubjectEvent> {
+    let now = unix_now();
+
+    // Fetch existing
+    let mut existing = conn.query_row(
+        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+                calendar_type, google_calendar_id, google_event_id, is_completed,
+                notes, created_at, updated_at
+         FROM subject_events WHERE id = ?1",
+        [id],
+        |r| {
+            Ok(SubjectEvent {
+                id: r.get(0)?,
+                subject: r.get(1)?,
+                name: r.get(2)?,
+                event_type: r.get(3)?,
+                event_date: r.get(4)?,
+                event_time: r.get(5)?,
+                is_all_day: r.get::<_, i32>(6)? != 0,
+                calendar_type: r.get(7)?,
+                google_calendar_id: r.get(8)?,
+                google_event_id: r.get(9)?,
+                is_completed: r.get::<_, i32>(10)? != 0,
+                notes: r.get(11)?,
+                created_at: r.get(12)?,
+                updated_at: r.get(13)?,
+            })
+        },
+    )?;
+
+    if let Some(sub) = payload.subject {
+        let sub_trimmed = sub.trim();
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO subjects (name, created_at) VALUES (?1, ?2)",
+            params![sub_trimmed, now],
+        );
+        existing.subject = sub_trimmed.to_string();
+    }
+    if let Some(name) = payload.name {
+        existing.name = name.trim().to_string();
+    }
+    if let Some(et) = payload.event_type {
+        existing.event_type = et.trim().to_string();
+    }
+    if let Some(ed) = payload.event_date {
+        existing.event_date = ed.trim().to_string();
+    }
+    if let Some(time) = payload.event_time {
+        existing.event_time = if time.trim().is_empty() { None } else { Some(time.trim().to_string()) };
+    }
+    if let Some(all_day) = payload.is_all_day {
+        existing.is_all_day = all_day;
+    }
+    if let Some(cal_type) = payload.calendar_type {
+        existing.calendar_type = cal_type;
+    }
+    if let Some(gcal_id) = payload.google_calendar_id {
+        existing.google_calendar_id = if gcal_id.trim().is_empty() { None } else { Some(gcal_id) };
+    }
+    if let Some(gevent_id) = payload.google_event_id {
+        existing.google_event_id = if gevent_id.trim().is_empty() { None } else { Some(gevent_id) };
+    }
+    if let Some(comp) = payload.is_completed {
+        existing.is_completed = comp;
+    }
+    if let Some(notes) = payload.notes {
+        existing.notes = Some(notes);
+    }
+    existing.updated_at = now;
+
+    conn.execute(
+        "UPDATE subject_events SET
+            subject = ?1, name = ?2, event_type = ?3, event_date = ?4, event_time = ?5,
+            is_all_day = ?6, calendar_type = ?7, google_calendar_id = ?8, google_event_id = ?9,
+            is_completed = ?10, notes = ?11, updated_at = ?12
+         WHERE id = ?13",
+        params![
+            existing.subject,
+            existing.name,
+            existing.event_type,
+            existing.event_date,
+            existing.event_time,
+            existing.is_all_day as i32,
+            existing.calendar_type,
+            existing.google_calendar_id,
+            existing.google_event_id,
+            existing.is_completed as i32,
+            existing.notes,
+            existing.updated_at,
+            id,
+        ],
+    )?;
+
+    Ok(existing)
+}
+
+pub fn subject_event_delete(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM subject_events WHERE id = ?1", [id])?;
+    Ok(())
+}
+
+pub fn subject_event_get_by_id(conn: &Connection, id: i64) -> Result<Option<SubjectEvent>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, subject, name, event_type, event_date, event_time, is_all_day,
+                calendar_type, google_calendar_id, google_event_id, is_completed,
+                notes, created_at, updated_at
+         FROM subject_events WHERE id = ?1",
+    )?;
+    let mut rows = stmt.query([id])?;
+    if let Some(r) = rows.next()? {
+        Ok(Some(SubjectEvent {
+            id: r.get(0)?,
+            subject: r.get(1)?,
+            name: r.get(2)?,
+            event_type: r.get(3)?,
+            event_date: r.get(4)?,
+            event_time: r.get(5)?,
+            is_all_day: r.get::<_, i32>(6)? != 0,
+            calendar_type: r.get(7)?,
+            google_calendar_id: r.get(8)?,
+            google_event_id: r.get(9)?,
+            is_completed: r.get::<_, i32>(10)? != 0,
+            notes: r.get(11)?,
+            created_at: r.get(12)?,
+            updated_at: r.get(13)?,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn subject_event_toggle_completed(conn: &Connection, id: i64, completed: bool) -> Result<()> {
+    conn.execute(
+        "UPDATE subject_events SET is_completed = ?1, updated_at = ?2 WHERE id = ?3",
+        params![completed as i32, unix_now(), id],
+    )?;
+    Ok(())
+}
+
 

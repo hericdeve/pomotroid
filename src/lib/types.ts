@@ -328,3 +328,51 @@ export interface AdjacentSessions {
   previous: AdjacentSessionPreview | null;
   next: AdjacentSessionPreview | null;
 }
+
+// ---------------------------------------------------------------------------
+// Academic / Subject Events types
+// ---------------------------------------------------------------------------
+
+export type SubjectEventType = 'exam' | 'assignment' | 'project' | 'quiz' | 'other';
+
+export interface SubjectEvent {
+  id: number;
+  subject: string;
+  name: string;
+  event_type: SubjectEventType | string;
+  event_date: string; // YYYY-MM-DD
+  event_time: string | null; // HH:MM
+  is_all_day: boolean;
+  calendar_type: 'local' | 'google' | string;
+  google_calendar_id: string | null;
+  google_event_id: string | null;
+  is_completed: boolean;
+  notes: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CreateSubjectEventPayload {
+  subject: string;
+  name: string;
+  event_type: SubjectEventType | string;
+  event_date: string;
+  event_time?: string | null;
+  is_all_day?: boolean;
+  calendar_type?: 'local' | 'google';
+  google_calendar_id?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateSubjectEventPayload {
+  subject?: string;
+  name?: string;
+  event_type?: SubjectEventType | string;
+  event_date?: string;
+  event_time?: string | null;
+  is_all_day?: boolean;
+  calendar_type?: 'local' | 'google';
+  google_calendar_id?: string | null;
+  is_completed?: boolean;
+  notes?: string | null;
+}

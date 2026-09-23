@@ -33,8 +33,9 @@
   import SubjectsView from '$lib/components/stats/SubjectsView.svelte';
   import PlanningView from '$lib/components/stats/PlanningView.svelte';
   import ComparisonsView from '$lib/components/stats/ComparisonsView.svelte';
+  import EventsView from '$lib/components/stats/EventsView.svelte';
 
-  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights' | 'subjects' | 'planning' | 'comparisons';
+  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights' | 'subjects' | 'planning' | 'comparisons' | 'events';
 
   let activeTab = $state<Tab>('today');
   let detailed = $state<DetailedStats | null>(null);
@@ -196,6 +197,9 @@
       <button class="tab" class:active={activeTab === 'planning'} onclick={() => switchTab('planning')}
         >Planning</button
       >
+      <button class="tab" class:active={activeTab === 'events'} onclick={() => switchTab('events')}
+        >Events</button
+      >
       <button class="tab" class:active={activeTab === 'subjects'} onclick={() => switchTab('subjects')}
         >Subjects</button
       >
@@ -248,6 +252,8 @@
         <InsightsView />
       {:else if activeTab === 'subjects'}
         <SubjectsView />
+      {:else if activeTab === 'events'}
+        <EventsView />
       {:else}
         <PlanningView />
       {/if}
