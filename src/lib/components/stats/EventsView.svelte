@@ -3,17 +3,18 @@
   import {
     subjectEventsGetAll,
     subjectEventToggleCompleted,
+    subjectEventDelete,
     subjectsGetAll,
     googleCalendarGetCalendars,
   } from '$lib/ipc';
   import type {
     SubjectEvent,
-    SubjectEventType,
     SubjectStats,
     GoogleCalendarItem,
   } from '$lib/types';
   import { getSubjectColor, getContrastColor } from '$lib/utils/subjectColors';
   import EventModal from './EventModal.svelte';
+  import DropdownSelect from '$lib/components/DropdownSelect.svelte';
   import { error as logError } from '@tauri-apps/plugin-log';
 
   let events = $state<SubjectEvent[]>([]);
@@ -27,12 +28,14 @@
 
   // Filters & State
   let statusFilter = $state<'upcoming' | 'overdue' | 'completed' | 'all'>('upcoming');
-  let subjectFilter = $state<string>('all');
-  let typeFilter = $state<string>('all');
+  let filterSubject = $state<string>('');
+  let filterType = $state<string>('');
   let searchQuery = $state<string>('');
 
   let showModal = $state(false);
   let selectedEventForEdit = $state<SubjectEvent | null>(null);
+
+  const TYPE_OPTIONS = ['Exam', 'Assignment', 'Project', 'Quiz', 'Other'];
 
   const TYPE_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
     exam: { label: 'Exam', icon: '📝', color: '#ef4444' },
@@ -71,10 +74,8 @@
     if (tickerInterval) clearInterval(tickerInterval);
   });
 
-  // Calculate target Date object from event_date + event_time
   function getEventTargetDate(ev: SubjectEvent): Date {
     if (ev.is_all_day || !ev.event_time) {
-      // All day: due at 23:59:59 of that date
       const [y, m, d] = ev.event_date.split('-').map(Number);
       return new Date(y, m - 1, d, 23, 59, 59);
     }
@@ -140,9 +141,9 @@
     if (isOverdue) {
       urgency = 'overdue';
     } else if (days === 0) {
-      urgency = 'urgent'; // < 24 hours
+      urgency = 'urgent';
     } else if (days <= 2) {
-      urgency = 'soon'; // < 3 days
+      urgency = 'soon';
     } else {
       urgency = 'upcoming';
     }
@@ -158,7 +159,7 @@
     };
   }
 
-  // Next upcoming milestone for Hero Banner
+  // Next upcoming milestone for KPI card
   let nextMilestone = $derived.by(() => {
     const upcomingEvents = events
       .filter(e => !e.is_completed && getEventTargetDate(e).getTime() >= now.getTime())
@@ -168,7 +169,7 @@
 
   let nextMilestoneCountdown = $derived(nextMilestone ? getCountdownInfo(nextMilestone) : null);
 
-  // Counts for filter tabs
+  // Counts for KPI cards and filter tabs
   let counts = $derived.by(() => {
     let upcoming = 0;
     let overdue = 0;
@@ -190,7 +191,15 @@
     };
   });
 
-  // Filtered and sorted events list
+  // Distinct list of subjects
+  let allSubjectsList = $derived.by(() => {
+    const set = new Set<string>();
+    subjects.forEach(s => set.add(s.name));
+    events.forEach(e => set.add(e.subject));
+    return Array.from(set).sort();
+  });
+
+  // Filtered and sorted events
   let filteredEvents = $derived.by(() => {
     return events
       .filter(ev => {
@@ -199,8 +208,8 @@
         if (statusFilter === 'overdue' && (ev.is_completed || !isPast)) return false;
         if (statusFilter === 'completed' && !ev.is_completed) return false;
 
-        if (subjectFilter !== 'all' && ev.subject !== subjectFilter) return false;
-        if (typeFilter !== 'all' && ev.event_type !== typeFilter) return false;
+        if (filterSubject && ev.subject !== filterSubject) return false;
+        if (filterType && ev.event_type.toLowerCase() !== filterType.toLowerCase()) return false;
 
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
@@ -213,21 +222,11 @@
         return true;
       })
       .sort((a, b) => {
-        // If viewing completed, sort latest completed first
         if (statusFilter === 'completed') {
           return getEventTargetDate(b).getTime() - getEventTargetDate(a).getTime();
         }
-        // Otherwise sort chronologically
         return getEventTargetDate(a).getTime() - getEventTargetDate(b).getTime();
       });
-  });
-
-  // Distinct list of subjects that have events or exist in DB
-  let allSubjectsList = $derived.by(() => {
-    const set = new Set<string>();
-    subjects.forEach(s => set.add(s.name));
-    events.forEach(e => set.add(e.subject));
-    return Array.from(set).sort();
   });
 
   async function handleToggleCompleted(ev: SubjectEvent, e: MouseEvent) {
@@ -239,6 +238,17 @@
       events = [...events];
     } catch (err) {
       logError(`Failed to toggle completed for event ${ev.id}: ${err}`);
+    }
+  }
+
+  async function handleDeleteEvent(ev: SubjectEvent, e: MouseEvent) {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete "${ev.name}"?`)) return;
+    try {
+      await subjectEventDelete(ev.id);
+      events = events.filter(e => e.id !== ev.id);
+    } catch (err) {
+      logError(`Failed to delete event: ${err}`);
     }
   }
 
@@ -294,131 +304,46 @@
   }
 </script>
 
-<div class="events-view">
-  <!-- Top Bar: Header & Add Button -->
-  <header class="view-header">
-    <div class="header-titles">
-      <h1 class="view-title">Academic Events & Deadlines</h1>
-      <p class="view-subtitle">Track upcoming exams, assignments, projects, and milestone countdowns.</p>
+<div class="view events-view">
+  <!-- Top Stat / KPI Cards (Consistent with DailyView, WeeklyView, HistoryView) -->
+  <div class="cards">
+    <div class="card" style="--delay: 0ms">
+      <span class="card-label">Next Deadline</span>
+      <span class="card-value next-val">
+        {nextMilestoneCountdown ? nextMilestoneCountdown.formatted : '—'}
+      </span>
+      <span class="card-subtext">
+        {nextMilestone ? `${nextMilestone.subject}: ${nextMilestone.name}` : 'All caught up'}
+      </span>
     </div>
-    <button class="btn-create-event" onclick={handleOpenCreate}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-      <span>New Event</span>
-    </button>
-  </header>
-
-  <!-- Hero: Next Milestone Countdown Banner -->
-  {#if nextMilestone && nextMilestoneCountdown}
-    {@const typeConf = TYPE_CONFIG[nextMilestone.event_type] || TYPE_CONFIG.other}
-    {@const subjCol = getSubjectColor(nextMilestone.subject)}
-    {@const subjFg = getContrastColor(subjCol)}
-    <div class="hero-milestone-card" onclick={() => handleEditEvent(nextMilestone!)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter') handleEditEvent(nextMilestone!); }}>
-      <div class="hero-left">
-        <div class="hero-badge-row">
-          <span class="hero-type-chip" style="border-color: {typeConf.color}; color: {typeConf.color};">
-            <span>{typeConf.icon}</span>
-            <span>{typeConf.label}</span>
-          </span>
-          <span class="hero-subject-chip" style="background-color: {subjCol}; color: {subjFg};">
-            {nextMilestone.subject}
-          </span>
-          <span class="hero-due-badge">
-            📅 {formatDateFriendly(nextMilestone.event_date)} • {formatTimeFriendly(nextMilestone.event_time, nextMilestone.is_all_day)}
-          </span>
-        </div>
-        <h2 class="hero-event-title">{nextMilestone.name}</h2>
-        {#if nextMilestone.notes}
-          <p class="hero-notes">{nextMilestone.notes}</p>
-        {/if}
-      </div>
-
-      <!-- Real-time Big Countdown Display -->
-      <div class="hero-countdown-box">
-        <span class="countdown-label">TIME REMAINING</span>
-        <div class="countdown-units">
-          <div class="unit-box">
-            <span class="unit-val">{nextMilestoneCountdown.days}</span>
-            <span class="unit-name">DAYS</span>
-          </div>
-          <span class="unit-sep">:</span>
-          <div class="unit-box">
-            <span class="unit-val">{String(nextMilestoneCountdown.hours).padStart(2, '0')}</span>
-            <span class="unit-name">HOURS</span>
-          </div>
-          <span class="unit-sep">:</span>
-          <div class="unit-box">
-            <span class="unit-val">{String(nextMilestoneCountdown.minutes).padStart(2, '0')}</span>
-            <span class="unit-name">MINS</span>
-          </div>
-          <span class="unit-sep">:</span>
-          <div class="unit-box">
-            <span class="unit-val highlight">{String(nextMilestoneCountdown.seconds).padStart(2, '0')}</span>
-            <span class="unit-name">SECS</span>
-          </div>
-        </div>
-      </div>
+    <div class="card-divider"></div>
+    <div class="card" style="--delay: 60ms">
+      <span class="card-label">Upcoming</span>
+      <span class="card-value">{counts.upcoming}</span>
+      <span class="card-subtext">Active deadlines</span>
     </div>
-  {/if}
-
-  <!-- Filters & Controls Bar -->
-  <div class="controls-bar">
-    <!-- Status Tabs -->
-    <div class="status-tabs">
-      <button
-        class="status-tab"
-        class:active={statusFilter === 'upcoming'}
-        onclick={() => statusFilter = 'upcoming'}
-      >
-        Upcoming <span class="tab-count">{counts.upcoming}</span>
-      </button>
-      <button
-        class="status-tab"
-        class:active={statusFilter === 'overdue'}
-        onclick={() => statusFilter = 'overdue'}
-      >
-        Overdue <span class="tab-count" class:has-overdue={counts.overdue > 0}>{counts.overdue}</span>
-      </button>
-      <button
-        class="status-tab"
-        class:active={statusFilter === 'completed'}
-        onclick={() => statusFilter = 'completed'}
-      >
-        Completed <span class="tab-count">{counts.completed}</span>
-      </button>
-      <button
-        class="status-tab"
-        class:active={statusFilter === 'all'}
-        onclick={() => statusFilter = 'all'}
-      >
-        All <span class="tab-count">{counts.all}</span>
-      </button>
+    <div class="card-divider"></div>
+    <div class="card" style="--delay: 120ms">
+      <span class="card-label">Overdue</span>
+      <span class="card-value" class:has-overdue={counts.overdue > 0}>{counts.overdue}</span>
+      <span class="card-subtext">Needs attention</span>
     </div>
+    <div class="card-divider"></div>
+    <div class="card" style="--delay: 180ms">
+      <span class="card-label">Completed</span>
+      <span class="card-value">{counts.completed}</span>
+      <span class="card-subtext">Done & submitted</span>
+    </div>
+  </div>
 
-    <!-- Dropdowns & Search -->
-    <div class="filter-actions">
-      <!-- Subject Filter -->
-      <select bind:value={subjectFilter} class="filter-select">
-        <option value="all">All Subjects</option>
-        {#each allSubjectsList as subj}
-          <option value={subj}>{subj}</option>
-        {/each}
-      </select>
-
-      <!-- Event Type Filter -->
-      <select bind:value={typeFilter} class="filter-select">
-        <option value="all">All Types</option>
-        <option value="exam">Exams</option>
-        <option value="assignment">Assignments</option>
-        <option value="project">Projects</option>
-        <option value="quiz">Quizzes</option>
-        <option value="other">Other</option>
-      </select>
+  <!-- Controls Bar (Consistent with HistoryView) -->
+  <div class="controls">
+    <div class="filter-row">
+      <DropdownSelect bind:value={filterSubject} options={allSubjectsList} placeholder="All Subjects" />
+      <DropdownSelect bind:value={filterType} options={TYPE_OPTIONS} placeholder="All Types" />
 
       <!-- Search Input -->
-      <div class="search-box">
+      <div class="search-wrap">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon">
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -430,153 +355,198 @@
           class="search-input"
         />
         {#if searchQuery}
-          <button class="btn-clear-search" onclick={() => searchQuery = ''}>✕</button>
+          <button class="btn-clear" onclick={() => searchQuery = ''}>✕</button>
         {/if}
+      </div>
+
+      <!-- Add Event Button -->
+      <button class="btn btn-add-entry" onclick={handleOpenCreate} title="Add Academic Event">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14"/>
+          <path d="M12 5v14"/>
+        </svg>
+        <span>Add Event</span>
+      </button>
+    </div>
+
+    <!-- Status Tabs (Quick modes matching HistoryView) -->
+    <div class="filter-row status-controls">
+      <div class="quick-modes">
+        <button
+          class="btn btn-small"
+          class:active={statusFilter === 'upcoming'}
+          onclick={() => statusFilter = 'upcoming'}
+        >
+          Upcoming <span class="tab-badge">{counts.upcoming}</span>
+        </button>
+        <button
+          class="btn btn-small"
+          class:active={statusFilter === 'overdue'}
+          onclick={() => statusFilter = 'overdue'}
+        >
+          Overdue <span class="tab-badge" class:overdue-badge={counts.overdue > 0}>{counts.overdue}</span>
+        </button>
+        <button
+          class="btn btn-small"
+          class:active={statusFilter === 'completed'}
+          onclick={() => statusFilter = 'completed'}
+        >
+          Completed <span class="tab-badge">{counts.completed}</span>
+        </button>
+        <button
+          class="btn btn-small"
+          class:active={statusFilter === 'all'}
+          onclick={() => statusFilter = 'all'}
+        >
+          All <span class="tab-badge">{counts.all}</span>
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- Events List Area -->
-  <div class="events-container">
+  <!-- Events List Table (Consistent with SubjectsView and HistoryView) -->
+  <div class="list-container">
     {#if loading}
-      <div class="empty-state">
-        <div class="spinner"></div>
-        <p>Loading academic events...</p>
-      </div>
+      <div class="msg">Loading academic events...</div>
     {:else if filteredEvents.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">📅</div>
-        <h3>No events found</h3>
-        <p>
-          {#if searchQuery || subjectFilter !== 'all' || typeFilter !== 'all'}
-            No events match your current filter criteria.
-          {:else if statusFilter === 'overdue'}
-            Great job! You have no overdue events.
-          {:else if statusFilter === 'completed'}
-            You haven't completed any events yet.
-          {:else}
-            No upcoming events yet. Add assignments or exams to start counting down!
-          {/if}
-        </p>
-        {#if statusFilter === 'upcoming' && !searchQuery && subjectFilter === 'all' && typeFilter === 'all'}
-          <button class="btn-create-event" onclick={handleOpenCreate}>
-            + Add First Event
-          </button>
+      <div class="msg">
+        {#if searchQuery || filterSubject || filterType}
+          No events match the selected filters.
+        {:else if statusFilter === 'overdue'}
+          No overdue events. Everything is on schedule!
+        {:else if statusFilter === 'completed'}
+          No completed events yet.
+        {:else}
+          No upcoming events. Use "+ Add Event" to track exams and assignments.
         {/if}
       </div>
     {:else}
-      <div class="events-grid">
-        {#each filteredEvents as ev (ev.id)}
-          {@const timing = getCountdownInfo(ev)}
-          {@const typeConf = TYPE_CONFIG[ev.event_type] || TYPE_CONFIG.other}
-          {@const subjCol = getSubjectColor(ev.subject)}
-          {@const subjFg = getContrastColor(subjCol)}
-          <div
-            class="event-card"
-            class:completed={ev.is_completed}
-            class:is-overdue={timing.urgency === 'overdue'}
-            class:is-urgent={timing.urgency === 'urgent'}
-            onclick={() => handleEditEvent(ev)}
-            role="button"
-            tabindex="0"
-            onkeydown={(e) => { if (e.key === 'Enter') handleEditEvent(ev); }}
-          >
-            <!-- Card Header: Checkbox + Subject + Type -->
-            <div class="card-top-row">
-              <!-- Checkbox -->
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="checkbox-wrapper"
-                onclick={(e) => handleToggleCompleted(ev, e)}
-                title={ev.is_completed ? 'Mark incomplete' : 'Mark completed'}
-              >
-                <input
-                  type="checkbox"
-                  checked={ev.is_completed}
+      <table class="events-table">
+        <thead>
+          <tr>
+            <th class="col-status"></th>
+            <th class="col-subject">Subject</th>
+            <th class="col-title">Event Title</th>
+            <th class="col-type">Type</th>
+            <th class="col-due">Due Date</th>
+            <th class="col-countdown">Countdown</th>
+            <th class="col-cal">Calendar</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each filteredEvents as ev (ev.id)}
+            {@const timing = getCountdownInfo(ev)}
+            {@const typeConf = TYPE_CONFIG[ev.event_type] || TYPE_CONFIG.other}
+            {@const subjCol = getSubjectColor(ev.subject)}
+            {@const subjFg = getContrastColor(subjCol)}
+            <tr
+              class="event-row"
+              class:is-completed={ev.is_completed}
+              class:is-overdue={timing.urgency === 'overdue'}
+              onclick={() => handleEditEvent(ev)}
+            >
+              <!-- Checkbox Toggle -->
+              <td class="col-status">
+                <button
+                  type="button"
+                  class="btn-status-toggle"
+                  class:checked={ev.is_completed}
                   onclick={(e) => handleToggleCompleted(ev, e)}
-                />
-              </div>
+                  title={ev.is_completed ? 'Mark incomplete' : 'Mark completed'}
+                >
+                  {#if ev.is_completed}
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  {/if}
+                </button>
+              </td>
 
-              <!-- Subject Tag -->
-              <span class="subject-badge" style="background-color: {subjCol}; color: {subjFg};">
-                {ev.subject}
-              </span>
+              <!-- Subject Pill -->
+              <td class="col-subject">
+                <span class="subject-pill" style="background-color: {subjCol}; color: {subjFg};">
+                  {ev.subject}
+                </span>
+              </td>
 
-              <!-- Type Badge -->
-              <span class="type-badge" style="border-color: {typeConf.color}; color: {typeConf.color};">
-                <span>{typeConf.icon}</span>
-                <span>{typeConf.label}</span>
-              </span>
+              <!-- Event Title & Notes Preview -->
+              <td class="col-title">
+                <div class="title-cell">
+                  <span class="event-name" class:completed-text={ev.is_completed}>
+                    {ev.name}
+                  </span>
+                  {#if ev.notes}
+                    <span class="event-notes-sub">{ev.notes}</span>
+                  {/if}
+                </div>
+              </td>
 
-              <!-- Calendar Destination Badge -->
-              <span class="cal-badge" class:google={ev.calendar_type === 'google'} title="Synced destination">
-                {#if ev.calendar_type === 'google'}
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>
-                  </svg>
-                  <span>{getCalendarName(ev)}</span>
-                {:else}
-                  <span>Local</span>
-                {/if}
-              </span>
-            </div>
+              <!-- Event Type Tag -->
+              <td class="col-type">
+                <span class="type-tag" style="border-color: {typeConf.color}; color: {typeConf.color};">
+                  <span class="type-icon">{typeConf.icon}</span>
+                  <span>{typeConf.label}</span>
+                </span>
+              </td>
 
-            <!-- Card Title -->
-            <h3 class="event-card-title" class:completed-title={ev.is_completed}>
-              {ev.name}
-            </h3>
+              <!-- Due Date & Time -->
+              <td class="col-due">
+                <div class="due-cell">
+                  <span class="due-date">{formatDateFriendly(ev.event_date)}</span>
+                  <span class="due-time">{formatTimeFriendly(ev.event_time, ev.is_all_day)}</span>
+                </div>
+              </td>
 
-            <!-- Date & Time Info -->
-            <div class="date-time-row">
-              <span class="date-info">
-                📅 {formatDateFriendly(ev.event_date)}
-              </span>
-              <span class="time-info">
-                🕒 {formatTimeFriendly(ev.event_time, ev.is_all_day)}
-              </span>
-            </div>
+              <!-- Live Countdown Badge -->
+              <td class="col-countdown">
+                <span
+                  class="countdown-badge"
+                  class:urgency-overdue={timing.urgency === 'overdue'}
+                  class:urgency-urgent={timing.urgency === 'urgent'}
+                  class:urgency-soon={timing.urgency === 'soon'}
+                  class:urgency-upcoming={timing.urgency === 'upcoming'}
+                  class:urgency-completed={timing.urgency === 'completed'}
+                >
+                  {timing.formatted}
+                </span>
+              </td>
 
-            <!-- Countdown Pill / Urgency Indicator -->
-            <div class="countdown-pill-row">
-              <div class="countdown-pill" class:urgency-overdue={timing.urgency === 'overdue'} class:urgency-urgent={timing.urgency === 'urgent'} class:urgency-soon={timing.urgency === 'soon'} class:urgency-upcoming={timing.urgency === 'upcoming'} class:urgency-completed={timing.urgency === 'completed'}>
-                {#if timing.urgency === 'overdue'}
-                  <span class="pill-icon">⚠️</span>
-                {:else if timing.urgency === 'urgent'}
-                  <span class="pill-icon">🔥</span>
-                {:else if timing.urgency === 'soon'}
-                  <span class="pill-icon">⏳</span>
-                {:else if timing.urgency === 'completed'}
-                  <span class="pill-icon">✓</span>
-                {:else}
-                  <span class="pill-icon">⏱️</span>
-                {/if}
-                <span class="pill-text">{timing.formatted}</span>
-              </div>
-            </div>
+              <!-- Calendar Destination -->
+              <td class="col-cal">
+                <span class="cal-badge" class:is-google={ev.calendar_type === 'google'} title={getCalendarName(ev)}>
+                  {ev.calendar_type === 'google' ? 'Google' : 'Local'}
+                </span>
+              </td>
 
-            <!-- Notes preview if available -->
-            {#if ev.notes}
-              <p class="event-notes-preview">{ev.notes}</p>
-            {/if}
-
-            <!-- Card Actions -->
-            <div class="card-footer">
-              <span class="edit-hint">Click to edit</span>
-              <button
-                class="btn-edit-action"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  handleEditEvent(ev);
-                }}
-                title="Edit event"
-              >
-                ✏️ Edit
-              </button>
-            </div>
-          </div>
-        {/each}
-      </div>
+              <!-- Actions Column -->
+              <td class="col-actions">
+                <div class="row-actions">
+                  <button
+                    class="btn-icon-action"
+                    onclick={(e) => { e.stopPropagation(); handleEditEvent(ev); }}
+                    title="Edit event"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                    </svg>
+                  </button>
+                  <button
+                    class="btn-icon-action btn-delete-action"
+                    onclick={(e) => handleDeleteEvent(ev, e)}
+                    title="Delete event"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </div>
 </div>
@@ -595,283 +565,105 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    padding: 1.25rem 1.5rem;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     box-sizing: border-box;
     color: var(--color-foreground);
     background: transparent;
-    gap: 1.25rem;
   }
 
-  /* Header */
-  .view-header {
+  /* ── Stat KPI Cards (100% matched to DailyView / WeeklyView) ── */
+  .cards {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-
-  .view-title {
-    font-size: 1.35rem;
-    font-weight: 700;
-    margin: 0 0 4px 0;
-    color: var(--color-foreground);
-  }
-
-  .view-subtitle {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--color-foreground-darker, #a1a1aa);
-  }
-
-  .btn-create-event {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--color-focus-round);
-    color: var(--color-background);
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 0.86rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: filter 0.15s, transform 0.1s;
+    align-items: stretch;
+    border-bottom: 1px solid var(--color-separator);
     flex-shrink: 0;
   }
 
-  .btn-create-event:hover {
-    filter: brightness(1.1);
-  }
-
-  .btn-create-event:active {
-    transform: scale(0.98);
-  }
-
-  /* Hero Milestone Card */
-  .hero-milestone-card {
-    background: color-mix(in oklch, var(--color-foreground) 4%, transparent);
-    border: 1px solid var(--color-separator);
-    border-radius: 8px;
-    padding: 1.2rem 1.4rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1.5rem;
-    cursor: pointer;
-    transition: border-color 0.2s, background-color 0.2s, transform 0.1s;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-  }
-
-  .hero-milestone-card:hover {
-    border-color: var(--color-accent);
-    background: color-mix(in oklch, var(--color-foreground) 6%, transparent);
-  }
-
-  .hero-left {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  .card {
     flex: 1;
-    min-width: 0;
-  }
-
-  .hero-badge-row {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .hero-type-chip {
-    display: flex;
-    align-items: center;
+    justify-content: center;
     gap: 4px;
-    border: 1px solid currentColor;
-    border-radius: 4px;
-    padding: 2px 7px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    padding: 16px 20px;
+    animation: card-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--delay, 0ms);
   }
 
-  .hero-subject-chip {
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
+  @keyframes card-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
-  .hero-due-badge {
-    font-size: 0.78rem;
-    color: var(--color-foreground-darker, #a1a1aa);
-  }
-
-  .hero-event-title {
-    margin: 0;
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: var(--color-foreground);
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .hero-notes {
-    margin: 0;
-    font-size: 0.82rem;
-    color: var(--color-foreground-darker, #a1a1aa);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* Big Real-Time Countdown Box */
-  .hero-countdown-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background: color-mix(in oklch, var(--color-foreground) 6%, transparent);
-    border: 1px solid var(--color-separator);
-    border-radius: 8px;
-    padding: 10px 16px;
-    flex-shrink: 0;
-  }
-
-  .countdown-label {
+  .card-label {
     font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-foreground-darker);
+  }
+
+  .card-value {
+    font-size: 1.85rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--color-foreground-darker, #a1a1aa);
-    margin-bottom: 6px;
-  }
-
-  .countdown-units {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .unit-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 38px;
-  }
-
-  .unit-val {
-    font-size: 1.35rem;
-    font-weight: 800;
-    font-family: monospace;
-    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
     color: var(--color-foreground);
+    line-height: 1.1;
   }
 
-  .unit-val.highlight {
+  .card-value.next-val {
+    font-size: 1.4rem;
+    font-family: monospace;
     color: var(--color-focus-round);
   }
 
-  .unit-name {
-    font-size: 0.6rem;
-    font-weight: 600;
-    color: var(--color-foreground-darker, #a1a1aa);
-    margin-top: 2px;
-  }
-
-  .unit-sep {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--color-separator);
-    margin-bottom: 8px;
-  }
-
-  /* Controls & Filter Bar */
-  .controls-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--color-separator);
-  }
-
-  .status-tabs {
-    display: flex;
-    gap: 4px;
-    background: color-mix(in oklch, var(--color-foreground) 4%, transparent);
-    padding: 3px;
-    border-radius: 6px;
-    border: 1px solid var(--color-separator);
-  }
-
-  .status-tab {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: transparent;
-    border: none;
-    color: var(--color-foreground-darker, #a1a1aa);
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 0.82rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .status-tab:hover {
-    color: var(--color-foreground);
-  }
-
-  .status-tab.active {
-    background: var(--color-focus-round);
-    color: var(--color-background);
-    font-weight: 600;
-  }
-
-  .tab-count {
-    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
-    padding: 1px 6px;
-    border-radius: 10px;
-    font-size: 0.72rem;
-    font-weight: 600;
-  }
-
-  .status-tab.active .tab-count {
-    background: rgba(0, 0, 0, 0.2);
-    color: var(--color-background);
-  }
-
-  .tab-count.has-overdue {
-    background: rgba(239, 68, 68, 0.2);
+  .card-value.has-overdue {
     color: #ef4444;
   }
 
-  .filter-actions {
+  .card-subtext {
+    font-size: 0.75rem;
+    color: var(--color-foreground-darker);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .card-divider {
+    width: 1px;
+    background: var(--color-separator);
+    align-self: stretch;
+    margin: 12px 0;
+  }
+
+  /* ── Controls & Filter Bar (100% matched to HistoryView) ── */
+  .controls {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px 0 16px;
+    flex-shrink: 0;
+  }
+
+  .filter-row {
+    display: flex;
     gap: 8px;
+    align-items: center;
     flex-wrap: wrap;
   }
 
-  .filter-select {
-    padding: 6px 10px;
-    background: color-mix(in oklch, var(--color-foreground) 6%, transparent);
-    border: 1px solid var(--color-separator);
-    border-radius: 6px;
-    color: var(--color-foreground);
-    font-size: 0.8rem;
-    outline: none;
-    cursor: pointer;
-  }
-
-  .filter-select option {
-    background: var(--color-background);
-    color: var(--color-foreground);
-  }
-
-  .search-box {
+  .search-wrap {
     position: relative;
     display: flex;
     align-items: center;
@@ -880,179 +672,293 @@
   .search-icon {
     position: absolute;
     left: 8px;
-    color: var(--color-foreground-darker, #a1a1aa);
+    color: var(--color-foreground-darker);
     pointer-events: none;
   }
 
   .search-input {
-    padding: 6px 26px 6px 28px;
-    background: color-mix(in oklch, var(--color-foreground) 6%, transparent);
+    background: transparent;
     border: 1px solid var(--color-separator);
-    border-radius: 6px;
     color: var(--color-foreground);
-    font-size: 0.8rem;
-    outline: none;
+    padding: 6px 26px 6px 28px;
+    border-radius: 4px;
+    font-size: 0.85rem;
     width: 140px;
     transition: width 0.2s, border-color 0.2s;
+    outline: none;
   }
 
   .search-input:focus {
-    width: 190px;
-    border-color: var(--color-accent);
+    width: 180px;
+    border-color: var(--color-focus-round);
   }
 
-  .btn-clear-search {
+  .btn-clear {
     position: absolute;
     right: 6px;
     background: none;
     border: none;
-    color: var(--color-foreground-darker, #a1a1aa);
+    color: var(--color-foreground-darker);
     cursor: pointer;
     font-size: 0.75rem;
-    padding: 2px 4px;
   }
 
-  /* Grid Area */
-  .events-container {
-    flex: 1;
-  }
-
-  .events-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1rem;
-    padding-bottom: 2rem;
-  }
-
-  /* Event Card */
-  .event-card {
-    background: color-mix(in oklch, var(--color-foreground) 3%, transparent);
-    border: 1px solid var(--color-separator);
-    border-radius: 8px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  .btn-add-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-focus-round, var(--color-accent));
+    color: var(--color-background);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
-    position: relative;
-    box-sizing: border-box;
+    white-space: nowrap;
+    transition: filter 0.15s ease;
+    margin-left: auto;
   }
 
-  .event-card:hover {
-    border-color: var(--color-accent);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  .btn-add-entry:hover {
+    filter: brightness(1.1);
   }
 
-  .event-card.completed {
-    opacity: 0.65;
-    background: color-mix(in oklch, var(--color-foreground) 2%, transparent);
+  .quick-modes {
+    display: flex;
+    gap: 4px;
+    background: var(--color-background);
+    padding: 3px;
+    border-radius: 6px;
+    border: 1px solid var(--color-separator);
   }
 
-  .event-card.is-overdue {
-    border-left: 3px solid #ef4444;
-  }
-
-  .event-card.is-urgent {
-    border-left: 3px solid #f97316;
-  }
-
-  .card-top-row {
+  .btn-small {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    border: none;
+    background: transparent;
+    color: var(--color-foreground-darker);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
   }
 
-  .checkbox-wrapper {
+  .btn-small:hover {
+    color: var(--color-foreground);
+    background: var(--color-hover);
+  }
+
+  .btn-small.active {
+    background: var(--color-focus-round);
+    color: var(--color-background);
+    font-weight: 600;
+  }
+
+  .tab-badge {
+    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
+    padding: 1px 5px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .btn-small.active .tab-badge {
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--color-background);
+  }
+
+  .tab-badge.overdue-badge {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+  }
+
+  /* ── Events Table (100% matched to SubjectsView & HistoryView) ── */
+  .list-container {
+    flex: 1;
+    overflow-y: auto;
+    background: transparent;
+    border: 1px solid var(--color-separator);
+    border-radius: 6px;
+    margin: 14px 16px 16px 16px;
+  }
+
+  .msg {
+    padding: 36px 16px;
+    text-align: center;
+    color: var(--color-foreground-darker);
+    font-size: 0.9rem;
+  }
+
+  .events-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  th, td {
+    padding: 0.65rem 0.85rem;
+    text-align: left;
+    border-bottom: 1px solid var(--color-separator);
+    vertical-align: middle;
+  }
+
+  th {
+    font-weight: 600;
+    color: var(--color-foreground-darker);
+    background: var(--color-background);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .event-row {
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+
+  .event-row:hover {
+    background: var(--color-hover);
+  }
+
+  .event-row.is-completed {
+    opacity: 0.6;
+  }
+
+  .event-row.is-overdue {
+    border-left: 3px solid #ef4444;
+  }
+
+  /* Columns */
+  .col-status {
+    width: 32px;
+    text-align: center;
+  }
+
+  .btn-status-toggle {
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--color-foreground-darker);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    cursor: pointer;
+    justify-content: center;
+    color: var(--color-background);
+    padding: 0;
+    transition: all 0.15s;
   }
 
-  .checkbox-wrapper input {
-    cursor: pointer;
-    width: 15px;
-    height: 15px;
-    accent-color: var(--color-focus-round);
+  .btn-status-toggle.checked {
+    background: var(--color-focus-round);
+    border-color: var(--color-focus-round);
   }
 
-  .subject-badge {
-    padding: 2px 8px;
+  .col-subject {
+    width: 14%;
+  }
+
+  .subject-pill {
+    display: inline-block;
+    padding: 2px 7px;
     border-radius: 4px;
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     font-weight: 600;
-    max-width: 130px;
+    max-width: 110px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .type-badge {
+  .col-title {
+    width: 30%;
+  }
+
+  .title-cell {
     display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .event-name {
+    font-weight: 600;
+    color: var(--color-foreground);
+    line-height: 1.25;
+  }
+
+  .event-name.completed-text {
+    text-decoration: line-through;
+    color: var(--color-foreground-darker);
+  }
+
+  .event-notes-sub {
+    font-size: 0.74rem;
+    color: var(--color-foreground-darker);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .col-type {
+    width: 12%;
+  }
+
+  .type-tag {
+    display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     border: 1px solid currentColor;
     border-radius: 4px;
     padding: 1px 6px;
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     font-weight: 500;
   }
 
-  .cal-badge {
-    margin-left: auto;
-    font-size: 0.68rem;
-    color: var(--color-foreground-darker, #a1a1aa);
+  .type-icon {
+    font-size: 0.75rem;
+  }
+
+  .col-due {
+    width: 16%;
+  }
+
+  .due-cell {
     display: flex;
-    align-items: center;
-    gap: 3px;
-    background: color-mix(in oklch, var(--color-foreground) 5%, transparent);
-    padding: 2px 5px;
-    border-radius: 4px;
+    flex-direction: column;
+    gap: 1px;
   }
 
-  .cal-badge.google {
-    color: #60a5fa;
-  }
-
-  .event-card-title {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 600;
-    line-height: 1.25;
+  .due-date {
     color: var(--color-foreground);
+    font-weight: 500;
   }
 
-  .completed-title {
-    text-decoration: line-through;
-    color: var(--color-foreground-darker, #a1a1aa);
+  .due-time {
+    font-size: 0.74rem;
+    color: var(--color-foreground-darker);
   }
 
-  .date-time-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 0.78rem;
-    color: var(--color-foreground-darker, #a1a1aa);
+  .col-countdown {
+    width: 16%;
   }
 
-  /* Countdown Pill */
-  .countdown-pill-row {
-    display: flex;
-    align-items: center;
-  }
-
-  .countdown-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 9px;
-    border-radius: 12px;
+  .countdown-badge {
+    display: inline-block;
+    font-family: monospace;
     font-size: 0.76rem;
     font-weight: 600;
-    font-family: monospace;
+    padding: 3px 8px;
+    border-radius: 12px;
     letter-spacing: 0.02em;
+    white-space: nowrap;
   }
 
   .urgency-overdue {
@@ -1081,90 +987,58 @@
 
   .urgency-completed {
     background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
-    color: var(--color-foreground-darker, #a1a1aa);
+    color: var(--color-foreground-darker);
   }
 
-  .event-notes-preview {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--color-foreground-darker, #a1a1aa);
-    line-height: 1.3;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .col-cal {
+    width: 70px;
   }
 
-  .card-footer {
+  .cal-badge {
+    font-size: 0.72rem;
+    color: var(--color-foreground-darker);
+    background: color-mix(in oklch, var(--color-foreground) 6%, transparent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .cal-badge.is-google {
+    color: #60a5fa;
+  }
+
+  .col-actions {
+    width: 60px;
+    text-align: right;
+  }
+
+  .row-actions {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-top: auto;
-    padding-top: 6px;
-    border-top: 1px solid var(--color-separator);
+    justify-content: flex-end;
+    gap: 4px;
   }
 
-  .edit-hint {
-    font-size: 0.7rem;
-    color: var(--color-foreground-darker, #a1a1aa);
-    opacity: 0.6;
-  }
-
-  .btn-edit-action {
+  .btn-icon-action {
     background: transparent;
     border: none;
-    color: var(--color-foreground-darker, #a1a1aa);
-    font-size: 0.72rem;
+    color: var(--color-foreground-darker);
     cursor: pointer;
-    padding: 3px 6px;
+    padding: 4px;
     border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.15s;
   }
 
-  .btn-edit-action:hover {
-    background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
+  .btn-icon-action:hover {
     color: var(--color-foreground);
+    background: var(--color-hover);
   }
 
-  /* Empty State */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 1rem;
-    color: var(--color-foreground-darker, #a1a1aa);
-    text-align: center;
-    gap: 10px;
-  }
-
-  .empty-icon {
-    font-size: 2.5rem;
-  }
-
-  .empty-state h3 {
-    margin: 0;
-    font-size: 1.15rem;
-    color: var(--color-foreground);
-  }
-
-  .empty-state p {
-    margin: 0;
-    font-size: 0.85rem;
-    max-width: 380px;
-  }
-
-  .spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--color-separator);
-    border-top-color: var(--color-focus-round);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  .btn-delete-action:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
   }
 </style>

@@ -17,7 +17,7 @@
     CreateSubjectEventPayload,
     UpdateSubjectEventPayload,
   } from '$lib/types';
-  import { getSubjectColor, getContrastColor } from '$lib/utils/subjectColors';
+  import { getSubjectColor } from '$lib/utils/subjectColors';
   import { error as logError } from '@tauri-apps/plugin-log';
 
   interface Props {
@@ -208,13 +208,10 @@
   <div class="modal-content" onclick={(e) => e.stopPropagation()}>
     <!-- Modal Header -->
     <div class="modal-header">
-      <div class="header-title-row">
-        <span class="header-icon">
-          {EVENT_TYPES.find(t => t.id === eventType)?.icon || '📌'}
-        </span>
-        <h2>{isEditMode ? 'Edit Academic Event' : 'New Academic Event'}</h2>
+      <div class="header-title">
+        {isEditMode ? 'Edit Academic Event' : 'New Academic Event'}
       </div>
-      <button class="close-btn" aria-label="Close" onclick={onClose}>✕</button>
+      <button class="close-btn" aria-label="Close" onclick={onClose}>×</button>
     </div>
 
     <!-- Error Banner -->
@@ -225,8 +222,8 @@
     {/if}
 
     <!-- Modal Form Body -->
-    <div class="modal-body">
-      <!-- Title / Name Input -->
+    <div class="scrollable-body">
+      <!-- Title Input -->
       <div class="form-row">
         <label for="event-name-input">Event Title / Description *</label>
         <input
@@ -268,7 +265,8 @@
         </div>
 
         <div class="form-row">
-          <label for="event-type-select">Event Type</label>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
+          <label>Event Type</label>
           <div class="type-pill-selector">
             {#each EVENT_TYPES as t}
               <button
@@ -279,7 +277,7 @@
                 title={t.label}
               >
                 <span>{t.icon}</span>
-                <span class="type-label">{t.label}</span>
+                <span>{t.label}</span>
               </button>
             {/each}
           </div>
@@ -324,7 +322,8 @@
 
       <!-- Calendar Sync Destination -->
       <div class="form-row">
-        <label for="calendar-sync-select">Calendar Destination</label>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
+        <label>Calendar Destination</label>
         <div class="calendar-choice-box">
           <div class="toggle-group">
             <button
@@ -335,8 +334,7 @@
                 googleCalendarId = null;
               }}
             >
-              <span class="cal-btn-icon">📅</span>
-              <span>Local Calendar</span>
+              <span>📅 Local Calendar</span>
             </button>
             <button
               type="button"
@@ -350,9 +348,6 @@
               }}
               title={!isGoogleSignedIn ? 'Sign in to Google in Settings to sync' : 'Sync to Google Calendar'}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>
-              </svg>
               <span>Google Calendar</span>
             </button>
           </div>
@@ -373,12 +368,8 @@
                   {/each}
                 </select>
               {:else}
-                <span class="hint-muted">No writable Google Calendars found.</span>
+                <span class="hint-muted">No Google Calendars found.</span>
               {/if}
-            </div>
-          {:else if !isGoogleSignedIn}
-            <div class="google-hint">
-              <span>Tip: Connect Google Calendar in Settings to automatically sync assignments and exams across your devices.</span>
             </div>
           {/if}
         </div>
@@ -390,13 +381,13 @@
         <textarea
           id="event-notes-input"
           bind:value={notes}
-          placeholder="Chapters to study, essay requirements, submission link..."
-          rows="3"
+          placeholder="Chapters to study, assignment requirements, submission link..."
+          rows="2"
           class="custom-textarea"
         ></textarea>
       </div>
 
-      <!-- Completed Checkbox (for edit mode or manual marking) -->
+      <!-- Completed Checkbox (for edit mode) -->
       {#if isEditMode}
         <div class="form-row">
           <label class="completion-toggle-label">
@@ -404,14 +395,14 @@
               type="checkbox"
               bind:checked={isCompleted}
             />
-            <span class="completion-text">Mark as completed / submitted</span>
+            <span>Mark as completed / submitted</span>
           </label>
         </div>
       {/if}
     </div>
 
     <!-- Modal Actions Footer -->
-    <div class="modal-actions">
+    <div class="actions">
       {#if isEditMode}
         <button
           type="button"
@@ -422,24 +413,22 @@
           {isDeleting ? 'Deleting...' : 'Delete'}
         </button>
       {/if}
-      <div class="actions-right">
-        <button
-          type="button"
-          class="btn-cancel"
-          onclick={onClose}
-          disabled={isSaving || isDeleting}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="btn-save"
-          onclick={handleSave}
-          disabled={isSaving || isDeleting}
-        >
-          {isSaving ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Create Event')}
-        </button>
-      </div>
+      <button
+        type="button"
+        class="btn-cancel"
+        onclick={onClose}
+        disabled={isSaving || isDeleting}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="btn-save"
+        onclick={handleSave}
+        disabled={isSaving || isDeleting}
+      >
+        {isSaving ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Create Event')}
+      </button>
     </div>
   </div>
 </div>
@@ -447,69 +436,62 @@
 <style>
   .modal-backdrop {
     position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.65);
-    backdrop-filter: blur(4px);
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: 1000;
+    backdrop-filter: blur(2px);
     animation: fade-in 0.15s ease-out;
   }
 
   .modal-content {
     background: var(--color-background);
-    color: var(--color-foreground);
-    width: 90%;
-    max-width: 540px;
-    max-height: 90vh;
-    border-radius: 8px;
     border: 1px solid var(--color-separator);
-    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+    border-radius: 8px;
+    width: 480px;
+    max-width: 90vw;
+    max-height: 88vh;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     animation: slide-up 0.15s ease-out;
+    color: var(--color-foreground);
+    overflow: hidden;
   }
 
   .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 20px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--color-separator);
   }
 
-  .header-title-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .header-icon {
-    font-size: 1.25rem;
-  }
-
-  .modal-header h2 {
-    margin: 0;
-    font-size: 1.15rem;
+  .header-title {
+    font-size: 1.05rem;
     font-weight: 600;
+    color: var(--color-foreground);
+    letter-spacing: 0.02em;
   }
 
   .close-btn {
-    background: transparent;
+    background: none;
     border: none;
-    color: var(--color-foreground-darker, #a1a1aa);
-    font-size: 1.1rem;
+    font-size: 1.5rem;
+    color: var(--color-foreground-darker);
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: var(--transition-default);
+    padding: 0;
+    line-height: 1;
+    transition: color 0.15s;
   }
 
   .close-btn:hover {
-    color: var(--color-foreground);
-    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
+    color: var(--color-accent);
   }
 
   .error-banner {
@@ -522,8 +504,8 @@
     border-radius: 2px;
   }
 
-  .modal-body {
-    padding: 18px 20px;
+  .scrollable-body {
+    padding: 20px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -539,13 +521,13 @@
   .form-grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 14px;
+    gap: 12px;
   }
 
   label {
-    font-size: 0.82rem;
+    font-size: 0.85rem;
+    color: var(--color-foreground-darker);
     font-weight: 500;
-    color: var(--color-foreground-darker, #a1a1aa);
   }
 
   .sublabel {
@@ -559,22 +541,22 @@
   .custom-textarea {
     width: 100%;
     padding: 8px 12px;
-    background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
-    border: 1px solid var(--color-separator);
-    border-radius: 6px;
+    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
+    border: 1px solid transparent;
+    border-radius: 4px;
     color: var(--color-foreground);
     font-size: 0.88rem;
-    font-family: inherit;
+    font-family: 'Mona Sans', system-ui, sans-serif;
+    transition: var(--transition-default);
     outline: none;
-    transition: border-color 0.15s, background-color 0.15s;
     box-sizing: border-box;
   }
 
   .custom-input:focus,
   .custom-select:focus,
   .custom-textarea:focus {
-    border-color: var(--color-accent);
-    background: color-mix(in oklch, var(--color-foreground) 12%, transparent);
+    border-color: var(--color-focus-round);
+    background: color-mix(in oklch, var(--color-foreground) 15%, transparent);
   }
 
   .custom-select option {
@@ -601,32 +583,31 @@
   .type-pill-selector {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
   }
 
   .type-pill {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 5px 8px;
-    background: color-mix(in oklch, var(--color-foreground) 6%, transparent);
-    border: 1px solid var(--color-separator);
-    border-radius: 5px;
-    color: var(--color-foreground-darker, #a1a1aa);
-    font-size: 0.78rem;
+    padding: 4px 7px;
+    background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--color-foreground-darker);
+    font-size: 0.76rem;
     cursor: pointer;
     transition: all 0.15s;
   }
 
   .type-pill:hover {
-    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
+    background: color-mix(in oklch, var(--color-foreground) 14%, transparent);
     color: var(--color-foreground);
   }
 
   .type-pill.active {
     background: var(--color-focus-round);
     color: var(--color-background);
-    border-color: var(--color-focus-round);
     font-weight: 600;
   }
 
@@ -643,15 +624,15 @@
     gap: 6px;
     cursor: pointer;
     font-size: 0.78rem;
-    color: var(--color-foreground-darker, #a1a1aa);
+    color: var(--color-foreground-darker);
   }
 
   .all-day-hint {
     padding: 8px 12px;
     font-size: 0.82rem;
-    color: var(--color-foreground-darker, #a1a1aa);
+    color: var(--color-foreground-darker);
     background: color-mix(in oklch, var(--color-foreground) 4%, transparent);
-    border-radius: 6px;
+    border-radius: 4px;
     border: 1px dashed var(--color-separator);
   }
 
@@ -659,8 +640,8 @@
   .calendar-choice-box {
     background: color-mix(in oklch, var(--color-foreground) 4%, transparent);
     border: 1px solid var(--color-separator);
-    border-radius: 6px;
-    padding: 10px;
+    border-radius: 4px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -677,26 +658,24 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 7px 12px;
-    background: transparent;
-    border: 1px solid var(--color-separator);
+    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
+    border: 1px solid transparent;
+    color: var(--color-foreground);
+    padding: 7px;
     border-radius: 4px;
-    color: var(--color-foreground-darker, #a1a1aa);
     font-size: 0.82rem;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: var(--transition-default);
   }
 
-  .toggle-group button:hover:not(:disabled) {
-    background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
-    color: var(--color-foreground);
+  .toggle-group button:hover:not(.active):not(:disabled) {
+    background: color-mix(in oklch, var(--color-foreground) 15%, transparent);
   }
 
   .toggle-group button.active {
     background: var(--color-focus-round);
     color: var(--color-background);
-    border-color: var(--color-focus-round);
-    font-weight: 500;
+    font-weight: 600;
   }
 
   .toggle-group button:disabled {
@@ -705,18 +684,12 @@
   }
 
   .google-calendar-select-wrapper {
-    margin-top: 4px;
-  }
-
-  .google-hint {
-    font-size: 0.75rem;
-    color: var(--color-foreground-darker, #a1a1aa);
-    padding: 4px 6px;
+    margin-top: 2px;
   }
 
   .hint-muted {
     font-size: 0.78rem;
-    color: var(--color-foreground-darker, #a1a1aa);
+    color: var(--color-foreground-darker);
     font-style: italic;
   }
 
@@ -726,71 +699,68 @@
     align-items: center;
     gap: 8px;
     cursor: pointer;
-    padding: 8px 10px;
+    padding: 6px 8px;
     background: color-mix(in oklch, var(--color-foreground) 5%, transparent);
-    border-radius: 6px;
-    font-size: 0.85rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
     color: var(--color-foreground);
   }
 
-  .completion-toggle-label input {
-    cursor: pointer;
-  }
-
   /* Actions Footer */
-  .modal-actions {
+  .actions {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    padding: 12px 20px;
+    gap: 12px;
+    padding: 16px 20px;
     border-top: 1px solid var(--color-separator);
-  }
-
-  .actions-right {
-    display: flex;
-    gap: 10px;
-    margin-left: auto;
-  }
-
-  .btn-cancel,
-  .btn-delete,
-  .btn-save {
-    padding: 7px 16px;
-    border-radius: 5px;
-    font-size: 0.86rem;
-    cursor: pointer;
-    transition: all 0.15s;
   }
 
   .btn-cancel {
     background: transparent;
-    border: 1px solid var(--color-separator);
+    border: 1px solid var(--color-foreground-darker);
     color: var(--color-foreground);
+    padding: 7px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    transition: background 0.15s;
   }
 
   .btn-cancel:hover:not(:disabled) {
-    background: color-mix(in oklch, var(--color-foreground) 8%, transparent);
+    background: color-mix(in oklch, var(--color-foreground) 10%, transparent);
+  }
+
+  .btn-save {
+    background: var(--color-focus-round);
+    border: none;
+    color: var(--color-background);
+    padding: 7px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 500;
+    transition: filter 0.15s;
+  }
+
+  .btn-save:hover:not(:disabled) {
+    filter: brightness(1.1);
   }
 
   .btn-delete {
     background: transparent;
     border: 1px solid #ef4444;
     color: #ef4444;
+    padding: 7px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    margin-right: auto;
+    transition: background 0.15s;
   }
 
   .btn-delete:hover:not(:disabled) {
     background: rgba(239, 68, 68, 0.15);
-  }
-
-  .btn-save {
-    background: var(--color-focus-round);
-    border: 1px solid var(--color-focus-round);
-    color: var(--color-background);
-    font-weight: 500;
-  }
-
-  .btn-save:hover:not(:disabled) {
-    filter: brightness(1.1);
   }
 
   .btn-cancel:disabled,
@@ -806,7 +776,7 @@
   }
 
   @keyframes slide-up {
-    from { transform: translateY(12px); opacity: 0; }
+    from { transform: translateY(10px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
   }
 </style>
