@@ -380,7 +380,15 @@ pub fn sessions_clear(db: State<'_, DbState>, app: AppHandle) -> Result<(), Stri
 #[tauri::command]
 pub fn sessions_import_xlsx(path: String, db: State<'_, DbState>, app: AppHandle) -> Result<u32, String> {
     log::info!("[sessions] importing from {path}");
-    let mut workbook = open_workbook_auto(&path).map_err(|e| format!("Failed to open workbook: {e}"))?;
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Import path cannot be empty".to_string());
+    }
+    let import_path = std::path::Path::new(trimmed);
+    if !import_path.is_file() {
+        return Err("Import file does not exist".to_string());
+    }
+    let mut workbook = open_workbook_auto(trimmed).map_err(|e| format!("Failed to open workbook: {e}"))?;
     
     // get first sheet
     let sheet_name = workbook.sheet_names().first().cloned().ok_or("No sheets found in workbook")?;
@@ -493,6 +501,20 @@ pub fn sessions_import_xlsx(path: String, db: State<'_, DbState>, app: AppHandle
 #[tauri::command]
 pub fn sessions_export(path: String, db: State<'_, DbState>) -> Result<u32, String> {
     log::info!("[sessions] exporting to {path}");
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Export path cannot be empty".to_string());
+    }
+    if !trimmed.ends_with(".json") {
+        return Err("Export file must have a .json extension".to_string());
+    }
+    let export_path = std::path::Path::new(trimmed);
+    if let Some(parent) = export_path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.is_dir() {
+            return Err("Export parent directory does not exist".to_string());
+        }
+    }
+
     let conn = db.lock().map_err(|e| e.to_string())?;
     let sessions = queries::export_sessions(&conn).map_err(|e| e.to_string())?;
     let count = sessions.len() as u32;
@@ -504,7 +526,7 @@ pub fn sessions_export(path: String, db: State<'_, DbState>) -> Result<u32, Stri
         sessions,
     };
 
-    pomotroid_io::write_export(&path, &envelope)?;
+    pomotroid_io::write_export(trimmed, &envelope)?;
     log::info!("[sessions] exported {count} sessions to {path}");
     Ok(count)
 }
@@ -515,7 +537,16 @@ pub fn sessions_export(path: String, db: State<'_, DbState>) -> Result<u32, Stri
 #[tauri::command]
 pub fn sessions_import(path: String, db: State<'_, DbState>, app: AppHandle) -> Result<queries::ImportSummary, String> {
     log::info!("[sessions] importing from {path}");
-    let envelope = pomotroid_io::read_import(&path)?;
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Import path cannot be empty".to_string());
+    }
+    let import_path = std::path::Path::new(trimmed);
+    if !import_path.is_file() {
+        return Err("Import file does not exist".to_string());
+    }
+
+    let envelope = pomotroid_io::read_import(trimmed)?;
     let conn = db.lock().map_err(|e| e.to_string())?;
     let summary = queries::import_sessions(&conn, &envelope.sessions).map_err(|e| e.to_string())?;
     log::info!("[sessions] import complete: imported={} skipped={}", summary.imported, summary.skipped);

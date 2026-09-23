@@ -238,19 +238,21 @@ impl PomotroidDbus {
                             goal_rounds: None,
                         });
                     }
-                    if let Some(round_id) = snap.active_session_id {
-                        let _ = queries::update_session(&conn, round_id, queries::UpdateSessionPayload {
-                            subject: if subject.is_empty() { None } else { Some(subject.clone()) },
-                            subject_topic: if subject_topic.is_empty() { None } else { Some(subject_topic.clone()) },
-                            study_type: if study_type.is_empty() { None } else { Some(study_type.clone()) },
-                            notes: if notes.is_empty() { None } else { Some(notes.clone()) },
-                            duration_secs: None,
-                            exclude_from_stats: None,
-                            started_at: None,
-                            completed: None,
-                            is_half_session: None,
-                            round_type: None,
-                        });
+                    if (snap.is_running || snap.is_paused) && snap.round_type == "work" {
+                        if let Some(round_id) = snap.active_session_id {
+                            let _ = queries::update_session(&conn, round_id, queries::UpdateSessionPayload {
+                                subject: if subject.is_empty() { None } else { Some(subject.clone()) },
+                                subject_topic: if subject_topic.is_empty() { None } else { Some(subject_topic.clone()) },
+                                study_type: if study_type.is_empty() { None } else { Some(study_type.clone()) },
+                                notes: if notes.is_empty() { None } else { Some(notes.clone()) },
+                                duration_secs: None,
+                                exclude_from_stats: None,
+                                started_at: None,
+                                completed: None,
+                                is_half_session: None,
+                                round_type: None,
+                            });
+                        }
                     }
                 }
             }

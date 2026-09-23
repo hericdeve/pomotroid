@@ -94,6 +94,7 @@ pub async fn sync_calendar_two_way(
 
 
     let mut seen_google_event_ids = std::collections::HashSet::new();
+    let mut candidates_for_deletion: Vec<(i64, String)> = Vec::new();
 
     // 3. Process events and write back to database
     {
@@ -181,13 +182,38 @@ pub async fn sync_calendar_two_way(
             }
         }
 
-        // 4. Delete blocks from SQLite that were removed in Google Calendar
+        // 4. Identify local blocks that might have been removed in Google Calendar
         for local_block in local_synced_blocks {
             if let Some(ref gid) = local_block.google_event_id {
                 if !seen_google_event_ids.contains(gid) {
-                    let _ = queries::schedule_delete_block(&conn, local_block.id);
+                    candidates_for_deletion.push((local_block.id, gid.clone()));
                 }
             }
+        }
+    }
+
+    // Verify with Google Calendar API before deleting to prevent removing
+    // recurring or out-of-week events.
+    let mut to_delete = Vec::new();
+    for (block_id, gid) in candidates_for_deletion {
+        match api::get_event(access_token, calendar_id, &gid).await {
+            Ok(None) => {
+                log::info!("[gcal] Event {gid} was deleted in Google Calendar, removing local block #{block_id}");
+                to_delete.push(block_id);
+            }
+            Ok(Some(_)) => {
+                log::debug!("[gcal] Event {gid} still exists in Google Calendar, keeping local block #{block_id}");
+            }
+            Err(e) => {
+                log::warn!("[gcal] Failed to check event {gid}: {e}, keeping local block #{block_id}");
+            }
+        }
+    }
+
+    if !to_delete.is_empty() {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        for id in to_delete {
+            let _ = queries::schedule_delete_block(&conn, id);
         }
     }
 
@@ -366,11 +392,16 @@ pub async fn sync_subject_events(
 
     // 3. Fetch events from Google Calendar (-90 days past to +365 days future)
     let now = chrono::Utc::now();
-    let time_min = (now - Duration::days(90)).to_rfc3339();
-    let time_max = (now + Duration::days(365)).to_rfc3339();
+    let min_dt = now - Duration::days(90);
+    let max_dt = now + Duration::days(365);
+    let time_min = min_dt.to_rfc3339();
+    let time_max = max_dt.to_rfc3339();
+    let min_date_str = min_dt.format("%Y-%m-%d").to_string();
+    let max_date_str = max_dt.format("%Y-%m-%d").to_string();
     let google_events = api::fetch_events(access_token, calendar_id, &time_min, &time_max).await?;
 
     let mut seen_google_event_ids = std::collections::HashSet::new();
+    let mut candidates_for_deletion: Vec<(i64, String)> = Vec::new();
 
     // 4. Reconcile Google events into local SQLite database
     {
@@ -493,9 +524,35 @@ pub async fn sync_subject_events(
         for local_ev in local_synced_events {
             if let Some(ref gid) = local_ev.google_event_id {
                 if !seen_google_event_ids.contains(gid) {
-                    let _ = queries::subject_event_delete(&conn, local_ev.id);
+                    // Only consider if the event was within the queried date range
+                    if local_ev.event_date >= min_date_str && local_ev.event_date <= max_date_str {
+                        candidates_for_deletion.push((local_ev.id, gid.clone()));
+                    }
                 }
             }
+        }
+    }
+
+    let mut to_delete = Vec::new();
+    for (ev_id, gid) in candidates_for_deletion {
+        match api::get_event(access_token, calendar_id, &gid).await {
+            Ok(None) => {
+                log::info!("[gcal] Subject event {gid} was deleted in Google Calendar, removing local event #{ev_id}");
+                to_delete.push(ev_id);
+            }
+            Ok(Some(_)) => {
+                log::debug!("[gcal] Subject event {gid} still exists in Google Calendar, keeping local event #{ev_id}");
+            }
+            Err(e) => {
+                log::warn!("[gcal] Failed to check subject event {gid}: {e}, keeping local event #{ev_id}");
+            }
+        }
+    }
+
+    if !to_delete.is_empty() {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        for id in to_delete {
+            let _ = queries::subject_event_delete(&conn, id);
         }
     }
 

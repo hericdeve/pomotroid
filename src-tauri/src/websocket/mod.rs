@@ -21,7 +21,8 @@ use std::sync::Arc;
 
 use axum::{
     extract::{ws::{Message, WebSocket, WebSocketUpgrade}, State as AxumState},
-    response::IntoResponse,
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     routing::get,
     Router,
 };
@@ -150,11 +151,41 @@ pub async fn stop(state: &Arc<WsState>) {
 // WebSocket handler
 // ---------------------------------------------------------------------------
 
+pub fn is_allowed_origin(origin: &str) -> bool {
+    let trimmed = origin.trim();
+    if trimmed.is_empty() || trimmed == "null" {
+        return true;
+    }
+    if let Ok(uri) = trimmed.parse::<axum::http::Uri>() {
+        if let Some(host) = uri.host() {
+            if host == "localhost" || host == "127.0.0.1" || host == "[::1]" || host == "tauri.localhost" {
+                return true;
+            }
+        }
+        if uri.scheme_str() == Some("tauri") {
+            return true;
+        }
+    }
+    false
+}
+
 async fn ws_handler(
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
     AxumState(state): AxumState<ServerState>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+) -> Response {
+    if let Some(origin) = headers.get(header::ORIGIN) {
+        if let Ok(origin_str) = origin.to_str() {
+            if !is_allowed_origin(origin_str) {
+                log::warn!("[ws] rejected connection with forbidden origin: {origin_str}");
+                return (StatusCode::FORBIDDEN, "Forbidden origin").into_response();
+            }
+        } else {
+            return (StatusCode::BAD_REQUEST, "Invalid origin header").into_response();
+        }
+    }
+
+    ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: ServerState) {
@@ -412,5 +443,22 @@ mod tests {
         assert_eq!(val["payload"]["elapsed_secs"], snap.elapsed_secs);
         assert_eq!(val["payload"]["total_secs"], snap.total_secs);
         assert_eq!(val["payload"]["round_type"], snap.round_type);
+    }
+
+    #[test]
+    fn origin_validation_rules() {
+        assert!(is_allowed_origin("http://localhost"));
+        assert!(is_allowed_origin("http://localhost:3000"));
+        assert!(is_allowed_origin("http://127.0.0.1:8080"));
+        assert!(is_allowed_origin("http://[::1]:5173"));
+        assert!(is_allowed_origin("tauri://localhost"));
+        assert!(is_allowed_origin("https://tauri.localhost"));
+        assert!(is_allowed_origin("null"));
+        assert!(is_allowed_origin(""));
+
+        assert!(!is_allowed_origin("https://evil.com"));
+        assert!(!is_allowed_origin("http://evil-localhost.com"));
+        assert!(!is_allowed_origin("http://127.0.0.1.attacker.com"));
+        assert!(!is_allowed_origin("https://google.com"));
     }
 }

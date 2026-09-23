@@ -26,6 +26,8 @@ pub enum TimerCommand {
     /// Update the stored duration without altering phase or elapsed time.
     /// Used to arm the next round/reset path without clobbering a fresh Start.
     Prime { duration_secs: u32 },
+    /// Restart the current round from zero without advancing sequence or ending study session.
+    RestartRound,
     /// OS sleep detected: freeze elapsed position, block until WakeResume.
     Suspend,
     /// OS wake detected: resume from the saved elapsed position.
@@ -41,6 +43,7 @@ pub enum TimerEvent {
     Paused { elapsed_secs: u32 },
     Resumed { elapsed_secs: u32 },
     Reset { elapsed_secs: u32 },
+    Restarted { elapsed_secs: u32 },
     Suspended { elapsed_secs: u32 },
 }
 
@@ -139,6 +142,11 @@ fn run_loop(
                     elapsed_secs = 0;
                     Transition::Stay
                 }
+                Ok(TimerCommand::RestartRound) => {
+                    let _ = event_tx.send(TimerEvent::Restarted { elapsed_secs });
+                    elapsed_secs = 0;
+                    Transition::Stay
+                }
                 // Skip while Idle: advance to the next round without starting.
                 Ok(TimerCommand::Skip) => {
                     let _ = event_tx.send(TimerEvent::Complete { skipped: true });
@@ -160,6 +168,11 @@ fn run_loop(
                 }
                 Ok(TimerCommand::Reset) => {
                     let _ = event_tx.send(TimerEvent::Reset { elapsed_secs });
+                    elapsed_secs = 0;
+                    Transition::To(Phase::Idle)
+                }
+                Ok(TimerCommand::RestartRound) => {
+                    let _ = event_tx.send(TimerEvent::Restarted { elapsed_secs });
                     elapsed_secs = 0;
                     Transition::To(Phase::Idle)
                 }
@@ -223,6 +236,11 @@ fn run_loop(
                     }
                     Ok(TimerCommand::Reset) => {
                         let _ = event_tx.send(TimerEvent::Reset { elapsed_secs });
+                        elapsed_secs = 0;
+                        Transition::To(Phase::Idle)
+                    }
+                    Ok(TimerCommand::RestartRound) => {
+                        let _ = event_tx.send(TimerEvent::Restarted { elapsed_secs });
                         elapsed_secs = 0;
                         Transition::To(Phase::Idle)
                     }

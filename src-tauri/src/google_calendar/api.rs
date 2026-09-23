@@ -9,6 +9,8 @@ const CALENDAR_API_BASE: &str = "https://www.googleapis.com/calendar/v3";
 struct CalendarListResponse {
     #[serde(default)]
     items: Vec<CalendarListItem>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -30,6 +32,8 @@ struct CalendarListItem {
 struct EventListResponse {
     #[serde(default)]
     items: Vec<GoogleEventItem>,
+    #[serde(rename = "nextPageToken")]
+    next_page_token: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -56,36 +60,40 @@ pub struct EventDateTime {
 
 pub async fn fetch_calendars(access_token: &str) -> Result<Vec<GoogleCalendarItem>, String> {
     let client = Client::new();
-    let url = format!("{CALENDAR_API_BASE}/users/me/calendarList?maxResults=250");
+    let mut page_token: Option<String> = None;
+    let mut items = Vec::new();
 
-    let res = client
-        .get(&url)
-        .bearer_auth(access_token)
-        .send()
-        .await
-        .map_err(|e| format!("Calendar list request failed: {e}"))?;
+    loop {
+        let mut url = format!("{CALENDAR_API_BASE}/users/me/calendarList?maxResults=250");
+        if let Some(ref pt) = page_token {
+            url.push_str(&format!("&pageToken={}", urlencoding::encode(pt)));
+        }
 
-    let status = res.status();
-    if !status.is_success() {
-        let body = res.text().await.unwrap_or_default();
-        log::error!("[gcal] fetch_calendars failed (HTTP {status}): {body}");
-        return Err(format!("Failed to list calendars (HTTP {status}): {body}"));
-    }
+        let res = client
+            .get(&url)
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| format!("Calendar list request failed: {e}"))?;
 
-    let parsed: CalendarListResponse = res
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse calendar list response: {e}"))?;
+        let status = res.status();
+        if !status.is_success() {
+            let body = res.text().await.unwrap_or_default();
+            log::error!("[gcal] fetch_calendars failed (HTTP {status}): {body}");
+            return Err(format!("Failed to list calendars (HTTP {status}): {body}"));
+        }
 
-    let items = parsed
-        .items
-        .into_iter()
-        .map(|item| {
+        let parsed: CalendarListResponse = res
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse calendar list response: {e}"))?;
+
+        for item in parsed.items {
             let summary = item
                 .summary_override
                 .or(item.summary)
                 .unwrap_or_else(|| "Untitled Calendar".into());
-            GoogleCalendarItem {
+            items.push(GoogleCalendarItem {
                 id: item.id,
                 summary,
                 description: item.description,
@@ -95,9 +103,17 @@ pub async fn fetch_calendars(access_token: &str) -> Result<Vec<GoogleCalendarIte
                 is_visible: false,
                 is_synced: false,
                 is_events_synced: false,
+            });
+        }
+
+        if let Some(next) = parsed.next_page_token {
+            if !next.trim().is_empty() {
+                page_token = Some(next);
+                continue;
             }
-        })
-        .collect();
+        }
+        break;
+    }
 
     Ok(items)
 }
@@ -110,37 +126,90 @@ pub async fn fetch_events(
 ) -> Result<Vec<GoogleEventItem>, String> {
     let client = Client::new();
     let encoded_cal_id = urlencoding::encode(calendar_id);
-    let url = format!(
-        "{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events?singleEvents=true&timeMin={}&timeMax={}&orderBy=startTime&maxResults=250",
-        urlencoding::encode(time_min),
-        urlencoding::encode(time_max),
-    );
+    let mut page_token: Option<String> = None;
+    let mut active_events = Vec::new();
+
+    loop {
+        let mut url = format!(
+            "{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events?singleEvents=true&timeMin={}&timeMax={}&orderBy=startTime&maxResults=250",
+            urlencoding::encode(time_min),
+            urlencoding::encode(time_max),
+        );
+        if let Some(ref pt) = page_token {
+            url.push_str(&format!("&pageToken={}", urlencoding::encode(pt)));
+        }
+
+        let res = client
+            .get(&url)
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch events for {calendar_id}: {e}"))?;
+
+        if !res.status().is_success() {
+            let body = res.text().await.unwrap_or_default();
+            return Err(format!("Event fetch error ({calendar_id}): {body}"));
+        }
+
+        let parsed: EventListResponse = res
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse events: {e}"))?;
+
+        for e in parsed.items {
+            if e.status.as_deref() != Some("cancelled") {
+                active_events.push(e);
+            }
+        }
+
+        if let Some(next) = parsed.next_page_token {
+            if !next.trim().is_empty() {
+                page_token = Some(next);
+                continue;
+            }
+        }
+        break;
+    }
+
+    Ok(active_events)
+}
+
+pub async fn get_event(
+    access_token: &str,
+    calendar_id: &str,
+    event_id: &str,
+) -> Result<Option<GoogleEventItem>, String> {
+    let client = Client::new();
+    let encoded_cal_id = urlencoding::encode(calendar_id);
+    let encoded_event_id = urlencoding::encode(event_id);
+    let url = format!("{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events/{encoded_event_id}");
 
     let res = client
         .get(&url)
         .bearer_auth(access_token)
         .send()
         .await
-        .map_err(|e| format!("Failed to fetch events for {calendar_id}: {e}"))?;
+        .map_err(|e| format!("Failed to get event {event_id}: {e}"))?;
 
-    if !res.status().is_success() {
+    let status = res.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !status.is_success() {
         let body = res.text().await.unwrap_or_default();
-        return Err(format!("Event fetch error ({calendar_id}): {body}"));
+        return Err(format!("Get event error ({event_id}): {body}"));
     }
 
-    let parsed: EventListResponse = res
+    let parsed: GoogleEventItem = res
         .json()
         .await
-        .map_err(|e| format!("Failed to parse events: {e}"))?;
+        .map_err(|e| format!("Failed to parse event {event_id}: {e}"))?;
 
-    // Filter out cancelled events
-    let active_events = parsed
-        .items
-        .into_iter()
-        .filter(|e| e.status.as_deref() != Some("cancelled"))
-        .collect();
+    if parsed.status.as_deref() == Some("cancelled") {
+        return Ok(None);
+    }
 
-    Ok(active_events)
+    Ok(Some(parsed))
 }
 
 pub fn get_local_timezone() -> String {

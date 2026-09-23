@@ -173,7 +173,7 @@ impl TimerController {
     /// preserved — only the elapsed time is zeroed.
     pub fn restart_round(&self) {
         log::info!("[timer] restart round");
-        self.engine.send(TimerCommand::Reset);
+        self.engine.send(TimerCommand::RestartRound);
     }
 
     pub fn skip(&self) {
@@ -315,7 +315,7 @@ fn listen_events(
 
 
                 // --- Session recording: start on first tick of a new round ---
-                if elapsed_secs == 1 && current_session_id.is_none() {
+                if elapsed_secs >= 1 && current_session_id.is_none() {
                     let rt = sequence.lock().unwrap().current_round.as_str().to_string();
                     let total = {
                         let seq = sequence.lock().unwrap();
@@ -431,6 +431,7 @@ fn listen_events(
                     s.elapsed_secs = 0;
                     s.is_running = false;
                     s.total_secs = next_duration;
+                    s.active_session_id = None;
                 }
 
                 // Arm the next round's duration without risking a late
@@ -610,6 +611,7 @@ fn listen_events(
                     let mut s = shared.lock().unwrap();
                     s.elapsed_secs = 0;
                     s.is_running = false;
+                    s.active_session_id = None;
                     s.last_completed_session_id = None;
                     s.active_study_session_id = None;
                 }
@@ -632,6 +634,49 @@ fn listen_events(
                 engine.send(TimerCommand::Prime { duration_secs: duration });
 
                 // Reset tray to idle (empty arc).
+                let rt = sequence.lock().unwrap().current_round.as_str().to_string();
+                tray::update_icon(&tray, &rt, false, 0.0);
+                last_tray_progress = -1.0;
+                tray::update_menu_items(&tray, false, false);
+
+                #[cfg(target_os = "linux")]
+                if let Some(dbus) = app.try_state::<Arc<crate::dbus::DbusState>>() {
+                    let dbus_clone = Arc::clone(&dbus);
+                    let snap = build_snapshot(&sequence, &settings, &shared);
+                    tauri::async_runtime::spawn(async move {
+                        crate::dbus::broadcast_state_changed(&dbus_clone, &snap).await;
+                    });
+                }
+            }
+
+            TimerEvent::Restarted { elapsed_secs } => {
+                if let Some(rid) = current_session_id.take() {
+                    if let Ok(conn) = db.lock() {
+                        let _ = queries::complete_round(&conn, rid, false, false, Some(elapsed_secs));
+                    }
+                }
+                log::debug!("[timer] round restarted");
+
+                {
+                    let mut s = shared.lock().unwrap();
+                    s.elapsed_secs = 0;
+                    s.is_running = false;
+                    s.active_session_id = None;
+                    s.last_completed_session_id = None;
+                }
+                let snapshot = build_snapshot(&sequence, &settings, &shared);
+                let _ = app.emit("timer:reset", snapshot);
+                if let Some(ws) = app.try_state::<Arc<WsState>>() {
+                    websocket::broadcast_reset(&ws);
+                }
+
+                let duration = {
+                    let seq = sequence.lock().unwrap();
+                    let s = settings.lock().unwrap();
+                    seq.current_duration_secs(&s)
+                };
+                engine.send(TimerCommand::Prime { duration_secs: duration });
+
                 let rt = sequence.lock().unwrap().current_round.as_str().to_string();
                 tray::update_icon(&tray, &rt, false, 0.0);
                 last_tray_progress = -1.0;

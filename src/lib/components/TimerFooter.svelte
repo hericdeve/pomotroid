@@ -24,7 +24,7 @@
   );
 
   async function handleReset() {
-    if (snap.active_session_id !== null) {
+    if (snap.active_session_id !== null && (snap.is_running || snap.is_paused)) {
       updateSession(snap.active_session_id, {
         subject: null,
         subject_topic: null,
