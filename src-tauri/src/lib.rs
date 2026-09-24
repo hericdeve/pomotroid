@@ -23,6 +23,7 @@ use commands::{
     accessibility_trusted,
     tray_supported,
     app_version,
+    app_is_background_mode,
     check_update,
     install_update,
     audio_clear_custom, audio_get_custom_info, audio_set_custom,
@@ -48,8 +49,79 @@ use commands::{
     tags_sync, goal_sync, tags_get_pending,
 };
 
+pub struct AppModeState {
+    pub is_background: std::sync::atomic::AtomicBool,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
+    let mut cli_background = false;
+    let mut cli_force_window = false;
+
+    for arg in args.iter().skip(1) {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!("Pomotroid — A simple and visually-pleasing Pomodoro timer\n");
+                println!("Usage: pomotroid [OPTIONS]\n");
+                println!("Options:");
+                println!("  -b, --background, --hidden  Start in the background without opening the main window");
+                println!("  -w, --window, --show        Force the main window to open (overrides start_hidden setting)");
+                println!("  -v, --version               Print version information and exit");
+                println!("  -h, --help                  Print this help message and exit");
+                return;
+            }
+            "--version" | "-v" => {
+                println!("pomotroid {}", env!("APP_BUILD_VERSION"));
+                return;
+            }
+            "--background" | "-b" | "--hidden" => {
+                cli_background = true;
+            }
+            "--window" | "-w" | "--show" => {
+                cli_force_window = true;
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Check if an instance of Pomotroid is already running on the session bus.
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build();
+        if let Ok(runtime) = rt {
+            let existing_instance = runtime.block_on(async {
+                if let Ok(conn) = zbus::Connection::session().await {
+                    let dbus_proxy = zbus::fdo::DBusProxy::new(&conn).await.ok()?;
+                    dbus_proxy.name_has_owner("org.pomotroid.Pomodoro".try_into().ok()?).await.unwrap_or(false).then_some(conn)
+                } else {
+                    None
+                }
+            });
+
+            if let Some(conn) = existing_instance {
+                if cli_background && !cli_force_window {
+                    println!("Pomotroid is already running in the background.");
+                    return;
+                } else {
+                    // Instruct the running instance to open and focus its main window.
+                    runtime.block_on(async {
+                        let _ = conn.call_method(
+                            Some("org.pomotroid.Pomodoro"),
+                            "/org/pomotroid/Pomodoro",
+                            Some("org.pomotroid.Pomodoro"),
+                            "OpenMainWindow",
+                            &(),
+                        ).await;
+                    });
+                    return;
+                }
+            }
+        }
+    }
+
     tauri::Builder::default()
         .plugin(
             LogBuilder::new()
@@ -64,7 +136,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .setup(|app| {
+        .setup(move |app| {
             // Capture Rust panics to the log file before the process terminates.
             std::panic::set_hook(Box::new(|info| {
                 log::error!("PANIC: {info}");
@@ -136,6 +208,16 @@ pub fn run() {
                 let conn = db.lock().unwrap();
                 settings::load(&conn).expect("failed to load settings")
             };
+
+            let start_in_background = (cli_background || initial_settings.start_hidden) && !cli_force_window;
+            let app_mode = Arc::new(AppModeState {
+                is_background: std::sync::atomic::AtomicBool::new(start_in_background),
+            });
+            app.manage(Arc::clone(&app_mode));
+            if start_in_background {
+                log::info!("[app] running in background mode (start_hidden={}, cli_background={}, cli_force_window={})",
+                    initial_settings.start_hidden, cli_background, cli_force_window);
+            }
 
             // Apply the persisted log level before any further setup.
             if initial_settings.verbose_logging {
@@ -369,23 +451,31 @@ pub fn run() {
             let db_for_close = db.clone();
             let win_for_close = main_window.clone();
             let app_for_close = app.handle().clone();
+            let app_mode_for_close = Arc::clone(&app_mode);
             let db_for_pos = db.clone();
             let win_for_pos = main_window.clone();
             main_window.on_window_event(move |event| {
                 match event {
                     tauri::WindowEvent::CloseRequested { api, .. } => {
-                        let hide = db_for_close
+                        let is_bg = app_mode_for_close.is_background.load(std::sync::atomic::Ordering::Relaxed);
+                        let min_to_tray_close = db_for_close
                             .lock()
                             .ok()
                             .and_then(|conn| settings::load(&conn).ok())
                             .map(|s| s.min_to_tray_on_close)
                             .unwrap_or(false);
-                        if hide {
+                        if is_bg || min_to_tray_close {
                             api.prevent_close();
                             let _ = win_for_close.hide();
+                            // Close secondary windows so user doesn't leave stray dialogs around.
+                            for label in ["settings", "stats", "planner", "palette"] {
+                                if let Some(win) = app_for_close.get_webview_window(label) {
+                                    let _ = win.close();
+                                }
+                            }
                         } else {
                             // Main window is truly closing — close child windows if open.
-                            for label in ["settings", "stats", "palette"] {
+                            for label in ["settings", "stats", "planner", "palette"] {
                                 if let Some(win) = app_for_close.get_webview_window(label) {
                                     let _ = win.close();
                                 }
@@ -506,6 +596,7 @@ pub fn run() {
             accessibility_trusted,
             tray_supported,
             app_version,
+            app_is_background_mode,
             // Updater
             check_update,
             install_update,

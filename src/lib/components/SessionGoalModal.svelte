@@ -428,7 +428,7 @@
     gap: 6px;
     padding: 10px 12px;
     background: var(--color-background-light, rgba(255,255,255,0.03));
-    border: 1px dashed var(--color-subtext, rgba(255,255,255,0.1));
+    border: 1px dashed var(--color-separator);
     border-radius: 6px;
   }
 

@@ -1502,7 +1502,7 @@
     height: 100%;
     width: 100%;
     background: var(--color-background);
-    color: var(--color-text);
+    color: var(--color-foreground);
     overflow: hidden;
     font-size: 0.85rem;
   }
@@ -1540,7 +1540,7 @@
 
   .btn-toggle-sidebar:hover {
     background: rgba(255, 255, 255, 0.08);
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   .btn-toggle-sidebar.is-active {
@@ -1564,7 +1564,7 @@
   .btn-nav {
     background: transparent;
     border: none;
-    color: var(--color-text);
+    color: var(--color-foreground);
     padding: 0.3rem 0.6rem;
     font-size: 0.85rem;
     cursor: pointer;
@@ -1593,7 +1593,7 @@
   .week-date-range {
     font-weight: 600;
     font-size: 0.95rem;
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   .toolbar-actions {
@@ -1628,7 +1628,7 @@
     gap: 0.4rem;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid var(--color-separator);
-    color: var(--color-text);
+    color: var(--color-foreground);
     padding: 0.3rem 0.7rem;
     border-radius: 6px;
     font-size: 0.8rem;
@@ -1639,7 +1639,7 @@
 
   .btn-sync:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.12);
-    border-color: var(--color-subtext, rgba(255, 255, 255, 0.3));
+    border-color: var(--color-separator);
   }
 
   .btn-sync:disabled {
@@ -1663,7 +1663,7 @@
 
   .btn-calendar-settings:hover {
     background: rgba(255, 255, 255, 0.08);
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   .sync-icon.spinning {
@@ -1727,7 +1727,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   .day-number.today-pill {
@@ -1973,7 +1973,7 @@
 
   .hour-cell.drag-over {
     background: rgba(255, 255, 255, 0.03);
-    box-shadow: inset 0 0 0 1px var(--color-subtext, rgba(255, 255, 255, 0.3));
+    box-shadow: inset 0 0 0 1px var(--color-separator);
   }
 
   /* ── Overlay Events (Google Calendar) ─────────────────────── */

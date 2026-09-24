@@ -13,6 +13,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     pub always_on_top: bool,
+    pub start_hidden: bool,
     pub break_always_on_top: bool,
     pub auto_start_work: bool,
     pub auto_start_break: bool,
@@ -82,6 +83,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             always_on_top: false,
+            start_hidden: false,
             break_always_on_top: false,
             auto_start_work: true,
             auto_start_break: true,
@@ -199,6 +201,7 @@ pub fn load(conn: &Connection) -> Result<Settings> {
     let d = Settings::default();
     Ok(Settings {
         always_on_top: parse_bool(&map, "always_on_top", d.always_on_top),
+        start_hidden: parse_bool(&map, "start_hidden", d.start_hidden),
         break_always_on_top: parse_bool(&map, "break_always_on_top", d.break_always_on_top),
         auto_start_work: parse_bool(&map, "auto_start_work", d.auto_start_work),
         auto_start_break: parse_bool(&map, "auto_start_break", d.auto_start_break),
@@ -362,6 +365,7 @@ mod tests {
             assert_eq!(s.shortcut_restart, "Control+F4");
         }
         assert!(!s.always_on_top);
+        assert!(!s.start_hidden);
         assert!(!s.websocket_enabled);
         assert_eq!(s.websocket_port, 1314);
         assert_eq!(s.theme_mode, "auto");

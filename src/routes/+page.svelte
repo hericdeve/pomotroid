@@ -8,7 +8,7 @@
   import { showTagModal, pendingTags } from '$lib/stores/pendingTags';
   import { showGoalModal, sessionGoalRounds } from '$lib/stores/sessionGoal';
   import { timerState } from '$lib/stores/timer';
-  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerReset, timerSkip, timerRestartRound, updateSession, studySessionUpdate, scheduleGetAll, tagsSync, goalSync, tagsGetPending, onTagsChanged, onGoalChanged } from '$lib/ipc';
+  import { getSettings, getThemes, onSettingsChanged, onThemesChanged, timerToggle, timerReset, timerSkip, timerRestartRound, updateSession, studySessionUpdate, scheduleGetAll, tagsSync, goalSync, tagsGetPending, onTagsChanged, onGoalChanged, isBackgroundMode } from '$lib/ipc';
   import type { ScheduledBlock } from '$lib/types';
   import { settings } from '$lib/stores/settings';
   import { applyTheme } from '$lib/stores/theme';
@@ -237,8 +237,11 @@
         }, 60_000);
         cleanups.push(() => clearInterval(intervalId));
 
-        await getCurrentWebviewWindow().show();
-        await info(`[main] initialized, theme=${active?.name ?? 'none'}`);
+        const isBg = await isBackgroundMode();
+        if (!isBg) {
+          await getCurrentWebviewWindow().show();
+        }
+        await info(`[main] initialized (isBg=${isBg}), theme=${active?.name ?? 'none'}`);
       } catch (e) {
         await logError(`[main] initialization failed: ${e}`);
         throw e;
@@ -522,7 +525,7 @@
   .ghost-btn {
     pointer-events: auto;
     background: transparent;
-    color: var(--color-subtext);
+    color: var(--color-foreground-darker);
     border: 1px solid transparent;
     padding: 0.5rem 1rem;
     font-size: 0.85rem;
@@ -534,8 +537,8 @@
   }
 
   .ghost-btn:hover {
-    color: var(--color-text);
-    border-color: var(--color-subtext);
+    color: var(--color-foreground);
+    border-color: var(--color-separator);
     background: rgba(255, 255, 255, 0.05);
   }
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import { openSettingsWindow, openStatsWindow } from '$lib/utils/windows';
+  import { openSettingsWindow, openStatsWindow, openPlannerWindow } from '$lib/utils/windows';
   import { setWindowVisibility } from '$lib/ipc';
   import { settings } from '$lib/stores/settings';
   import { isMac } from '$lib/utils/platform';
@@ -74,6 +74,10 @@
 
   async function openSettings() {
     await openSettingsWindow();
+  }
+
+  async function openPlanner() {
+    await openPlannerWindow();
   }
 
   async function openStats() {
@@ -159,6 +163,19 @@
   </Tooltip>
 {/snippet}
 
+{#snippet plannerBtn()}
+  <Tooltip text={m.tooltip_planner()}>
+    <button class="btn-icon" onclick={openPlanner} aria-label="Planner">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3" />
+        <line x1="2" y1="7" x2="14" y2="7" stroke="currentColor" stroke-width="1.3" />
+        <line x1="5" y1="1.5" x2="5" y2="4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+        <line x1="11" y1="1.5" x2="11" y2="4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+      </svg>
+    </button>
+  </Tooltip>
+{/snippet}
+
 {#snippet statsBtn()}
   <Tooltip text={m.tooltip_statistics()}>
     <button class="btn-icon" onclick={openStats} aria-label="Statistics">
@@ -236,19 +253,21 @@
 {/snippet}
 
 <nav class="titlebar" class:suppress-hover={suppressTitlebarHover} data-tauri-drag-region>
-  <!-- Left: settings + stats buttons on Linux/Windows. On macOS the traffic
+  <!-- Left: settings + planner + stats buttons on Linux/Windows. On macOS the traffic
        lights live here; the action buttons move to the right side instead. -->
   {#if !isMac}
     {@render settingsBtn()}
+    {@render plannerBtn()}
     {@render statsBtn()}
     {@render volumeBtn()}
   {/if}
 
-  <!-- Right: settings + stats buttons on macOS, window controls on Linux/Windows. -->
+  <!-- Right: settings + planner + stats buttons on macOS, window controls on Linux/Windows. -->
   <div class="controls">
     {#if isMac}
       {@render volumeBtn()}
       {@render statsBtn()}
+      {@render plannerBtn()}
       {@render settingsBtn()}
     {:else}
       {#if $settings.enable_window_controls}

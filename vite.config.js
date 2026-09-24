@@ -43,6 +43,7 @@ export default defineConfig(async () => ({
       clientFiles: [
         './src/routes/+layout.svelte',
         './src/routes/+page.svelte',
+        './src/routes/planner/+page.svelte',
         './src/routes/settings/+page.svelte',
         './src/routes/stats/+page.svelte',
       ],

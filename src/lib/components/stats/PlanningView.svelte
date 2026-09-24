@@ -537,7 +537,7 @@
     display: flex;
     height: 100%;
     padding: 1rem;
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   /* ── Sidebar ───────────────────────────────────── */
@@ -584,7 +584,7 @@
 
   .btn-sidebar-collapse:hover {
     background: rgba(255, 255, 255, 0.08);
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   .section-title {
@@ -652,7 +652,7 @@
 
   .allocation-label {
     font-size: 0.75rem;
-    color: var(--color-subtext);
+    color: var(--color-foreground-darker);
   }
 
   .allocated-text {
@@ -690,7 +690,7 @@
 
   .no-goal {
     font-size: 0.75rem;
-    color: var(--color-subtext);
+    color: var(--color-foreground-darker);
     font-style: italic;
     opacity: 0.7;
   }
@@ -698,7 +698,7 @@
   .empty {
     padding: 2rem 1rem;
     text-align: center;
-    color: var(--color-subtext);
+    color: var(--color-foreground-darker);
     font-size: 0.85rem;
   }
 

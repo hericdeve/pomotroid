@@ -98,6 +98,9 @@ export const getLogDir = () => invoke<string>('get_log_dir');
 /** Return the compile-time build version string (e.g. `1.0.0-dev.80+20b2d87`). */
 export const appVersion = () => invoke<string>('app_version');
 
+/** Return whether the app is currently running in background mode. */
+export const isBackgroundMode = () => invoke<boolean>('app_is_background_mode');
+
 // --- Sessions commands ---
 
 export const clearSessionHistory = () => invoke<void>('sessions_clear');

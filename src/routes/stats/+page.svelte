@@ -30,12 +30,9 @@
   import ManualEntryModal from '$lib/components/ManualEntryModal.svelte';
   import SessionTagModal from '$lib/components/SessionTagModal.svelte';
   import SessionsListModal from '$lib/components/stats/SessionsListModal.svelte';
-  import SubjectsView from '$lib/components/stats/SubjectsView.svelte';
-  import PlanningView from '$lib/components/stats/PlanningView.svelte';
   import ComparisonsView from '$lib/components/stats/ComparisonsView.svelte';
-  import EventsView from '$lib/components/stats/EventsView.svelte';
 
-  type Tab = 'today' | 'week' | 'alltime' | 'history' | 'insights' | 'subjects' | 'planning' | 'comparisons' | 'events';
+  type Tab = 'today' | 'week' | 'alltime' | 'comparisons' | 'insights' | 'history';
 
   let activeTab = $state<Tab>('today');
   let detailed = $state<DetailedStats | null>(null);
@@ -95,6 +92,17 @@
         await logError(`[stats] initialization failed: ${e}`);
         throw e;
       }
+
+      // Live OS color scheme changes — re-resolve only in auto mode.
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      const mqListener = async (e: MediaQueryListEvent) => {
+        if ($settings.theme_mode !== 'auto') return;
+        const allThemes = await getThemes();
+        const t = allThemes.find((th) => th.name === resolveThemeName($settings, e.matches));
+        if (t) applyTheme(t);
+      };
+      mq.addEventListener('change', mqListener);
+      cleanups.push(() => mq.removeEventListener('change', mqListener));
 
       cleanups.push(
         await onRoundChange(async () => {
@@ -194,20 +202,11 @@
       <button class="tab" class:active={activeTab === 'comparisons'} onclick={() => switchTab('comparisons')}
         >Comparisons</button
       >
-      <button class="tab" class:active={activeTab === 'planning'} onclick={() => switchTab('planning')}
-        >Planning</button
-      >
-      <button class="tab" class:active={activeTab === 'events'} onclick={() => switchTab('events')}
-        >Events</button
-      >
-      <button class="tab" class:active={activeTab === 'subjects'} onclick={() => switchTab('subjects')}
-        >Subjects</button
+      <button class="tab" class:active={activeTab === 'insights'} onclick={() => switchTab('insights')}
+        >Insights</button
       >
       <button class="tab" class:active={activeTab === 'history'} onclick={() => switchTab('history')}
         >History</button
-      >
-      <button class="tab" class:active={activeTab === 'insights'} onclick={() => switchTab('insights')}
-        >Insights</button
       >
     </div>
     <button class="btn-manual" onclick={() => {
@@ -233,6 +232,8 @@
         <YearlyView {heatmap} onBarClick={(r) => listModalTimeRange = r} />
       {:else if activeTab === 'comparisons'}
         <ComparisonsView {heatmap} />
+      {:else if activeTab === 'insights'}
+        <InsightsView />
       {:else if activeTab === 'history'}
         <HistoryView 
           onEditSession={(id) => editingSessionId = id} 
@@ -248,14 +249,6 @@
             showManualEntry = true;
           }}
         />
-      {:else if activeTab === 'insights'}
-        <InsightsView />
-      {:else if activeTab === 'subjects'}
-        <SubjectsView />
-      {:else if activeTab === 'events'}
-        <EventsView />
-      {:else}
-        <PlanningView />
       {/if}
     {/key}
   </div>

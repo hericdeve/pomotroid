@@ -371,6 +371,13 @@
   <div class="group-heading">{m.system_group_window()}</div>
 
   <SettingsToggle
+    label={m.system_toggle_start_hidden()}
+    description={m.system_toggle_start_hidden_desc()}
+    checked={$settings.start_hidden}
+    onclick={() => toggle('start_hidden', $settings.start_hidden)}
+  />
+
+  <SettingsToggle
     label={m.system_toggle_aot()}
     description={m.system_toggle_aot_desc()}
     checked={$settings.always_on_top}

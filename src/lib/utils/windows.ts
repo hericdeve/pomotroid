@@ -30,6 +30,29 @@ export async function openSettingsWindow(section?: string) {
   });
 }
 
+export async function openPlannerWindow() {
+  const existing = await WebviewWindow.getByLabel('planner');
+  if (existing) {
+    await existing.show();
+    await existing.setFocus();
+    return;
+  }
+  new WebviewWindow('planner', {
+    url: '/planner',
+    title: 'Pomotroid — Planner',
+    width: 960,
+    height: 640,
+    minWidth: 680,
+    minHeight: 480,
+    decorations: isMac,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    titleBarStyle: isMac ? ('Overlay' as any) : undefined,
+    hiddenTitle: isMac ? true : undefined,
+    resizable: true,
+    visible: false,
+  });
+}
+
 export async function openStatsWindow() {
   const existing = await WebviewWindow.getByLabel('stats');
   if (existing) {

@@ -898,6 +898,16 @@ pub fn app_version() -> &'static str {
     env!("APP_BUILD_VERSION")
 }
 
+/// Returns whether the app was launched in background mode (or configured to start hidden).
+#[tauri::command]
+pub fn app_is_background_mode(app: AppHandle) -> bool {
+    if let Some(state) = app.try_state::<crate::AppModeState>() {
+        state.is_background.load(std::sync::atomic::Ordering::Relaxed)
+    } else {
+        false
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CMD-10 — Platform commands
 // ---------------------------------------------------------------------------

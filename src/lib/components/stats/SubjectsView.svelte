@@ -154,7 +154,7 @@
     height: 100%;
     padding: 1rem;
     gap: 1rem;
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   .input-group {
@@ -180,7 +180,7 @@
     flex: 1;
     background: transparent;
     border: 1px solid transparent;
-    color: var(--color-text);
+    color: var(--color-foreground);
     padding: 0.5rem 0.75rem;
     border-radius: 4px;
     font-size: 0.9rem;
@@ -246,7 +246,7 @@
     width: 60px;
     background: transparent;
     border: 1px solid transparent;
-    color: var(--color-text);
+    color: var(--color-foreground);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.9rem;
@@ -263,7 +263,7 @@
   }
 
   .goal-input:hover {
-    border-color: var(--color-subtext);
+    border-color: var(--color-separator);
     background: rgba(255, 255, 255, 0.05);
   }
 
@@ -291,7 +291,7 @@
   .btn-delete {
     background: transparent;
     border: none;
-    color: var(--color-text);
+    color: var(--color-foreground-darker);
     opacity: 0.6;
     cursor: pointer;
     padding: 4px;
@@ -316,7 +316,7 @@
   .empty {
     padding: 2rem;
     text-align: center;
-    color: var(--color-subtext);
+    color: var(--color-foreground-darker);
     font-size: 0.9rem;
   }
 </style>

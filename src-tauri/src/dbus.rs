@@ -195,10 +195,18 @@ impl PomotroidDbus {
 
         let tags = self.pending_tags.lock().unwrap().clone();
         let goal = self.goal_rounds.load(Ordering::Relaxed);
+        let remaining_secs = snap.total_secs.saturating_sub(snap.elapsed_secs);
+        let progress = if snap.total_secs > 0 {
+            (snap.elapsed_secs as f64) / (snap.total_secs as f64)
+        } else {
+            0.0
+        };
 
         map.insert("round_type".into(), Value::from(snap.round_type));
         map.insert("elapsed_secs".into(), Value::from(snap.elapsed_secs));
         map.insert("total_secs".into(), Value::from(snap.total_secs));
+        map.insert("remaining_secs".into(), Value::from(remaining_secs));
+        map.insert("progress".into(), Value::from(progress));
         map.insert("is_running".into(), Value::from(snap.is_running));
         map.insert("is_paused".into(), Value::from(snap.is_paused));
         map.insert("work_round_number".into(), Value::from(snap.work_round_number));
@@ -782,7 +790,7 @@ impl PomotroidDbus {
     }
 
     // -----------------------------------------------------------------------
-    // Windows
+    // Windows & Lifecycle
     // -----------------------------------------------------------------------
 
     /// Bring the main Pomotroid window to the foreground.
@@ -790,8 +798,56 @@ impl PomotroidDbus {
         log::info!("[dbus] OpenMainWindow called");
         if let Some(window) = self.app.get_webview_window("main") {
             let _ = window.show();
+            let _ = window.unminimize();
             let _ = window.set_focus();
         }
+    }
+
+    /// Explicitly show the main Pomotroid window.
+    async fn show_main_window(&self) {
+        log::info!("[dbus] ShowMainWindow called");
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
+
+    /// Explicitly hide the main Pomotroid window.
+    async fn hide_main_window(&self) {
+        log::info!("[dbus] HideMainWindow called");
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+    }
+
+    /// Toggle visibility of the main Pomotroid window.
+    async fn toggle_main_window(&self) {
+        log::info!("[dbus] ToggleMainWindow called");
+        if let Some(window) = self.app.get_webview_window("main") {
+            if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
+                let _ = window.hide();
+            } else {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
+    }
+
+    /// Return whether the main Pomotroid window is currently visible.
+    async fn is_main_window_visible(&self) -> bool {
+        if let Some(window) = self.app.get_webview_window("main") {
+            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
+        } else {
+            false
+        }
+    }
+
+    /// Cleanly terminate the Pomotroid application (backend daemon and all windows).
+    async fn quit(&self) {
+        log::info!("[dbus] Quit called");
+        self.app.exit(0);
     }
 
     /// Open or focus the Pomotroid statistics window.
@@ -808,6 +864,30 @@ impl PomotroidDbus {
             .title("Pomotroid — Statistics")
             .inner_size(840.0, 520.0)
             .min_inner_size(600.0, 400.0)
+            .decorations(is_mac)
+            .resizable(true)
+            .build();
+
+        if let Ok(w) = win {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }
+
+    /// Open or focus the Pomotroid planner window.
+    async fn open_planner_window(&self) {
+        log::info!("[dbus] OpenPlannerWindow called");
+        if let Some(existing) = self.app.get_webview_window("planner") {
+            let _ = existing.show();
+            let _ = existing.set_focus();
+            return;
+        }
+
+        let is_mac = cfg!(target_os = "macos");
+        let win = tauri::WebviewWindowBuilder::new(&self.app, "planner", tauri::WebviewUrl::App("/planner".into()))
+            .title("Pomotroid — Planner")
+            .inner_size(960.0, 640.0)
+            .min_inner_size(680.0, 480.0)
             .decorations(is_mac)
             .resizable(true)
             .build();
@@ -907,10 +987,18 @@ pub async fn broadcast_state_changed(
         let mut map = HashMap::new();
         let tags = state.pending_tags.lock().unwrap().clone();
         let goal = state.goal_rounds.load(Ordering::Relaxed);
+        let remaining_secs = snap.total_secs.saturating_sub(snap.elapsed_secs);
+        let progress = if snap.total_secs > 0 {
+            (snap.elapsed_secs as f64) / (snap.total_secs as f64)
+        } else {
+            0.0
+        };
 
         map.insert("round_type".to_string(), Value::from(snap.round_type.clone()));
         map.insert("elapsed_secs".to_string(), Value::from(snap.elapsed_secs));
         map.insert("total_secs".to_string(), Value::from(snap.total_secs));
+        map.insert("remaining_secs".to_string(), Value::from(remaining_secs));
+        map.insert("progress".to_string(), Value::from(progress));
         map.insert("is_running".to_string(), Value::from(snap.is_running));
         map.insert("is_paused".to_string(), Value::from(snap.is_paused));
         map.insert("work_round_number".to_string(), Value::from(snap.work_round_number));
