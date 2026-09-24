@@ -3,6 +3,18 @@ use crate::db::{queries, DbState};
 use crate::db::queries::ScheduledBlock;
 use crate::google_calendar::api;
 
+pub fn day_of_week_to_byday(day: i32) -> &'static str {
+    match day {
+        0 => "MO",
+        1 => "TU",
+        2 => "WE",
+        3 => "TH",
+        4 => "FR",
+        5 => "SA",
+        _ => "SU",
+    }
+}
+
 pub fn calculate_week_bounds(monday_ymd: &str) -> Result<(String, String, NaiveDate), String> {
     let monday = NaiveDate::parse_from_str(monday_ymd, "%Y-%m-%d")
         .map_err(|e| format!("Invalid date format (expected YYYY-MM-DD): {e}"))?;
@@ -80,7 +92,7 @@ pub async fn sync_calendar_two_way(
     }
 
     // Re-fetch local synced blocks after syncing any unlinked blocks
-    let local_synced_blocks = {
+    let mut local_synced_blocks = {
         let conn = db.lock().map_err(|e| e.to_string())?;
         let all_blocks = queries::schedule_get_all(&conn).map_err(|e| format!("DB query error: {e}"))?;
         all_blocks
@@ -92,22 +104,24 @@ pub async fn sync_calendar_two_way(
     // 2. Fetch events from Google Calendar (no lock held!)
     let google_events = api::fetch_events(access_token, calendar_id, &time_min, &time_max).await?;
 
-
     let mut seen_google_event_ids = std::collections::HashSet::new();
     let mut candidates_for_deletion: Vec<(i64, String)> = Vec::new();
 
     // 3. Process events and write back to database
+    let sunday = _monday + Duration::days(6);
+    let sunday_ymd = sunday.format("%Y-%m-%d").to_string();
+
     {
         let conn = db.lock().map_err(|e| e.to_string())?;
 
         for event in &google_events {
-            let effective_event_id = event
-                .recurring_event_id
-                .as_deref()
-                .unwrap_or(&event.id);
+            let instance_id = event.id.clone();
+            let recurring_id = event.recurring_event_id.clone();
 
-            seen_google_event_ids.insert(effective_event_id.to_string());
-            seen_google_event_ids.insert(event.id.clone());
+            seen_google_event_ids.insert(instance_id.clone());
+            if let Some(ref rid) = recurring_id {
+                seen_google_event_ids.insert(rid.clone());
+            }
 
             // We only map timed events to study blocks
             if let (Some(start_dt_obj), Some(end_dt_obj)) = (&event.start, &event.end) {
@@ -121,7 +135,12 @@ pub async fn sync_calendar_two_way(
 
                         let day_of_week = s_local.weekday().num_days_from_monday() as i32;
                         let start_minute = (s_local.hour() * 60 + s_local.minute()) as i32;
-                        let end_minute = (e_local.hour() * 60 + e_local.minute()) as i32;
+                        let days_diff = (e_local.date_naive() - s_local.date_naive()).num_days().max(0) as i32;
+                        let mut end_minute = days_diff * 1440 + (e_local.hour() * 60 + e_local.minute()) as i32;
+                        if end_minute <= start_minute {
+                            end_minute = start_minute + 60;
+                        }
+                        let session_date = s_local.format("%Y-%m-%d").to_string();
 
                         let summary = event
                             .summary
@@ -129,53 +148,194 @@ pub async fn sync_calendar_two_way(
                             .filter(|s| !s.trim().is_empty())
                             .unwrap_or("Study Session");
 
-                        // Check if block already exists locally by google_event_id (master or instance)
-                        let existing_block = local_synced_blocks.iter().find(|b| {
-                            b.google_event_id.as_deref() == Some(effective_event_id)
-                                || b.google_event_id.as_deref() == Some(&event.id)
-                        });
+                        if let Some(ref rid) = recurring_id {
+                            // Recurring event occurrence
+                            let mut is_exception = false;
+                            if let Some(ref orig) = event.original_start_time {
+                                if let Some(ref orig_dt_str) = orig.date_time {
+                                    if orig_dt_str != start_str {
+                                        is_exception = true;
+                                    }
+                                }
+                            }
+                            if !is_exception {
+                                if local_synced_blocks.iter().any(|b| {
+                                    b.is_exception
+                                        && (b.google_event_id.as_deref() == Some(&instance_id)
+                                            || (b.recurring_event_id.as_deref() == Some(rid) && b.session_date.as_deref() == Some(&session_date)))
+                                }) {
+                                    is_exception = true;
+                                }
+                            }
 
-                        if let Some(existing) = existing_block {
-                            // Ensure google_event_id points to effective (master) event id
-                            if existing.google_event_id.as_deref() != Some(effective_event_id) {
-                                let _ = queries::schedule_update_google_event_id(
+                            if is_exception {
+                                let existing_exception = local_synced_blocks.iter().find(|b| {
+                                    b.is_exception
+                                        && (b.google_event_id.as_deref() == Some(&instance_id)
+                                            || (b.recurring_event_id.as_deref() == Some(rid) && b.session_date.as_deref() == Some(&session_date)))
+                                });
+
+                                if let Some(existing) = existing_exception {
+                                    let _ = queries::schedule_update_google_event_info(
+                                        &conn,
+                                        existing.id,
+                                        calendar_id,
+                                        &instance_id,
+                                        Some(rid),
+                                        Some(&session_date),
+                                        true,
+                                    );
+                                    if existing.subject != summary
+                                        || existing.day_of_week != day_of_week
+                                        || existing.start_minute != start_minute
+                                        || existing.end_minute != end_minute
+                                    {
+                                        let _ = queries::schedule_update_block_name_and_slot(
+                                            &conn,
+                                            existing.id,
+                                            summary,
+                                            day_of_week,
+                                            start_minute,
+                                            end_minute,
+                                        );
+                                    }
+                                } else {
+                                    let _ = queries::schedule_add_block_full(
+                                        &conn,
+                                        summary,
+                                        day_of_week,
+                                        start_minute,
+                                        end_minute,
+                                        None,
+                                        None,
+                                        None,
+                                        "google",
+                                        Some(calendar_id),
+                                        Some(&instance_id),
+                                        Some(rid),
+                                        Some(&session_date),
+                                        true,
+                                    );
+                                }
+                            } else {
+                                // Normal occurrence of the recurring series -> matches master block!
+                                let existing_master = local_synced_blocks.iter().find(|b| {
+                                    !b.is_exception
+                                        && b.session_date.is_none()
+                                        && (b.google_event_id.as_deref() == Some(rid) || b.recurring_event_id.as_deref() == Some(rid))
+                                        && (b.day_of_week == day_of_week || b.google_event_id.as_deref() == Some(rid))
+                                });
+
+                                if let Some(existing) = existing_master {
+                                    let _ = queries::schedule_update_google_event_info(
+                                        &conn,
+                                        existing.id,
+                                        calendar_id,
+                                        rid,
+                                        Some(rid),
+                                        None,
+                                        false,
+                                    );
+                                    if existing.subject != summary
+                                        || existing.day_of_week != day_of_week
+                                        || existing.start_minute != start_minute
+                                        || existing.end_minute != end_minute
+                                    {
+                                        let _ = queries::schedule_update_block_name_and_slot(
+                                            &conn,
+                                            existing.id,
+                                            summary,
+                                            day_of_week,
+                                            start_minute,
+                                            end_minute,
+                                        );
+                                    }
+                                } else {
+                                    // Insert new master block template
+                                    let new_master_id = queries::schedule_add_block_full(
+                                        &conn,
+                                        summary,
+                                        day_of_week,
+                                        start_minute,
+                                        end_minute,
+                                        None,
+                                        None,
+                                        None,
+                                        "google",
+                                        Some(calendar_id),
+                                        Some(rid),
+                                        Some(rid),
+                                        None,
+                                        false,
+                                    );
+                                    if let Ok(mid) = new_master_id {
+                                        local_synced_blocks.push(queries::ScheduledBlock {
+                                            id: mid,
+                                            subject: summary.to_string(),
+                                            day_of_week,
+                                            start_minute,
+                                            end_minute,
+                                            subject_topic: None,
+                                            study_type: None,
+                                            round_tags: None,
+                                            calendar_type: "google".to_string(),
+                                            google_calendar_id: Some(calendar_id.to_string()),
+                                            google_event_id: Some(rid.to_string()),
+                                            recurring_event_id: Some(rid.to_string()),
+                                            session_date: None,
+                                            is_exception: false,
+                                        });
+                                    }
+                                }
+                            }
+                        } else {
+                            // One-off (non-recurring) event
+                            let existing_block = local_synced_blocks.iter().find(|b| {
+                                b.google_event_id.as_deref() == Some(&instance_id)
+                            });
+
+                            if let Some(existing) = existing_block {
+                                let _ = queries::schedule_update_google_event_info(
                                     &conn,
                                     existing.id,
                                     calendar_id,
-                                    effective_event_id,
+                                    &instance_id,
+                                    None,
+                                    Some(&session_date),
+                                    false,
                                 );
-                            }
-
-                            // Check if name or hour slot changed
-                            if existing.subject != summary
-                                || existing.day_of_week != day_of_week
-                                || existing.start_minute != start_minute
-                                || existing.end_minute != end_minute
-                            {
-                                let _ = queries::schedule_update_block_name_and_slot(
+                                if existing.subject != summary
+                                    || existing.day_of_week != day_of_week
+                                    || existing.start_minute != start_minute
+                                    || existing.end_minute != end_minute
+                                {
+                                    let _ = queries::schedule_update_block_name_and_slot(
+                                        &conn,
+                                        existing.id,
+                                        summary,
+                                        day_of_week,
+                                        start_minute,
+                                        end_minute,
+                                    );
+                                }
+                            } else {
+                                let _ = queries::schedule_add_block_full(
                                     &conn,
-                                    existing.id,
                                     summary,
                                     day_of_week,
                                     start_minute,
                                     end_minute,
+                                    None,
+                                    None,
+                                    None,
+                                    "google",
+                                    Some(calendar_id),
+                                    Some(&instance_id),
+                                    None,
+                                    Some(&session_date),
+                                    false,
                                 );
                             }
-                        } else {
-                            // Insert new block from Google Calendar
-                            let _ = queries::schedule_add_block_full(
-                                &conn,
-                                summary,
-                                day_of_week,
-                                start_minute,
-                                end_minute,
-                                None,
-                                None,
-                                None,
-                                "google",
-                                Some(calendar_id),
-                                Some(effective_event_id),
-                            );
                         }
                     }
                 }
@@ -183,10 +343,26 @@ pub async fn sync_calendar_two_way(
         }
 
         // 4. Identify local blocks that might have been removed in Google Calendar
-        for local_block in local_synced_blocks {
-            if let Some(ref gid) = local_block.google_event_id {
-                if !seen_google_event_ids.contains(gid) {
-                    candidates_for_deletion.push((local_block.id, gid.clone()));
+        for local_block in &local_synced_blocks {
+            let check_id = local_block
+                .recurring_event_id
+                .as_deref()
+                .or(local_block.google_event_id.as_deref())
+                .unwrap_or("");
+            if check_id.is_empty() {
+                continue;
+            }
+
+            if local_block.session_date.is_none() {
+                if !seen_google_event_ids.contains(check_id) {
+                    candidates_for_deletion.push((local_block.id, check_id.to_string()));
+                }
+            } else if let Some(ref d) = local_block.session_date {
+                if d.as_str() >= monday_ymd && d.as_str() <= sunday_ymd.as_str() {
+                    let gid = local_block.google_event_id.as_deref().unwrap_or(check_id);
+                    if !seen_google_event_ids.contains(gid) {
+                        candidates_for_deletion.push((local_block.id, gid.to_string()));
+                    }
                 }
             }
         }
@@ -217,9 +393,59 @@ pub async fn sync_calendar_two_way(
         }
     }
 
-    // Return all blocks
+    // Return week blocks
     let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::schedule_get_all(&conn).map_err(|e| format!("Failed to reload blocks: {e}"))
+    let all_blocks = queries::schedule_get_all(&conn).map_err(|e| format!("Failed to reload blocks: {e}"))?;
+
+    let mut exception_series_in_week = std::collections::HashSet::new();
+    for b in &all_blocks {
+        if b.is_exception {
+            if let Some(ref d) = b.session_date {
+                if d.as_str() >= monday_ymd && d.as_str() <= sunday_ymd.as_str() {
+                    if let Some(ref rid) = b.recurring_event_id {
+                        exception_series_in_week.insert(rid.clone());
+                    }
+                    if let Some(ref gid) = b.google_event_id {
+                        exception_series_in_week.insert(gid.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    let week_blocks = all_blocks
+        .into_iter()
+        .filter(|b| {
+            if b.subject_topic.as_deref() == Some("__cancelled__") {
+                return false;
+            }
+
+            if b.session_date.is_none() {
+                if let Some(ref rid) = b.recurring_event_id {
+                    if exception_series_in_week.contains(rid) {
+                        return false;
+                    }
+                }
+                if let Some(ref gid) = b.google_event_id {
+                    if exception_series_in_week.contains(gid) {
+                        return false;
+                    }
+                }
+            }
+
+            if b.calendar_type == "google" {
+                if let Some(ref d) = b.session_date {
+                    d.as_str() >= monday_ymd && d.as_str() <= sunday_ymd.as_str()
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    Ok(week_blocks)
 }
 
 pub async fn push_block_create_to_google(
@@ -244,12 +470,24 @@ pub async fn push_block_create_to_google(
         block.end_minute,
     );
 
-    let event_id = api::create_event(access_token, calendar_id, &block.subject, &start_iso, &end_iso, None).await?;
+    let byday = day_of_week_to_byday(block.day_of_week);
+    let rrule = vec![format!("RRULE:FREQ=WEEKLY;BYDAY={byday}")];
+    let event_id = api::create_event(access_token, calendar_id, &block.subject, &start_iso, &end_iso, Some(rrule), None).await?;
 
     {
         let conn = db.lock().map_err(|e| e.to_string())?;
-        queries::schedule_update_google_event_id(&conn, block_id, calendar_id, &event_id)
-            .map_err(|e| format!("Failed to link block to Google event: {e}"))?;
+        let day_date = monday + chrono::Duration::days(block.day_of_week as i64);
+        let session_date = day_date.format("%Y-%m-%d").to_string();
+        queries::schedule_update_google_event_info(
+            &conn,
+            block_id,
+            calendar_id,
+            &event_id,
+            Some(&event_id),
+            Some(&session_date),
+            false,
+        )
+        .map_err(|e| format!("Failed to link block to Google event: {e}"))?;
     }
 
     Ok(event_id)
@@ -260,6 +498,7 @@ pub async fn push_block_update_to_google(
     access_token: &str,
     block_id: i64,
     monday_ymd: &str,
+    scope: &str,
 ) -> Result<(), String> {
     let block = {
         let conn = db.lock().map_err(|e| e.to_string())?;
@@ -269,18 +508,37 @@ pub async fn push_block_update_to_google(
     };
 
     if let Some(ref cal_id) = block.google_calendar_id {
-        if let Some(ref event_id) = block.google_event_id {
-            let (_, _, monday) = calculate_week_bounds(monday_ymd)?;
-            let (start_iso, end_iso) = block_slot_to_rfc3339(
-                monday,
-                block.day_of_week,
-                block.start_minute,
-                block.end_minute,
-            );
+        let (_, _, monday) = calculate_week_bounds(monday_ymd)?;
+        let (start_iso, end_iso) = block_slot_to_rfc3339(
+            monday,
+            block.day_of_week,
+            block.start_minute,
+            block.end_minute,
+        );
 
-            api::update_event(access_token, cal_id, event_id, &block.subject, &start_iso, &end_iso, None).await?;
+        if scope == "series" {
+            let target_event_id = block.recurring_event_id.as_deref().or(block.google_event_id.as_deref());
+            if let Some(event_id) = target_event_id {
+                let byday = day_of_week_to_byday(block.day_of_week);
+                let rrule = vec![format!("RRULE:FREQ=WEEKLY;BYDAY={byday}")];
+                api::update_event(access_token, cal_id, event_id, &block.subject, &start_iso, &end_iso, Some(rrule), None).await?;
+
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                let _ = queries::schedule_update_block_series(&conn, event_id, block.day_of_week, block.start_minute, block.end_minute);
+            }
         } else {
-            push_block_create_to_google(db, access_token, cal_id, block_id, monday_ymd).await?;
+            // "instance"
+            if let Some(ref event_id) = block.google_event_id {
+                api::update_event(access_token, cal_id, event_id, &block.subject, &start_iso, &end_iso, None, None).await?;
+
+                let day_date = monday + chrono::Duration::days(block.day_of_week as i64);
+                let session_date = day_date.format("%Y-%m-%d").to_string();
+
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                let _ = queries::schedule_update_block_instance(&conn, block_id, block.day_of_week, block.start_minute, block.end_minute, &session_date);
+            } else {
+                push_block_create_to_google(db, access_token, cal_id, block_id, monday_ymd).await?;
+            }
         }
     }
 
@@ -288,11 +546,39 @@ pub async fn push_block_update_to_google(
 }
 
 pub async fn push_block_delete_to_google(
+    db: &DbState,
     access_token: &str,
-    calendar_id: &str,
-    google_event_id: &str,
+    block_id: i64,
+    scope: &str,
 ) -> Result<(), String> {
-    api::delete_event(access_token, calendar_id, google_event_id).await
+    let block = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        queries::schedule_get_by_id(&conn, block_id)
+            .map_err(|e| format!("DB error: {e}"))?
+            .ok_or_else(|| format!("Block #{block_id} not found"))?
+    };
+
+    if let Some(ref cal_id) = block.google_calendar_id {
+        if scope == "series" {
+            let target_id = block.recurring_event_id.as_deref().or(block.google_event_id.as_deref());
+            if let Some(event_id) = target_id {
+                let _ = api::delete_event(access_token, cal_id, event_id).await;
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                let _ = queries::schedule_delete_by_recurring_event_id(&conn, event_id);
+            }
+        } else {
+            if let Some(ref event_id) = block.google_event_id {
+                let _ = api::delete_event(access_token, cal_id, event_id).await;
+            }
+            let conn = db.lock().map_err(|e| e.to_string())?;
+            let _ = queries::schedule_delete_block(&conn, block_id);
+        }
+    } else {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        let _ = queries::schedule_delete_block(&conn, block_id);
+    }
+
+    Ok(())
 }
 
 /// Parses an event title according to patterns:

@@ -23,8 +23,8 @@
     showSidebar?: boolean;
     onToggleSidebar?: () => void;
     onBlockAdd: (day: number, startMin: number, endMin: number, subject: string) => void;
-    onBlockDelete: (id: number) => void;
-    onBlockUpdate: (id: number, day: number, startMin: number, endMin: number) => void;
+    onBlockDelete: (id: number, scope?: 'instance' | 'series') => void;
+    onBlockUpdate: (id: number, day: number, startMin: number, endMin: number, scope?: 'instance' | 'series') => void;
     onWeekChange?: (mondayYmd: string, offset: number) => void;
     onSyncClick?: () => void;
     onSettingsClick?: () => void;
@@ -109,7 +109,8 @@
     const longBreakMins = $settings.long_breaks_enabled ? ($settings.time_long_break_secs / 60) : 0;
     const interval = $settings.long_break_interval;
 
-    let remainingMins = endMin - startMin;
+    const effectiveEnd = endMin <= startMin ? endMin + 1440 : endMin;
+    let remainingMins = effectiveEnd - startMin;
     let rounds = 0;
     let cyclePosition = 1;
     let breakMinsUsed = 0;
@@ -191,6 +192,11 @@
 
   let mondayDate = $derived(getMonday(weekOffset));
   let formattedWeekRange = $derived(formatWeekRange(mondayDate));
+  let currentMondayYmd = $derived(getMondayYmd(weekOffset));
+  let currentSundayYmd = $derived.by(() => {
+    const d = new Date(mondayDate.getTime() + 6 * 86400000);
+    return formatYmd(d);
+  });
 
   let weekDays = $derived(
     DAYS.map((name, i) => {
@@ -301,7 +307,7 @@
     onWeekChange?.(getMondayYmd(0), 0);
   }
 
-  async function handleModalSave(updatedBlock: ScheduledBlock) {
+  async function handleModalSave(updatedBlock: ScheduledBlock, scope: 'instance' | 'series' = 'instance') {
     try {
       await scheduleUpdateBlock(
         updatedBlock.id!,
@@ -311,12 +317,32 @@
         updatedBlock.subject_topic,
         updatedBlock.study_type,
         updatedBlock.round_tags,
-        getMondayYmd(weekOffset)
+        getMondayYmd(weekOffset),
+        scope
       );
 
-      const idx = blocks.findIndex(b => b.id === updatedBlock.id);
-      if (idx !== -1) {
-        blocks[idx] = { ...blocks[idx], ...updatedBlock };
+      if (scope === 'series') {
+        const seriesId = updatedBlock.recurring_event_id || updatedBlock.google_event_id;
+        blocks = blocks.map(b => {
+          if ((b.recurring_event_id === seriesId || b.google_event_id === seriesId) && !b.is_exception) {
+            return {
+              ...b,
+              subject_topic: updatedBlock.subject_topic,
+              study_type: updatedBlock.study_type,
+              round_tags: updatedBlock.round_tags,
+            };
+          }
+          return b;
+        });
+      } else {
+        const idx = blocks.findIndex(b => b.id === updatedBlock.id);
+        if (idx !== -1) {
+          blocks[idx] = {
+            ...blocks[idx],
+            ...updatedBlock,
+            is_exception: updatedBlock.calendar_type === 'google' ? true : blocks[idx].is_exception,
+          };
+        }
       }
 
       selectedBlockForModal = null;
@@ -438,15 +464,17 @@
     const calendarContainer = document.querySelector('.days-columns') as HTMLElement;
     if (!calendarContainer) return;
 
+    const effectiveEnd = block.end_minute <= block.start_minute ? block.end_minute + 1440 : block.end_minute;
+
     activeDrag = {
       id: block.id!,
       initialY: e.clientY,
       startMin: block.start_minute,
-      endMin: block.end_minute,
+      endMin: effectiveEnd,
       startDay: block.day_of_week,
       currentDay: block.day_of_week,
       currentStartMin: block.start_minute,
-      currentEndMin: block.end_minute,
+      currentEndMin: effectiveEnd,
       calendarRect: calendarContainer.getBoundingClientRect(),
       grabbedAsOverflow: !isPrimary,
     };
@@ -489,16 +517,115 @@
     activeDrag.currentEndMin = newStart + duration;
   }
 
+  let recurringPrompt = $state<{
+    type: 'update';
+    block: ScheduledBlock;
+    newDay: number;
+    newStartMin: number;
+    newEndMin: number;
+  } | {
+    type: 'delete';
+    block: ScheduledBlock;
+  } | null>(null);
+
+  function handleUpdateRequest(
+    id: number,
+    day: number,
+    startMin: number,
+    endMin: number,
+    e?: MouseEvent
+  ) {
+    const targetBlock = blocks.find(b => b.id === id);
+    if (!targetBlock) {
+      onBlockUpdate(id, day, startMin, endMin);
+      return;
+    }
+
+    const isRecurringMaster =
+      targetBlock.calendar_type === 'google' &&
+      !targetBlock.is_exception &&
+      Boolean(targetBlock.recurring_event_id || targetBlock.google_event_id);
+
+    if (!isRecurringMaster) {
+      // If already an exception or local, update directly without prompting
+      const scope = targetBlock.is_exception ? 'instance' : 'series';
+      onBlockUpdate(id, day, startMin, endMin, scope);
+      return;
+    }
+
+    // Modifier keys bypass prompt:
+    // Alt + Drag: single session (instance)
+    // Shift + Drag: weekly series (series)
+    if (e?.altKey) {
+      onBlockUpdate(id, day, startMin, endMin, 'instance');
+      return;
+    }
+    if (e?.shiftKey) {
+      onBlockUpdate(id, day, startMin, endMin, 'series');
+      return;
+    }
+
+    recurringPrompt = {
+      type: 'update',
+      block: targetBlock,
+      newDay: day,
+      newStartMin: startMin,
+      newEndMin: endMin,
+    };
+  }
+
+  function handleDeleteRequest(id: number, e?: MouseEvent) {
+    const targetBlock = blocks.find(b => b.id === id);
+    if (!targetBlock) {
+      onBlockDelete(id);
+      return;
+    }
+
+    const isRecurringMaster =
+      targetBlock.calendar_type === 'google' &&
+      !targetBlock.is_exception &&
+      Boolean(targetBlock.recurring_event_id || targetBlock.google_event_id);
+
+    if (!isRecurringMaster) {
+      onBlockDelete(id, targetBlock.is_exception ? 'instance' : 'series');
+      return;
+    }
+
+    if (e?.altKey) {
+      onBlockDelete(id, 'instance');
+      return;
+    }
+    if (e?.shiftKey) {
+      onBlockDelete(id, 'series');
+      return;
+    }
+
+    recurringPrompt = {
+      type: 'delete',
+      block: targetBlock,
+    };
+  }
+
   function handleBlockMouseUp(e: MouseEvent) {
     window.removeEventListener('mousemove', handleBlockMouseMove);
     window.removeEventListener('mouseup', handleBlockMouseUp);
 
     if (activeDrag) {
       if (e.clientX < activeDrag.calendarRect.left - 20) {
-        onBlockDelete(activeDrag.id);
+        handleDeleteRequest(activeDrag.id, e);
       } else {
-        if (activeDrag.currentDay !== activeDrag.startDay || activeDrag.currentStartMin !== activeDrag.startMin) {
-          onBlockUpdate(activeDrag.id, activeDrag.currentDay, activeDrag.currentStartMin, activeDrag.currentEndMin);
+        if (
+          activeDrag.currentDay !== activeDrag.startDay ||
+          activeDrag.currentStartMin !== activeDrag.startMin ||
+          activeDrag.currentEndMin !== activeDrag.endMin
+        ) {
+          handleUpdateRequest(
+            activeDrag.id,
+            activeDrag.currentDay,
+            activeDrag.currentStartMin,
+            activeDrag.currentEndMin,
+            e
+          );
         }
       }
     }
@@ -522,15 +649,16 @@
   function handleResizeStart2(e: MouseEvent, block: ScheduledBlock, type: 'top' | 'bottom') {
     e.stopPropagation();
     e.preventDefault();
+    const effectiveEnd = block.end_minute <= block.start_minute ? block.end_minute + 1440 : block.end_minute;
     activeResize = {
       id: block.id!,
       type,
       initialY: e.clientY,
       startMin: block.start_minute,
-      endMin: block.end_minute,
+      endMin: effectiveEnd,
       day: block.day_of_week,
     };
-    currentResizeState = { startMin: block.start_minute, endMin: block.end_minute };
+    currentResizeState = { startMin: block.start_minute, endMin: effectiveEnd };
     window.addEventListener('mousemove', handleResizeMove2);
     window.addEventListener('mouseup', handleResizeEnd2);
   }
@@ -556,13 +684,19 @@
     }
   }
 
-  function handleResizeEnd2() {
+  function handleResizeEnd2(e: MouseEvent) {
     window.removeEventListener('mousemove', handleResizeMove2);
     window.removeEventListener('mouseup', handleResizeEnd2);
 
     if (activeResize && currentResizeState) {
       if (currentResizeState.startMin !== activeResize.startMin || currentResizeState.endMin !== activeResize.endMin) {
-        onBlockUpdate(activeResize.id, activeResize.day, currentResizeState.startMin, currentResizeState.endMin);
+        handleUpdateRequest(
+          activeResize.id,
+          activeResize.day,
+          currentResizeState.startMin,
+          currentResizeState.endMin,
+          e
+        );
       }
     }
 
@@ -578,11 +712,32 @@
 
   function getSegmentsForDay(dayIdx: number) {
     const segments = [];
+    const exceptionSeriesIds = new Set(
+      blocks
+        .filter(b => b.is_exception && b.session_date && b.session_date >= currentMondayYmd && b.session_date <= currentSundayYmd)
+        .map(b => b.recurring_event_id || b.google_event_id)
+        .filter(Boolean)
+    );
+
     const visibleBlocks = blocks.filter(b => {
+      if (b.subject_topic === '__cancelled__') return false;
+
+      if (!b.session_date) {
+        const seriesId = b.recurring_event_id || b.google_event_id;
+        if (seriesId && exceptionSeriesIds.has(seriesId)) {
+          return false;
+        }
+      }
+
       if (b.calendar_type === 'google') {
         if (!showSyncedCalendar) return false;
         if (syncedCalendarId && b.google_calendar_id && b.google_calendar_id !== syncedCalendarId) {
           return false;
+        }
+        if (b.session_date) {
+          if (b.session_date < currentMondayYmd || b.session_date > currentSundayYmd) {
+            return false;
+          }
         }
         return true;
       }
@@ -600,12 +755,13 @@
           : isResizing && currentResizeState
             ? currentResizeState.startMin
             : block.start_minute;
-      const endMin =
+      const rawEnd =
         isDragging && activeDrag
           ? activeDrag.currentEndMin
           : isResizing && currentResizeState
             ? currentResizeState.endMin
             : block.end_minute;
+      const endMin = rawEnd <= startMin ? rawEnd + 1440 : rawEnd;
 
       if (blockDay === dayIdx) {
         segments.push({
@@ -983,7 +1139,7 @@
             {#each dayLayout.overlays as item (item.ev.id + '-' + item.ev.day_of_week)}
               {@const ev = item.ev}
               {@const top = ev.start_minute * PIXELS_PER_MINUTE}
-              {@const height = Math.max(20, (ev.end_minute - ev.start_minute) * PIXELS_PER_MINUTE)}
+              {@const height = Math.max(20, (Math.min(ev.end_minute, 24 * 60) - ev.start_minute) * PIXELS_PER_MINUTE)}
               {@const leftPct = (item.col / item.totalCols) * 100}
               {@const widthPct = (1 / item.totalCols) * 100}
               {@const overlayBg = ev.calendar_color}
@@ -1029,11 +1185,12 @@
                 class:dragging={seg.isDragging}
                 class:is-overflow={!seg.isPrimary}
                 class:is-google-synced={isGoogleSynced}
+                class:is-exception={seg.block.is_exception}
                 class:is-short={height < 32}
                 onmousedown={(e) => handleBlockMouseDown(e, seg.block, seg.isPrimary)}
                 onclick={(e) => handleBlockClick(e, seg.block)}
                 style="top: {top}px; height: {height}px; left: calc({leftPct}% + 2px); width: calc({widthPct}% - 4px); background-color: {blockBg}; color: {blockFg}; border-color: color-mix(in srgb, {blockBg} 70%, #000000);"
-                title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}) • {timing.rounds} {timing.rounds === 1 ? 'round' : 'rounds'} allocated • Study: {timing.formattedStudyTime}{timing.estSessionMins > 0 ? ' • Est. Session: ' + timing.formattedSessionTime : ''}{seg.block.subject_topic ? ' • ' + seg.block.subject_topic : ''}{seg.block.study_type ? ' • ' + seg.block.study_type : ''}{isGoogleSynced ? ' • Synced with Google' : ''}"
+                title="{seg.block.subject} ({formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}) • {timing.rounds} {timing.rounds === 1 ? 'round' : 'rounds'} allocated • Study: {timing.formattedStudyTime}{timing.estSessionMins > 0 ? ' • Est. Session: ' + timing.formattedSessionTime : ''}{seg.block.subject_topic ? ' • ' + seg.block.subject_topic : ''}{seg.block.study_type ? ' • ' + seg.block.study_type : ''}{seg.block.is_exception ? ' • This week only (modified session)' : (isGoogleSynced ? ' • Synced with Google' : '')}"
               >
                 <!-- Resize top handle -->
                 {#if seg.isPrimary}
@@ -1055,7 +1212,11 @@
                         {/if}
                         {formatTime(seg.originalStart)} - {formatTime(seg.originalEnd)}
                       </span>
-                      {#if isGoogleSynced && seg.isPrimary}
+                      {#if seg.block.is_exception}
+                        <span class="exception-badge compact" title="This week only (modified session)">
+                          This week only
+                        </span>
+                      {:else if isGoogleSynced && seg.isPrimary}
                         <span class="gcal-sync-badge" title="Synced with Google Calendar">
                           <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m17 2 4 4-4 4"/>
@@ -1117,7 +1278,16 @@
                           ~{timing.formattedSessionTime}
                         </span>
                       {/if}
-                      {#if isGoogleSynced && seg.isPrimary}
+                      {#if seg.block.is_exception}
+                        <span class="exception-badge" title="This week only (modified session)">
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                          </svg>
+                          <span>This week only</span>
+                        </span>
+                      {:else if isGoogleSynced && seg.isPrimary}
                         <span class="gcal-sync-badge" title="Synced with Google Calendar">
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m17 2 4 4-4 4"/>
@@ -1134,7 +1304,10 @@
                 {#if seg.isPrimary}
                   <button
                     class="btn-delete-block"
-                    onclick={() => onBlockDelete(seg.block.id!)}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteRequest(seg.block.id!, e);
+                    }}
                     title="Remove block"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1186,6 +1359,129 @@
       onSubjectEventChanged?.();
     }}
   />
+{/if}
+
+{#if recurringPrompt}
+  <div class="modal-overlay" role="presentation" onclick={() => recurringPrompt = null}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal recurring-prompt-modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+      <div class="header">
+        <div class="header-titles">
+          <h2>
+            {recurringPrompt.type === 'update' ? 'Update Recurring Session' : 'Delete Recurring Session'}
+          </h2>
+          <div class="header-meta">
+            <span class="meta-badge study">
+              <span class="rounds-dot"></span>
+              {recurringPrompt.block.subject}
+            </span>
+            <span class="meta-time">
+              {formatTime(recurringPrompt.type === 'update' ? recurringPrompt.newStartMin : recurringPrompt.block.start_minute)} – {formatTime(recurringPrompt.type === 'update' ? recurringPrompt.newEndMin : recurringPrompt.block.end_minute)}
+            </span>
+          </div>
+        </div>
+        <button class="close-btn" onclick={() => recurringPrompt = null} aria-label="Cancel">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="content prompt-content">
+        <p class="prompt-description">
+          {#if recurringPrompt.type === 'update'}
+            This session is part of a weekly recurring series. Would you like to modify this specific session only, or apply the changes to all weekly occurrences?
+          {:else}
+            This session is part of a weekly recurring series. Would you like to delete this specific session only, or remove all weekly occurrences?
+          {/if}
+        </p>
+
+        <div class="prompt-choices">
+          <button
+            class="choice-card"
+            onclick={() => {
+              if (!recurringPrompt) return;
+              if (recurringPrompt.type === 'update') {
+                onBlockUpdate(
+                  recurringPrompt.block.id!,
+                  recurringPrompt.newDay,
+                  recurringPrompt.newStartMin,
+                  recurringPrompt.newEndMin,
+                  'instance'
+                );
+              } else {
+                onBlockDelete(recurringPrompt.block.id!, 'instance');
+              }
+              recurringPrompt = null;
+            }}
+          >
+            <div class="choice-icon instance">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div class="choice-text">
+              <div class="choice-title">This session only</div>
+              <div class="choice-subtitle">
+                {recurringPrompt.type === 'update' ? 'Only moves this week’s session. Future weeks remain unchanged.' : 'Only removes this week’s session.'}
+              </div>
+            </div>
+          </button>
+
+          <button
+            class="choice-card"
+            onclick={() => {
+              if (!recurringPrompt) return;
+              if (recurringPrompt.type === 'update') {
+                onBlockUpdate(
+                  recurringPrompt.block.id!,
+                  recurringPrompt.newDay,
+                  recurringPrompt.newStartMin,
+                  recurringPrompt.newEndMin,
+                  'series'
+                );
+              } else {
+                onBlockDelete(recurringPrompt.block.id!, 'series');
+              }
+              recurringPrompt = null;
+            }}
+          >
+            <div class="choice-icon series">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m17 2 4 4-4 4"/>
+                <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+                <path d="m7 22-4-4 4-4"/>
+                <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+              </svg>
+            </div>
+            <div class="choice-text">
+              <div class="choice-title">All weekly sessions</div>
+              <div class="choice-subtitle">
+                {recurringPrompt.type === 'update' ? 'Updates the recurring series across all weeks.' : 'Removes the recurring series for all weeks.'}
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <div class="prompt-hint">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 16v-4"/>
+            <path d="M12 8h.01"/>
+          </svg>
+          <span>Hold <strong>Alt</strong> while dragging for single session, or <strong>Shift</strong> for all weeks.</span>
+        </div>
+      </div>
+
+      <div class="footer prompt-footer">
+        <button class="cancel-btn" onclick={() => recurringPrompt = null}>Cancel</button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -1754,6 +2050,11 @@
     border-radius: 3px;
   }
 
+  .scheduled-block.is-exception {
+    outline: 2px dashed color-mix(in srgb, currentColor 65%, transparent);
+    outline-offset: -2px;
+  }
+
   .scheduled-block:active {
     cursor: grabbing;
   }
@@ -1984,6 +2285,28 @@
     opacity: 0.85;
   }
 
+  .exception-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1;
+    color: currentColor;
+    background: color-mix(in srgb, currentColor 22%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+    border-radius: 4px;
+    padding: 2px 5px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .exception-badge.compact {
+    font-size: 0.58rem;
+    padding: 1px 3.5px;
+    gap: 2px;
+  }
+
   .block-time {
     font-size: 0.7rem;
     color: inherit;
@@ -2031,5 +2354,239 @@
 
   .btn-delete-block:hover {
     background: color-mix(in srgb, currentColor 35%, transparent);
+  }
+
+  /* ── Recurring Session Action Prompt Modal ─────────────────── */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: fade-in 0.18s ease-out;
+  }
+
+  .recurring-prompt-modal {
+    width: 100%;
+    max-width: 440px;
+    background: var(--color-background);
+    border: 1px solid var(--color-background-light, rgba(255, 255, 255, 0.1));
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: fade-in 0.18s ease-out;
+  }
+
+  .recurring-prompt-modal .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-background-light, rgba(255, 255, 255, 0.08));
+  }
+
+  .recurring-prompt-modal .header-titles {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .recurring-prompt-modal h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .recurring-prompt-modal .header-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .recurring-prompt-modal .meta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3.5px;
+    font-size: 0.67rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+    background: color-mix(in srgb, var(--color-focus-round, #4a90e2) 18%, transparent);
+    padding: 1.5px 6.5px;
+    border-radius: 999px;
+    opacity: 0.9;
+  }
+
+  .recurring-prompt-modal .meta-badge .rounds-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+  }
+
+  .recurring-prompt-modal .meta-time {
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    opacity: 0.85;
+  }
+
+  .recurring-prompt-modal .close-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .recurring-prompt-modal .close-btn:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.08));
+    color: var(--color-foreground);
+  }
+
+  .prompt-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .prompt-description {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.45;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    opacity: 0.9;
+  }
+
+  .prompt-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .choice-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--color-background-light, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--color-background-light, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    color: var(--color-foreground);
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .choice-card:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.08));
+    border-color: var(--color-focus-round, #4a90e2);
+  }
+
+  .choice-card:active {
+    transform: scale(0.99);
+  }
+
+  .choice-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+
+  .choice-icon.instance {
+    background: color-mix(in srgb, var(--color-focus-round, #4a90e2) 20%, transparent);
+    color: var(--color-focus-round, #4a90e2);
+  }
+
+  .choice-icon.series {
+    background: color-mix(in srgb, #9333ea 20%, transparent);
+    color: #c084fc;
+  }
+
+  .choice-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .choice-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .choice-subtitle {
+    font-size: 0.74rem;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    opacity: 0.8;
+    line-height: 1.35;
+  }
+
+  .prompt-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    opacity: 0.75;
+    padding-top: 4px;
+  }
+
+  .prompt-hint strong {
+    color: var(--color-foreground);
+    font-weight: 600;
+  }
+
+  .prompt-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 20px;
+    border-top: 1px solid var(--color-background-light, rgba(255, 255, 255, 0.08));
+  }
+
+  .cancel-btn {
+    background: transparent;
+    color: var(--color-foreground-darker, var(--color-foreground));
+    border: 1px solid var(--color-background-light, rgba(255, 255, 255, 0.15));
+    padding: 7px 16px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .cancel-btn:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.08));
+    color: var(--color-foreground);
   }
 </style>

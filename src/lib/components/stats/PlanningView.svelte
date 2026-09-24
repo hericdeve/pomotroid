@@ -54,7 +54,17 @@
     return `${y}-${m}-${dayNum}`;
   }
 
+  function getDateForDay(mondayYmd: string, dayOfWeek: number): string {
+    const [y, m, d] = mondayYmd.split('-').map(Number);
+    const date = new Date(y, m - 1, d + dayOfWeek);
+    const resY = date.getFullYear();
+    const resM = String(date.getMonth() + 1).padStart(2, '0');
+    const resD = String(date.getDate()).padStart(2, '0');
+    return `${resY}-${resM}-${resD}`;
+  }
+
   let currentMondayYmd = $derived(getMondayYmd(weekOffset));
+  let currentSundayYmd = $derived(getDateForDay(currentMondayYmd, 6));
 
   onMount(() => {
     let mounted = true;
@@ -205,17 +215,43 @@
       );
 
       blocks = [...blocks, newBlock];
+      if (authStatus.is_signed_in && syncedCalendar) {
+        blocks = await googleCalendarSyncNow(currentMondayYmd);
+      }
     } catch (e) {
       logError(`Failed to add block: ${e}`);
       alert(`Failed to add block: ${e}`);
     }
   }
 
-  async function handleBlockDelete(id: number) {
+  async function handleBlockDelete(id: number, scope: 'instance' | 'series' = 'instance') {
     const prevBlocks = blocks;
-    blocks = blocks.filter(b => b.id !== id);
+    const targetBlock = blocks.find(b => b.id === id);
+    if (scope === 'series' && targetBlock) {
+      const targetSeriesId = targetBlock.recurring_event_id || targetBlock.google_event_id;
+      blocks = blocks.filter(b => b.recurring_event_id !== targetSeriesId && b.google_event_id !== targetSeriesId && b.id !== id);
+    } else if (targetBlock && !targetBlock.is_exception && targetBlock.calendar_type === 'google') {
+      const targetSeriesId = targetBlock.recurring_event_id || targetBlock.google_event_id;
+      const sessionDate = getDateForDay(currentMondayYmd, targetBlock.day_of_week);
+      blocks = [
+        ...blocks,
+        {
+          ...targetBlock,
+          id: -Date.now(),
+          subject_topic: '__cancelled__',
+          session_date: sessionDate,
+          recurring_event_id: targetSeriesId,
+          is_exception: true,
+        },
+      ];
+    } else {
+      blocks = blocks.filter(b => b.id !== id);
+    }
     try {
-      await scheduleDeleteBlock(id);
+      await scheduleDeleteBlock(id, currentMondayYmd, scope);
+      if (authStatus.is_signed_in && syncedCalendar) {
+        blocks = await googleCalendarSyncNow(currentMondayYmd);
+      }
     } catch (e) {
       blocks = prevBlocks;
       logError(`Failed to delete block: ${e}`);
@@ -223,20 +259,70 @@
     }
   }
 
-  async function handleBlockUpdate(id: number, day: number, startMin: number, endMin: number) {
+  async function handleBlockUpdate(
+    id: number,
+    day: number,
+    startMin: number,
+    endMin: number,
+    scope: 'instance' | 'series' = 'instance'
+  ) {
     const prevBlocks = blocks;
-    blocks = blocks.map(b => b.id === id ? { ...b, day_of_week: day, start_minute: startMin, end_minute: endMin } : b);
+    const targetBlock = blocks.find(b => b.id === id);
+    if (!targetBlock) return;
+
+    if (scope === 'series') {
+      const targetSeriesId = targetBlock.recurring_event_id || targetBlock.google_event_id;
+      blocks = blocks.map(b => {
+        if ((b.recurring_event_id === targetSeriesId || b.google_event_id === targetSeriesId) && !b.is_exception) {
+          return { ...b, day_of_week: day, start_minute: startMin, end_minute: endMin };
+        }
+        return b;
+      });
+    } else {
+      if (targetBlock.is_exception) {
+        const sessionDate = getDateForDay(currentMondayYmd, day);
+        blocks = blocks.map(b =>
+          b.id === id
+            ? {
+                ...b,
+                day_of_week: day,
+                start_minute: startMin,
+                end_minute: endMin,
+                session_date: sessionDate,
+              }
+            : b
+        );
+      } else {
+        const targetSeriesId = targetBlock.recurring_event_id || targetBlock.google_event_id;
+        const sessionDate = getDateForDay(currentMondayYmd, day);
+        const newException: ScheduledBlock = {
+          ...targetBlock,
+          id: -Date.now(),
+          day_of_week: day,
+          start_minute: startMin,
+          end_minute: endMin,
+          session_date: sessionDate,
+          recurring_event_id: targetSeriesId,
+          is_exception: true,
+        };
+        blocks = [...blocks, newException];
+      }
+    }
     try {
       await scheduleUpdateBlock(
         id,
         day,
         startMin,
         endMin,
-        null,
-        null,
-        null,
-        currentMondayYmd
+        targetBlock?.subject_topic ?? null,
+        targetBlock?.study_type ?? null,
+        targetBlock?.round_tags ?? null,
+        currentMondayYmd,
+        scope
       );
+      if (authStatus.is_signed_in && syncedCalendar) {
+        blocks = await googleCalendarSyncNow(currentMondayYmd);
+      }
     } catch (e) {
       blocks = prevBlocks;
       logError(`Failed to update block: ${e}`);
@@ -245,12 +331,29 @@
   }
 
   function calculateAllocatedRounds(subjectName: string): number {
+    const exceptionSeriesIds = new Set(
+      blocks
+        .filter(b => b.is_exception && b.session_date && b.session_date >= currentMondayYmd && b.session_date <= currentSundayYmd)
+        .map(b => b.recurring_event_id || b.google_event_id)
+        .filter(Boolean)
+    );
+
     const subjectBlocks = blocks.filter(b => {
       if (b.subject !== subjectName) return false;
+      if (b.subject_topic === '__cancelled__') return false;
+      if (!b.session_date) {
+        const seriesId = b.recurring_event_id || b.google_event_id;
+        if (seriesId && exceptionSeriesIds.has(seriesId)) return false;
+      }
       if (b.calendar_type === 'google') {
         if (!showSyncedCalendar) return false;
         if (syncedCalendar && b.google_calendar_id && b.google_calendar_id !== syncedCalendar.id) {
           return false;
+        }
+        if (b.session_date) {
+          if (b.session_date < currentMondayYmd || b.session_date > currentSundayYmd) {
+            return false;
+          }
         }
         return true;
       }
@@ -266,7 +369,8 @@
     let totalRounds = 0;
 
     for (const block of subjectBlocks) {
-      let remainingMins = block.end_minute - block.start_minute;
+      const effectiveEnd = block.end_minute <= block.start_minute ? block.end_minute + 1440 : block.end_minute;
+      let remainingMins = effectiveEnd - block.start_minute;
       let roundsInBlock = 0;
       let cyclePosition = 1;
 

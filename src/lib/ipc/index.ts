@@ -152,7 +152,11 @@ export const scheduleAddBlock = (
   mondayYmd,
 });
 
-export const scheduleDeleteBlock = (id: number) => invoke<void>('schedule_delete_block', { id });
+export const scheduleDeleteBlock = (
+  id: number,
+  mondayYmd: string | null = null,
+  scope: 'instance' | 'series' = 'instance'
+) => invoke<void>('schedule_delete_block', { id, mondayYmd, scope });
 
 export const scheduleUpdateBlock = (
   id: number,
@@ -163,6 +167,7 @@ export const scheduleUpdateBlock = (
   studyType: string | null = null,
   roundTags: string | null = null,
   mondayYmd: string | null = null,
+  scope: 'instance' | 'series' = 'instance',
 ) => invoke<void>('schedule_update_block', {
   id, 
   dayOfWeek, 
@@ -172,6 +177,7 @@ export const scheduleUpdateBlock = (
   studyType,
   roundTags,
   mondayYmd,
+  scope,
 });
 
 // --- Google Calendar & Local Calendar commands ---

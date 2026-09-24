@@ -47,6 +47,8 @@ pub struct GoogleEventItem {
     pub status: Option<String>,
     #[serde(rename = "recurringEventId")]
     pub recurring_event_id: Option<String>,
+    #[serde(rename = "originalStartTime")]
+    pub original_start_time: Option<EventDateTime>,
     pub start: Option<EventDateTime>,
     pub end: Option<EventDateTime>,
 }
@@ -174,6 +176,52 @@ pub async fn fetch_events(
     Ok(active_events)
 }
 
+pub async fn fetch_event_instances(
+    access_token: &str,
+    calendar_id: &str,
+    event_id: &str,
+    time_min: &str,
+    time_max: &str,
+) -> Result<Vec<GoogleEventItem>, String> {
+    let client = Client::new();
+    let encoded_cal_id = urlencoding::encode(calendar_id);
+    let encoded_event_id = urlencoding::encode(event_id);
+    let url = format!(
+        "{CALENDAR_API_BASE}/calendars/{encoded_cal_id}/events/{encoded_event_id}/instances?timeMin={}&timeMax={}&maxResults=50",
+        urlencoding::encode(time_min),
+        urlencoding::encode(time_max),
+    );
+
+    let res = client
+        .get(&url)
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch instances for event {event_id}: {e}"))?;
+
+    let status = res.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    if !status.is_success() {
+        let body = res.text().await.unwrap_or_default();
+        return Err(format!("Fetch event instances error ({event_id}): {body}"));
+    }
+
+    let parsed: EventListResponse = res
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse event instances: {e}"))?;
+
+    let items = parsed
+        .items
+        .into_iter()
+        .filter(|e| e.status.as_deref() != Some("cancelled"))
+        .collect();
+
+    Ok(items)
+}
+
 pub async fn get_event(
     access_token: &str,
     calendar_id: &str,
@@ -222,6 +270,7 @@ pub async fn create_event(
     summary: &str,
     start_iso: &str,
     end_iso: &str,
+    recurrence: Option<Vec<String>>,
     time_zone: Option<&str>,
 ) -> Result<String, String> {
     let client = Client::new();
@@ -233,6 +282,8 @@ pub async fn create_event(
         .map(|s| s.to_string())
         .unwrap_or_else(get_local_timezone);
 
+    let rec = recurrence.unwrap_or_else(|| vec!["RRULE:FREQ=WEEKLY".to_string()]);
+
     let payload = json!({
         "summary": summary,
         "start": {
@@ -243,9 +294,7 @@ pub async fn create_event(
             "dateTime": end_iso,
             "timeZone": tz
         },
-        "recurrence": [
-            "RRULE:FREQ=WEEKLY"
-        ]
+        "recurrence": rec
     });
 
     let res = client
@@ -278,6 +327,7 @@ pub async fn update_event(
     summary: &str,
     start_iso: &str,
     end_iso: &str,
+    recurrence: Option<Vec<String>>,
     time_zone: Option<&str>,
 ) -> Result<(), String> {
     let client = Client::new();
@@ -290,7 +340,7 @@ pub async fn update_event(
         .map(|s| s.to_string())
         .unwrap_or_else(get_local_timezone);
 
-    let payload = json!({
+    let mut payload = json!({
         "summary": summary,
         "start": {
             "dateTime": start_iso,
@@ -301,6 +351,10 @@ pub async fn update_event(
             "timeZone": tz
         }
     });
+
+    if let Some(rrule) = recurrence {
+        payload["recurrence"] = json!(rrule);
+    }
 
     let res = client
         .patch(&url)

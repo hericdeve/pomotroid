@@ -1818,6 +1818,95 @@ mod tests {
         let events_cal = get_google_events_calendar(&conn).unwrap();
         assert!(events_cal.is_none());
     }
+
+    #[test]
+    fn test_recurring_schedule_blocks_and_exceptions() {
+        let conn = setup();
+
+        // 1. Add master series block
+        let master_id = schedule_add_block_full(
+            &conn,
+            "Mathematics",
+            0, // Monday
+            600, // 10:00
+            720, // 12:00
+            Some("Calculus"),
+            Some("Lecture"),
+            None,
+            "google",
+            Some("primary_cal_id"),
+            Some("instance_1"),
+            Some("series_master_123"),
+            Some("2026-09-21"),
+            false,
+        ).unwrap();
+
+        // 2. Add second instance of same series (e.g. next week)
+        let instance2_id = schedule_add_block_full(
+            &conn,
+            "Mathematics",
+            0, // Monday
+            600,
+            720,
+            Some("Calculus"),
+            Some("Lecture"),
+            None,
+            "google",
+            Some("primary_cal_id"),
+            Some("instance_2"),
+            Some("series_master_123"),
+            Some("2026-09-28"),
+            false,
+        ).unwrap();
+
+        // Verify retrieval
+        let all = schedule_get_all(&conn).unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].recurring_event_id, Some("series_master_123".to_string()));
+        assert!(!all[0].is_exception);
+
+        // 3. Move instance_1 as an exception (e.g. moved to Tuesday 14:00-16:00 on 2026-09-22)
+        schedule_update_block_instance(
+            &conn,
+            master_id,
+            1, // Tuesday
+            840, // 14:00
+            960, // 16:00
+            "2026-09-22",
+        ).unwrap();
+
+        let updated_inst = schedule_get_by_id(&conn, master_id).unwrap().unwrap();
+        assert_eq!(updated_inst.day_of_week, 1);
+        assert_eq!(updated_inst.start_minute, 840);
+        assert_eq!(updated_inst.end_minute, 960);
+        assert_eq!(updated_inst.session_date, Some("2026-09-22".to_string()));
+        assert!(updated_inst.is_exception);
+
+        // 4. Update the series time (e.g. weekly series changes from Monday 10:00 to Monday 11:00)
+        // This must update instance2 (non-exception), but MUST NOT overwrite instance1 (the exception)
+        schedule_update_block_series(
+            &conn,
+            "series_master_123",
+            0, // Monday
+            660, // 11:00
+            780, // 13:00
+        ).unwrap();
+
+        let inst1_after_series_update = schedule_get_by_id(&conn, master_id).unwrap().unwrap();
+        assert_eq!(inst1_after_series_update.day_of_week, 1, "Exception should remain on Tuesday");
+        assert_eq!(inst1_after_series_update.start_minute, 840, "Exception start time should remain 14:00");
+        assert!(inst1_after_series_update.is_exception);
+
+        let inst2_after_series_update = schedule_get_by_id(&conn, instance2_id).unwrap().unwrap();
+        assert_eq!(inst2_after_series_update.day_of_week, 0, "Non-exception follows series update");
+        assert_eq!(inst2_after_series_update.start_minute, 660, "Non-exception start time updated to 11:00");
+        assert!(!inst2_after_series_update.is_exception);
+
+        // 5. Delete entire series
+        schedule_delete_by_recurring_event_id(&conn, "series_master_123").unwrap();
+        let remaining = schedule_get_all(&conn).unwrap();
+        assert_eq!(remaining.len(), 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2088,12 +2177,16 @@ pub struct ScheduledBlock {
     pub calendar_type: String,
     pub google_calendar_id: Option<String>,
     pub google_event_id: Option<String>,
+    pub recurring_event_id: Option<String>,
+    pub session_date: Option<String>,
+    pub is_exception: bool,
 }
 
 pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
     let mut stmt = conn.prepare(
         "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags,
-                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id 
+                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id,
+                recurring_event_id, session_date, COALESCE(is_exception, 0)
          FROM scheduled_blocks 
          ORDER BY day_of_week ASC, start_minute ASC"
     )?;
@@ -2111,6 +2204,9 @@ pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
             calendar_type: row.get(8)?,
             google_calendar_id: row.get(9)?,
             google_event_id: row.get(10)?,
+            recurring_event_id: row.get(11)?,
+            session_date: row.get(12)?,
+            is_exception: row.get::<_, i32>(13)? != 0,
         })
     })?;
 
@@ -2124,7 +2220,8 @@ pub fn schedule_get_all(conn: &Connection) -> Result<Vec<ScheduledBlock>> {
 pub fn schedule_get_by_id(conn: &Connection, id: i64) -> Result<Option<ScheduledBlock>> {
     let mut stmt = conn.prepare(
         "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags,
-                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id 
+                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id,
+                recurring_event_id, session_date, COALESCE(is_exception, 0)
          FROM scheduled_blocks 
          WHERE id = ?1"
     )?;
@@ -2143,6 +2240,9 @@ pub fn schedule_get_by_id(conn: &Connection, id: i64) -> Result<Option<Scheduled
             calendar_type: row.get(8)?,
             google_calendar_id: row.get(9)?,
             google_event_id: row.get(10)?,
+            recurring_event_id: row.get(11)?,
+            session_date: row.get(12)?,
+            is_exception: row.get::<_, i32>(13)? != 0,
         }))
     } else {
         Ok(None)
@@ -2152,7 +2252,8 @@ pub fn schedule_get_by_id(conn: &Connection, id: i64) -> Result<Option<Scheduled
 pub fn schedule_get_by_google_event_id(conn: &Connection, event_id: &str) -> Result<Option<ScheduledBlock>> {
     let mut stmt = conn.prepare(
         "SELECT id, subject, day_of_week, start_minute, end_minute, subject_topic, study_type, round_tags,
-                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id 
+                COALESCE(calendar_type, 'local'), google_calendar_id, google_event_id,
+                recurring_event_id, session_date, COALESCE(is_exception, 0)
          FROM scheduled_blocks 
          WHERE google_event_id = ?1"
     )?;
@@ -2171,6 +2272,9 @@ pub fn schedule_get_by_google_event_id(conn: &Connection, event_id: &str) -> Res
             calendar_type: row.get(8)?,
             google_calendar_id: row.get(9)?,
             google_event_id: row.get(10)?,
+            recurring_event_id: row.get(11)?,
+            session_date: row.get(12)?,
+            is_exception: row.get::<_, i32>(13)? != 0,
         }))
     } else {
         Ok(None)
@@ -2199,6 +2303,9 @@ pub fn schedule_add_block(
         "local",
         None,
         None,
+        None,
+        None,
+        false,
     )
 }
 
@@ -2214,13 +2321,17 @@ pub fn schedule_add_block_full(
     calendar_type: &str,
     google_calendar_id: Option<&str>,
     google_event_id: Option<&str>,
+    recurring_event_id: Option<&str>,
+    session_date: Option<&str>,
+    is_exception: bool,
 ) -> Result<i64> {
     conn.execute(
         "INSERT INTO scheduled_blocks (
             subject, day_of_week, start_minute, end_minute, created_at, 
-            subject_topic, study_type, round_tags, calendar_type, google_calendar_id, google_event_id
+            subject_topic, study_type, round_tags, calendar_type, google_calendar_id, google_event_id,
+            recurring_event_id, session_date, is_exception
          ) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         params![
             subject.trim(), 
             day_of_week, 
@@ -2233,6 +2344,9 @@ pub fn schedule_add_block_full(
             calendar_type,
             google_calendar_id,
             google_event_id,
+            recurring_event_id,
+            session_date,
+            if is_exception { 1 } else { 0 },
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -2254,6 +2368,14 @@ pub fn schedule_delete_by_google_event_id(conn: &Connection, event_id: &str) -> 
     Ok(())
 }
 
+pub fn schedule_delete_by_recurring_event_id(conn: &Connection, recurring_event_id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM scheduled_blocks WHERE google_event_id = ?1 OR recurring_event_id = ?1",
+        params![recurring_event_id],
+    )?;
+    Ok(())
+}
+
 pub fn schedule_update_block(
     conn: &Connection, 
     id: i64, 
@@ -2269,6 +2391,39 @@ pub fn schedule_update_block(
          SET day_of_week = ?1, start_minute = ?2, end_minute = ?3, subject_topic = ?4, study_type = ?5, round_tags = ?6 
          WHERE id = ?7",
         params![day_of_week, start_minute, end_minute, subject_topic.map(|s| s.trim()), study_type.map(|s| s.trim()), round_tags, id],
+    )?;
+    Ok(())
+}
+
+pub fn schedule_update_block_instance(
+    conn: &Connection,
+    id: i64,
+    day_of_week: i32,
+    start_minute: i32,
+    end_minute: i32,
+    session_date: &str,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE scheduled_blocks
+         SET day_of_week = ?1, start_minute = ?2, end_minute = ?3, session_date = ?4, is_exception = 1, last_synced_at = ?5
+         WHERE id = ?6",
+        params![day_of_week, start_minute, end_minute, session_date, unix_now(), id],
+    )?;
+    Ok(())
+}
+
+pub fn schedule_update_block_series(
+    conn: &Connection,
+    recurring_event_id: &str,
+    day_of_week: i32,
+    start_minute: i32,
+    end_minute: i32,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE scheduled_blocks
+         SET day_of_week = ?1, start_minute = ?2, end_minute = ?3, last_synced_at = ?4
+         WHERE (google_event_id = ?5 OR recurring_event_id = ?5) AND is_exception = 0",
+        params![day_of_week, start_minute, end_minute, unix_now(), recurring_event_id],
     )?;
     Ok(())
 }
@@ -2301,6 +2456,33 @@ pub fn schedule_update_google_event_id(
          SET calendar_type = 'google', google_calendar_id = ?1, google_event_id = ?2, last_synced_at = ?3
          WHERE id = ?4",
         params![google_calendar_id, google_event_id, unix_now(), id],
+    )?;
+    Ok(())
+}
+
+pub fn schedule_update_google_event_info(
+    conn: &Connection,
+    id: i64,
+    google_calendar_id: &str,
+    google_event_id: &str,
+    recurring_event_id: Option<&str>,
+    session_date: Option<&str>,
+    is_exception: bool,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE scheduled_blocks
+         SET calendar_type = 'google', google_calendar_id = ?1, google_event_id = ?2,
+             recurring_event_id = ?3, session_date = ?4, is_exception = ?5, last_synced_at = ?6
+         WHERE id = ?7",
+        params![
+            google_calendar_id,
+            google_event_id,
+            recurring_event_id,
+            session_date,
+            if is_exception { 1 } else { 0 },
+            unix_now(),
+            id
+        ],
     )?;
     Ok(())
 }

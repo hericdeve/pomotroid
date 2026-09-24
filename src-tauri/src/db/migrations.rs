@@ -362,6 +362,41 @@ const MIGRATION_20: &str = "
     INSERT INTO schema_version VALUES (20);
 ";
 
+const MIGRATION_21: &str = "
+    ALTER TABLE scheduled_blocks ADD COLUMN recurring_event_id TEXT;
+    ALTER TABLE scheduled_blocks ADD COLUMN session_date TEXT;
+    ALTER TABLE scheduled_blocks ADD COLUMN is_exception INTEGER NOT NULL DEFAULT 0;
+
+    CREATE INDEX IF NOT EXISTS idx_blocks_recurring_event ON scheduled_blocks(recurring_event_id);
+    CREATE INDEX IF NOT EXISTS idx_blocks_session_date ON scheduled_blocks(session_date);
+
+    INSERT INTO schema_version VALUES (21);
+";
+
+const MIGRATION_22: &str = "
+    DELETE FROM scheduled_blocks 
+    WHERE is_exception = 0 
+      AND session_date IS NOT NULL 
+      AND recurring_event_id IS NOT NULL;
+
+    UPDATE scheduled_blocks 
+    SET recurring_event_id = google_event_id 
+    WHERE calendar_type = 'google' 
+      AND session_date IS NULL 
+      AND recurring_event_id IS NULL 
+      AND google_event_id IS NOT NULL;
+
+    INSERT INTO schema_version VALUES (22);
+";
+
+const MIGRATION_23: &str = "
+    UPDATE scheduled_blocks 
+    SET end_minute = end_minute + 1440 
+    WHERE end_minute <= start_minute;
+
+    INSERT INTO schema_version VALUES (23);
+";
+
 
 /// Apply any pending migrations. Each migration is wrapped in a transaction
 /// so a partial failure leaves the database unchanged.
@@ -571,6 +606,24 @@ pub fn run(conn: &Connection) -> Result<()> {
         log::info!("[db/migrations] MIGRATION_20 complete");
     }
 
+    if version < 21 {
+        log::info!("[db/migrations] applying MIGRATION_21: recurring schedule blocks and exceptions");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_21} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_21 complete");
+    }
+
+    if version < 22 {
+        log::info!("[db/migrations] applying MIGRATION_22: clean duplicate recurring instances and populate master recurring_event_id");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_22} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_22 complete");
+    }
+
+    if version < 23 {
+        log::info!("[db/migrations] applying MIGRATION_23: fix midnight-crossing block end_minute");
+        conn.execute_batch(&format!("BEGIN; {MIGRATION_23} COMMIT;"))?;
+        log::info!("[db/migrations] MIGRATION_23 complete");
+    }
+
     Ok(())
 }
 
@@ -606,7 +659,7 @@ mod tests {
         let v: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 20);
+        assert_eq!(v, 23);
     }
 
     #[test]

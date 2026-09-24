@@ -5,7 +5,7 @@
   interface Props {
     block: ScheduledBlock;
     onClose: () => void;
-    onSave: (updatedBlock: ScheduledBlock) => void;
+    onSave: (updatedBlock: ScheduledBlock, scope?: 'instance' | 'series') => void;
   }
 
   let { block, onClose, onSave }: Props = $props();
@@ -37,6 +37,12 @@
   let studyType = $state(block.study_type || '');
   let roundTagsStr = $state(block.round_tags || '{}');
   
+  let isRecurringMaster = $derived(
+    block.calendar_type === 'google' &&
+    !block.is_exception &&
+    Boolean(block.recurring_event_id || block.google_event_id)
+  );
+
   let roundTags = $derived.by(() => {
     try {
       return JSON.parse(roundTagsStr);
@@ -52,19 +58,20 @@
     roundTagsStr = JSON.stringify(current);
   }
 
-  function handleSave() {
+  function handleSave(scope: 'instance' | 'series' = 'instance') {
     onSave({
       ...block,
       subject_topic: subjectTopic || null,
       study_type: studyType || null,
       round_tags: roundTagsStr === '{}' ? null : roundTagsStr
-    });
+    }, scope);
   }
 
   let events = $derived.by(() => {
     let result: TimelineEvent[] = [];
     let currentMin = block.start_minute;
-    let remainingMins = block.end_minute - block.start_minute;
+    const effectiveEnd = block.end_minute <= block.start_minute ? block.end_minute + 1440 : block.end_minute;
+    let remainingMins = effectiveEnd - block.start_minute;
     let cyclePosition = 1;
     let roundNum = 1;
     
@@ -136,7 +143,9 @@
 
   let workRounds = $derived(events.filter(e => !e.isBreak).length);
   let studyMins = $derived(Math.round(workRounds * ($settings.time_work_secs / 60)));
-  let totalBlockMins = $derived(block.end_minute - block.start_minute);
+  let totalBlockMins = $derived(
+    (block.end_minute <= block.start_minute ? block.end_minute + 1440 : block.end_minute) - block.start_minute
+  );
 </script>
 
 <div class="modal-overlay" role="presentation" onclick={onClose}>
@@ -155,6 +164,11 @@
           <span class="meta-badge study">{formatMinsDuration(studyMins)}</span>
           {#if totalBlockMins > studyMins}
             <span class="meta-badge session">~{formatMinsDuration(totalBlockMins)}</span>
+          {/if}
+          {#if block.is_exception}
+            <span class="meta-badge exception" title="Modified for this week only">This week only</span>
+          {:else if block.calendar_type === 'google'}
+            <span class="meta-badge recurring" title="Weekly recurring session">Weekly recurring</span>
           {/if}
         </div>
       </div>
@@ -210,7 +224,12 @@
     </div>
     
     <div class="footer">
-      <button class="save-btn" onclick={handleSave}>Save</button>
+      {#if isRecurringMaster}
+        <button class="save-btn secondary" onclick={() => handleSave('instance')}>This session only</button>
+        <button class="save-btn" onclick={() => handleSave('series')}>All weekly sessions</button>
+      {:else}
+        <button class="save-btn" onclick={() => handleSave('instance')}>Save</button>
+      {/if}
     </div>
   </div>
 </div>
@@ -299,6 +318,18 @@
   .meta-badge.study {
     background: color-mix(in srgb, var(--color-focus-round, #4a90e2) 18%, transparent);
     color: var(--color-foreground);
+  }
+
+  .meta-badge.exception {
+    background: color-mix(in srgb, #f59e0b 20%, transparent);
+    color: #fbbf24;
+    border: 1px solid color-mix(in srgb, #f59e0b 35%, transparent);
+  }
+
+  .meta-badge.recurring {
+    background: color-mix(in srgb, #9333ea 20%, transparent);
+    color: #c084fc;
+    border: 1px solid color-mix(in srgb, #9333ea 35%, transparent);
   }
 
   .rounds-dot {
@@ -466,6 +497,17 @@
 
   .save-btn:hover {
     opacity: 0.9;
+  }
+
+  .save-btn.secondary {
+    background: var(--color-background-light, rgba(255, 255, 255, 0.08));
+    color: var(--color-foreground);
+    border: 1px solid var(--color-background-light, rgba(255, 255, 255, 0.15));
+    margin-right: 8px;
+  }
+
+  .save-btn.secondary:hover {
+    background: var(--color-hover, rgba(255, 255, 255, 0.15));
   }
 
   @keyframes fade-in {

@@ -50,6 +50,18 @@
   let activeScheduledSubject = $state<string | null>(null);
   let pendingRoundTags = $state<Record<number, { topic?: string, studyType?: string }>>({});
 
+  function isBlockActiveNow(b: ScheduledBlock, currentDay: number, currentMinute: number): boolean {
+    const effectiveEnd = b.end_minute <= b.start_minute ? b.end_minute + 1440 : b.end_minute;
+    if (b.day_of_week === currentDay && currentMinute >= b.start_minute && currentMinute < effectiveEnd) {
+      return true;
+    }
+    const prevDay = (currentDay - 1 + 7) % 7;
+    if (b.day_of_week === prevDay && effectiveEnd > 1440 && (currentMinute + 1440) >= b.start_minute && (currentMinute + 1440) < effectiveEnd) {
+      return true;
+    }
+    return false;
+  }
+
   function checkSchedule() {
     const now = new Date();
     // JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat
@@ -58,23 +70,17 @@
     const currentDay = jsDay === 0 ? 6 : jsDay - 1;
     const currentMinute = now.getHours() * 60 + now.getMinutes();
 
-    const activeBlock = scheduleBlocks.find(b => 
-      b.day_of_week === currentDay && 
-      currentMinute >= b.start_minute && 
-      currentMinute < b.end_minute
-    );
+    const activeBlock = scheduleBlocks.find(b => isBlockActiveNow(b, currentDay, currentMinute));
     activeScheduledSubject = activeBlock ? activeBlock.subject : null;
   }
 
   function handleStartScheduled() {
     if (activeScheduledSubject) {
-      const activeBlock = scheduleBlocks.find(b => {
-        const now = new Date();
-        const jsDay = now.getDay();
-        const currentDay = jsDay === 0 ? 6 : jsDay - 1;
-        const currentMinute = now.getHours() * 60 + now.getMinutes();
-        return b.day_of_week === currentDay && currentMinute >= b.start_minute && currentMinute < b.end_minute;
-      });
+      const now = new Date();
+      const jsDay = now.getDay();
+      const currentDay = jsDay === 0 ? 6 : jsDay - 1;
+      const currentMinute = now.getHours() * 60 + now.getMinutes();
+      const activeBlock = scheduleBlocks.find(b => isBlockActiveNow(b, currentDay, currentMinute));
 
       pendingTags.set({
         subject: activeScheduledSubject,

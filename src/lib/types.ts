@@ -176,6 +176,9 @@ export interface ScheduledBlock {
   calendar_type?: 'local' | 'google';
   google_calendar_id?: string | null;
   google_event_id?: string | null;
+  recurring_event_id?: string | null;
+  session_date?: string | null;
+  is_exception?: boolean;
 }
 
 export interface GoogleAuthStatus {

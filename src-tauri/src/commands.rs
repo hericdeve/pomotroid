@@ -1261,6 +1261,9 @@ pub async fn schedule_add_block(
             final_cal_type,
             target_google_cal_id.as_deref(),
             None,
+            None,
+            None,
+            false,
         )
         .map_err(|e| e.to_string())?;
 
@@ -1288,29 +1291,114 @@ pub async fn schedule_add_block(
 }
 
 #[tauri::command]
-pub async fn schedule_delete_block(id: i64, db: State<'_, DbState>) -> Result<(), String> {
-    let block = {
+pub async fn schedule_delete_block(
+    id: i64,
+    monday_ymd: Option<String>,
+    scope: Option<String>,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let existing = {
         let conn = db.lock().map_err(|e| e.to_string())?;
-        queries::schedule_get_by_id(&conn, id).map_err(|e| e.to_string())?
+        queries::schedule_get_by_id(&conn, id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("Block #{id} not found"))?
     };
 
-    if let Some(b) = block {
-        if let (Some(ref cal_id), Some(ref event_id)) = (&b.google_calendar_id, &b.google_event_id) {
-            match google_calendar::auth::ensure_valid_token(&db).await {
-                Ok(token) => {
-                    if let Err(e) = google_calendar::sync::push_block_delete_to_google(&token, cal_id, event_id).await {
-                        log::error!("[gcal] failed to delete Google event {event_id}: {e}");
+    let scope_val = scope.unwrap_or_else(|| "instance".to_string());
+    let ymd = monday_ymd.unwrap_or_else(google_calendar::sync::current_monday_ymd);
+    let (_, _, monday) = google_calendar::sync::calculate_week_bounds(&ymd)?;
+    let master_id = existing.recurring_event_id.as_deref().or(existing.google_event_id.as_deref());
+
+    if scope_val == "series" {
+        {
+            let conn = db.lock().map_err(|e| e.to_string())?;
+            if let Some(mid) = master_id {
+                queries::schedule_delete_by_recurring_event_id(&conn, mid).map_err(|e| e.to_string())?;
+            } else {
+                queries::schedule_delete_block(&conn, id).map_err(|e| e.to_string())?;
+            }
+        }
+        if existing.calendar_type == "google" {
+            if let Some(ref cal_id) = existing.google_calendar_id {
+                if let Some(mid) = master_id {
+                    if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                        let _ = google_calendar::api::delete_event(&token, cal_id, mid).await;
                     }
                 }
-                Err(e) => {
-                    log::error!("[gcal] failed to get token to delete Google event: {e}");
+            }
+        }
+    } else {
+        // scope_val == "instance"
+        if existing.is_exception {
+            // Already an exception block! Delete it
+            {
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                queries::schedule_delete_block(&conn, id).map_err(|e| e.to_string())?;
+            }
+            if existing.calendar_type == "google" {
+                if let (Some(ref cal_id), Some(ref inst_id)) = (&existing.google_calendar_id, &existing.google_event_id) {
+                    if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                        let _ = google_calendar::api::delete_event(&token, cal_id, inst_id).await;
+                    }
+                }
+            }
+        } else {
+            // Master block! DO NOT delete the master block from SQLite.
+            // Insert a cancellation exception block for this week
+            let orig_session_date = (monday + chrono::Duration::days(existing.day_of_week as i64)).format("%Y-%m-%d").to_string();
+            {
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                let _ = queries::schedule_add_block_full(
+                    &conn,
+                    &existing.subject,
+                    existing.day_of_week,
+                    existing.start_minute,
+                    existing.end_minute,
+                    Some("__cancelled__"),
+                    None,
+                    None,
+                    &existing.calendar_type,
+                    existing.google_calendar_id.as_deref(),
+                    None,
+                    master_id,
+                    Some(&orig_session_date),
+                    true,
+                );
+            }
+            if existing.calendar_type == "google" {
+                if let Some(ref cal_id) = existing.google_calendar_id {
+                    if let Some(mid) = master_id {
+                        if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                            let (time_min, time_max, _) = google_calendar::sync::calculate_week_bounds(&ymd)?;
+                            let instances = google_calendar::api::fetch_event_instances(&token, cal_id, mid, &time_min, &time_max).await.unwrap_or_default();
+                            let target_instance = instances.into_iter().find(|inst| {
+                                if let Some(ref orig) = inst.original_start_time {
+                                    if let Some(ref dt) = orig.date_time {
+                                        if dt.starts_with(&orig_session_date) {
+                                            return true;
+                                        }
+                                    }
+                                }
+                                if let Some(ref st) = inst.start {
+                                    if let Some(ref dt) = st.date_time {
+                                        if dt.starts_with(&orig_session_date) {
+                                            return true;
+                                        }
+                                    }
+                                }
+                                false
+                            });
+                            if let Some(inst) = target_instance {
+                                let _ = google_calendar::api::delete_event(&token, cal_id, &inst.id).await;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
-    queries::schedule_delete_block(&conn, id).map_err(|e| e.to_string())
+    Ok(())
 }
 
 #[tauri::command]
@@ -1323,36 +1411,165 @@ pub async fn schedule_update_block(
     study_type: Option<String>,
     round_tags: Option<String>,
     monday_ymd: Option<String>,
+    scope: Option<String>,
     db: State<'_, DbState>,
 ) -> Result<(), String> {
-    let block = {
+    let existing = {
         let conn = db.lock().map_err(|e| e.to_string())?;
-        queries::schedule_update_block(
-            &conn,
-            id,
-            day_of_week,
-            start_minute,
-            end_minute,
-            subject_topic.as_deref(),
-            study_type.as_deref(),
-            round_tags.as_deref(),
-        )
-        .map_err(|e| e.to_string())?;
-
-        queries::schedule_get_by_id(&conn, id).map_err(|e| e.to_string())?
+        queries::schedule_get_by_id(&conn, id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("Block #{id} not found"))?
     };
 
+    let scope_val = scope.unwrap_or_else(|| "instance".to_string());
     let ymd = monday_ymd.unwrap_or_else(google_calendar::sync::current_monday_ymd);
-    if let Some(b) = block {
-        if b.calendar_type == "google" {
-            match google_calendar::auth::ensure_valid_token(&db).await {
-                Ok(token) => {
-                    if let Err(e) = google_calendar::sync::push_block_update_to_google(&db, &token, id, &ymd).await {
-                        log::error!("[gcal] failed to update Google event for block #{id}: {e}");
+    let (_, _, monday) = google_calendar::sync::calculate_week_bounds(&ymd)?;
+    let session_date = (monday + chrono::Duration::days(day_of_week as i64)).format("%Y-%m-%d").to_string();
+
+    if scope_val == "series" {
+        let master_id = existing.recurring_event_id.as_deref().or(existing.google_event_id.as_deref());
+        {
+            let conn = db.lock().map_err(|e| e.to_string())?;
+            if !existing.is_exception {
+                queries::schedule_update_block(
+                    &conn,
+                    id,
+                    day_of_week,
+                    start_minute,
+                    end_minute,
+                    subject_topic.as_deref(),
+                    study_type.as_deref(),
+                    round_tags.as_deref(),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            if let Some(mid) = master_id {
+                let _ = queries::schedule_update_block_series(&conn, mid, day_of_week, start_minute, end_minute);
+            }
+        }
+
+        if existing.calendar_type == "google" {
+            if let Some(ref cal_id) = existing.google_calendar_id {
+                if let Some(mid) = master_id {
+                    let (start_iso, end_iso) = google_calendar::sync::block_slot_to_rfc3339(
+                        monday,
+                        day_of_week,
+                        start_minute,
+                        end_minute,
+                    );
+                    let byday = google_calendar::sync::day_of_week_to_byday(day_of_week);
+                    let rrule = vec![format!("RRULE:FREQ=WEEKLY;BYDAY={byday}")];
+                    if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                        let _ = google_calendar::api::update_event(&token, cal_id, mid, &existing.subject, &start_iso, &end_iso, Some(rrule), None).await;
                     }
                 }
-                Err(e) => {
-                    log::error!("[gcal] failed to get token to update Google event: {e}");
+            }
+        }
+    } else {
+        // scope_val == "instance"
+        if existing.is_exception {
+            {
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                queries::schedule_update_block(
+                    &conn,
+                    id,
+                    day_of_week,
+                    start_minute,
+                    end_minute,
+                    subject_topic.as_deref(),
+                    study_type.as_deref(),
+                    round_tags.as_deref(),
+                )
+                .map_err(|e| e.to_string())?;
+                queries::schedule_update_block_instance(&conn, id, day_of_week, start_minute, end_minute, &session_date)
+                    .map_err(|e| e.to_string())?;
+            }
+
+            if existing.calendar_type == "google" {
+                if let (Some(ref cal_id), Some(ref inst_id)) = (&existing.google_calendar_id, &existing.google_event_id) {
+                    let (start_iso, end_iso) = google_calendar::sync::block_slot_to_rfc3339(
+                        monday,
+                        day_of_week,
+                        start_minute,
+                        end_minute,
+                    );
+                    if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                        let _ = google_calendar::api::update_event(&token, cal_id, inst_id, &existing.subject, &start_iso, &end_iso, None, None).await;
+                    }
+                }
+            }
+        } else {
+            // Master block updated for this session only!
+            // Do NOT modify the master block in SQLite!
+            let master_id = existing.recurring_event_id.as_deref().or(existing.google_event_id.as_deref());
+            let new_id = {
+                let conn = db.lock().map_err(|e| e.to_string())?;
+                queries::schedule_add_block_full(
+                    &conn,
+                    &existing.subject,
+                    day_of_week,
+                    start_minute,
+                    end_minute,
+                    subject_topic.as_deref().or(existing.subject_topic.as_deref()),
+                    study_type.as_deref().or(existing.study_type.as_deref()),
+                    round_tags.as_deref().or(existing.round_tags.as_deref()),
+                    &existing.calendar_type,
+                    existing.google_calendar_id.as_deref(),
+                    None,
+                    master_id,
+                    Some(&session_date),
+                    true,
+                )
+                .map_err(|e| e.to_string())?
+            };
+
+            if existing.calendar_type == "google" {
+                if let Some(ref cal_id) = existing.google_calendar_id {
+                    if let Some(mid) = master_id {
+                        if let Ok(token) = google_calendar::auth::ensure_valid_token(&db).await {
+                            let (time_min, time_max, _) = google_calendar::sync::calculate_week_bounds(&ymd)?;
+                            let instances = google_calendar::api::fetch_event_instances(&token, cal_id, mid, &time_min, &time_max).await.unwrap_or_default();
+                            let orig_session_date = (monday + chrono::Duration::days(existing.day_of_week as i64)).format("%Y-%m-%d").to_string();
+                            let target_instance = instances.into_iter().find(|inst| {
+                                if let Some(ref orig) = inst.original_start_time {
+                                    if let Some(ref dt) = orig.date_time {
+                                        if dt.starts_with(&orig_session_date) {
+                                            return true;
+                                        }
+                                    }
+                                }
+                                if let Some(ref st) = inst.start {
+                                    if let Some(ref dt) = st.date_time {
+                                        if dt.starts_with(&orig_session_date) {
+                                            return true;
+                                        }
+                                    }
+                                }
+                                false
+                            });
+
+                            if let Some(inst) = target_instance {
+                                let (start_iso, end_iso) = google_calendar::sync::block_slot_to_rfc3339(
+                                    monday,
+                                    day_of_week,
+                                    start_minute,
+                                    end_minute,
+                                );
+                                if google_calendar::api::update_event(&token, cal_id, &inst.id, &existing.subject, &start_iso, &end_iso, None, None).await.is_ok() {
+                                    let conn = db.lock().map_err(|e| e.to_string())?;
+                                    let _ = queries::schedule_update_google_event_info(
+                                        &conn,
+                                        new_id,
+                                        cal_id,
+                                        &inst.id,
+                                        Some(mid),
+                                        Some(&session_date),
+                                        true,
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1711,7 +1928,12 @@ pub async fn google_calendar_get_overlay_events(
                                 if let Some(ref edt_str) = end.date_time {
                                     if let Ok(e_dt) = chrono::DateTime::parse_from_rfc3339(edt_str) {
                                         let e_local = e_dt.with_timezone(&chrono::Local);
-                                        (e_local.hour() * 60 + e_local.minute()) as i32
+                                        let days_diff = (e_local.date_naive() - s_local.date_naive()).num_days().max(0) as i32;
+                                        let mut em = days_diff * 1440 + (e_local.hour() * 60 + e_local.minute()) as i32;
+                                        if em <= start_minute {
+                                            em = start_minute + 60;
+                                        }
+                                        em
                                     } else {
                                         start_minute + 60
                                     }
