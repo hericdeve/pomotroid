@@ -216,9 +216,19 @@
 
   let currentMinute = $derived(now.getHours() * 60 + now.getMinutes());
 
-  // All-day and timed overlay events
-  let allDayEvents = $derived(overlayEvents.filter(e => e.is_all_day));
-  let timedOverlayEvents = $derived(overlayEvents.filter(e => !e.is_all_day));
+  let subjectEventGoogleIds = $derived(
+    new Set((subjectEvents || []).map(se => se.google_event_id).filter(Boolean))
+  );
+  let blockGoogleIds = $derived(
+    new Set((blocks || []).flatMap(b => [b.google_event_id, b.recurring_event_id]).filter(Boolean))
+  );
+
+  // All-day and timed overlay events (excluding any already rendered as subject events or blocks)
+  let visibleOverlayEvents = $derived(
+    overlayEvents.filter(e => !subjectEventGoogleIds.has(e.id) && !blockGoogleIds.has(e.id))
+  );
+  let allDayEvents = $derived(visibleOverlayEvents.filter(e => e.is_all_day));
+  let timedOverlayEvents = $derived(visibleOverlayEvents.filter(e => !e.is_all_day));
 
   let selectedOverlayEvent = $state<GoogleOverlayEvent | null>(null);
 
@@ -272,6 +282,10 @@
     return subjectEvents.filter(ev => ev.event_date === ymd && isSubjectEventVisible(ev));
   }
 
+  function getUntimedSubjectEventsForDay(dayIdx: number): SubjectEvent[] {
+    return getSubjectEventsForDay(dayIdx).filter(ev => ev.is_all_day || !ev.event_time);
+  }
+
   function getTimedSubjectEventsForDay(dayIdx: number): SubjectEvent[] {
     return getSubjectEventsForDay(dayIdx).filter(ev => !ev.is_all_day && !!ev.event_time);
   }
@@ -286,11 +300,11 @@
     }
   }
 
-  let currentWeekSubjectEvents = $derived(
-    weekDays.flatMap((_, idx) => getSubjectEventsForDay(idx))
+  let currentWeekAllDaySubjectEvents = $derived(
+    weekDays.flatMap((_, idx) => getUntimedSubjectEventsForDay(idx))
   );
 
-  let hasEventsOrAllDay = $derived(allDayEvents.length > 0 || currentWeekSubjectEvents.length > 0);
+  let hasEventsOrAllDay = $derived(allDayEvents.length > 0 || currentWeekAllDaySubjectEvents.length > 0);
 
   function handlePrevWeek() {
     const newOffset = weekOffset - 1;
@@ -1033,8 +1047,8 @@
         <div class="days-columns all-day-days">
           {#each weekDays as _, dayIdx}
             <div class="day-column all-day-cell">
-              <!-- Academic / Subject Events -->
-              {#each getSubjectEventsForDay(dayIdx) as ev (ev.id)}
+              <!-- Academic / Subject Events (All-Day / Untimed) -->
+              {#each getUntimedSubjectEventsForDay(dayIdx) as ev (ev.id)}
                 {@const evBg = getSubjectColor(ev.subject)}
                 {@const evFg = getContrastColor(evBg)}
                 {@const typeIcon = getTypeIcon(ev.event_type)}
@@ -1043,12 +1057,9 @@
                   class:is-completed={ev.is_completed}
                   style="background-color: {evBg}; color: {evFg};"
                   onclick={() => handleSubjectEventClick(ev)}
-                  title="{ev.subject}: {ev.name}{ev.event_time ? ' (' + ev.event_time + ')' : ''}{ev.is_completed ? ' • Completed' : ''}"
+                  title="{ev.subject}: {ev.name}{ev.is_completed ? ' • Completed' : ''}"
                 >
                   <span class="event-icon">{typeIcon}</span>
-                  {#if ev.event_time}
-                    <span class="event-time-tag">{ev.event_time}</span>
-                  {/if}
                   <span class="overlay-badge-text">{ev.name}</span>
                 </button>
               {/each}
@@ -1818,14 +1829,6 @@
   .subject-event-badge .event-icon {
     font-size: 0.75rem;
     flex-shrink: 0;
-  }
-
-  .subject-event-badge .event-time-tag {
-    font-size: 0.65rem;
-    opacity: 0.85;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 0 4px;
-    border-radius: 2px;
   }
 
   .subject-milestone-marker {
